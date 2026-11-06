@@ -3,6 +3,7 @@
  "w": 340,
  "h": 336,
  "elevation": 52.0,
+ "style": "v2",
  "states": [
   "intact",
   "cracked",

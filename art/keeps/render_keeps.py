@@ -7,7 +7,10 @@ Writes public/keeps/<team>_<state>.png and public/keeps/manifest.json. Post-proc
 halo for embers, 2x downsample) runs inside Blender with numpy, so no Pillow is needed.
 
 The keep is built in the shared art kit (art/muster_art/kit.py): unlit toon shading, inverted-hull outlines,
-team colour from the TeamColor node group. It is seen from the south at a 3/4 angle so it stands upright on
+team colour from the TeamColor node group. When the checkout has the style module (art/muster_art/style.py,
+docs/ART-V3.md), the active direction sets the keep colours (`keep.*`), team colours, ink colour and widths, toon
+bands, rim, key light and the contract camera (elevation, ppu); MUSTER_STYLE=<id> picks one, MUSTER_STYLE=v2 keeps
+the v2 look. The manifest records which look was rendered. It is seen from the south at a 3/4 angle so it stands upright on
 the board, and every state shares one canvas and one ground anchor so the game can swap them in place.
 
 States, driven in game by commander hp / max hp (src/render/keeps.ts):
@@ -40,6 +43,32 @@ TEAMS = ("tide", "ember")
 PPU = 120  # output pixels per world unit (the unit sprites use the same)
 SS = 2  # supersample
 EL = 52.0  # camera elevation, degrees: the board's 3/4 look
+LINE = 0.012  # hull outline width in world units
+INK = "#0b0f18"  # outer silhouette colour
+INK_PX = 2  # outer silhouette width in output pixels
+STYLE = None  # the art direction id once one is applied
+
+
+def load_style():
+    """Take colours, line widths and camera from the active art direction (art/style/, docs/ART-V3.md) when this
+    checkout has the style module; without it, or with MUSTER_STYLE=v2, the keeps keep their v2 look.
+    Returns (keep colours, a function that pushes the direction into the kit once the stage exists)."""
+    global PPU, EL, LINE, INK, INK_PX, STYLE
+    if os.environ.get("MUSTER_STYLE") == "v2":
+        return V2_KEEP, lambda: None
+    try:
+        from muster_art import style as S
+    except ImportError:
+        return V2_KEEP, lambda: None
+    st, c = S.load(), S.contract()
+    STYLE = st["id"]
+    PPU = c["camera"]["ppu"]
+    EL = float(c["camera"]["elevation_deg"])  # keeps render at the board camera so the footprint sits on the ground
+    LINE = st["outline"]["props"]
+    INK = st["outline"]["color"]
+    INK_PX = st["outline"]["silhouette_px"]
+    kp = {k: st["keep"].get(k, V2_KEEP[k]) for k in KEEP_MAIN}
+    return kp, lambda: S.apply(st)  # ink, team colours, toon bands, rim, key light
 AZ = -90.0  # camera looks north from the south, so the gate faces the viewer
 
 # keep dimensions (world units, footprint centred on the origin, gate facing -Y)
@@ -57,32 +86,61 @@ def args():
     return a
 
 
+# the v2 keep colours; a style direction's `keep` section (art/style/<id>.json) replaces them
+# (the second tones are derived from the main ones when a direction leaves them out)
+V2_KEEP = {"stone": "#b8b0a2", "stone_dk": "#7d766b", "roof": "team.main", "trim": "#ffcf4d", "wood": "#a8703f",
+           "window": "#1b1820", "window_glow": False,
+           "stone2": "#a39b8d", "stone_lt": "#d6cfc0", "wood_dk": "#6b4528", "trim_dk": "#c98d2a"}
+KEEP_MAIN = ("stone", "stone_dk", "roof", "trim", "wood", "window", "window_glow")
+
+
+def mix(a, b, f):
+    """Blend two #rrggbb colours: f = 0 gives a, 1 gives b."""
+    ca = [int(a.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    cb = [int(b.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    return "#" + "".join(f"{round(x + (y - x) * f):02x}" for x, y in zip(ca, cb))
+
+
 class Mats:
-    def __init__(self):
+    def __init__(self, kp=V2_KEEP):
         t, g, f = K.toon, K.glow, K.flat
-        self.stone = t("#b8b0a2")
-        self.stone2 = t("#a39b8d")
-        self.stone_lt = t("#d6cfc0")
-        self.stone_dk = t("#7d766b")
+        st, dk = kp["stone"], kp["stone_dk"]
+        self.stone = t(st)
+        self.stone2 = t(kp.get("stone2") or mix(st, dk, 0.32))
+        self.stone_lt = t(kp.get("stone_lt") or mix(st, "#ffffff", 0.3))
+        self.stone_dk = t(dk)
         self.char = t("#4a4340")
         self.char2 = t("#5d5450")
         self.fill = f("#2a2522")
         self.hole = f("#151215")
-        self.wood = t("#a8703f")
-        self.wood_dk = t("#6b4528")
+        self.wood = t(kp["wood"])
+        self.wood_dk = t(kp.get("wood_dk") or mix(kp["wood"], "#1a1210", 0.42))
         self.burnt = t("#3a2c26")
         self.iron = t("#6f7885", spec=0.2)
-        self.gold = t("#ffcf4d", spec=0.35)
-        self.gold_dk = t("#c98d2a")
+        self.gold = t(kp["trim"], spec=0.35)
+        self.gold_dk = t(kp.get("trim_dk") or mix(kp["trim"], "#6b3a10", 0.35))
         self.team = t("team.main")
         self.team_dk = t("team.dark")
         self.team_lt = t("team.light")
         self.team_char = t("team.dark", mult=0.55)
-        self.slit = f("#1b1820")
+        self.roof = t(kp["roof"])  # "team.main" / "team.dark" go through the team mask
+        # arrow slits: dark, or lit from inside in a direction with glowing windows
+        self.slit = g(kp["window"], 1.2) if kp.get("window_glow") else f(kp["window"])
         self.ember = g("#ff9a3d", 1.6)
         self.ember_hot = g("#ffd27a", 1.5)
         self.window_fire = g("#ffb347", 1.7)
         self.cloth = t("#efe4c8")
+
+
+class KeepKit(K.Kit):
+    """The art kit with every explicit per-part outline width scaled to the direction's scenery line width,
+    so a direction with no hull lines (outline.props = 0) turns them all off."""
+    line_k = 1.0
+
+    def _emit(self, bm, mat, loc=(0, 0, 0), rot=None, scale=1.0, smooth=True, outline=None, name="p"):
+        if outline:
+            outline *= self.line_k
+        return super()._emit(bm, mat, loc, rot, scale, smooth, outline, name)
 
 
 def jitter(rng, a):
@@ -166,7 +224,7 @@ def build(k, M, state):
 
     # ---- roof: a team-colour cone with a gold finial and a pennant
     if s <= 1:
-        k.cone(R_TOWER - 0.06, 0.82, M.team, loc=(0, 0, top_z + 0.06), seg=16)
+        k.cone(R_TOWER - 0.06, 0.82, M.roof, loc=(0, 0, top_z + 0.06), seg=16)
         k.cyl(R_TOWER - 0.04, 0.06, M.team_dk, loc=(0, 0, top_z + 0.09), seg=16)
         # tile ridges
         for i in range(8):
@@ -410,9 +468,9 @@ def over(top, bot):
 
 def post(raw, glow, out_path):
     img = premul(load_rgba(raw))
-    ink_a = dilate(img[..., 3], 3 * SS // 2 + 1)
+    ink_a = dilate(img[..., 3], INK_PX * SS)
     ink = np.zeros_like(img)
-    ink[..., :3] = np.array([11, 15, 24], np.float32)[None, None] / 255 * ink_a[..., None]
+    ink[..., :3] = np.array([int(INK.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)], np.float32)[None, None] / 255 * ink_a[..., None]
     ink[..., 3] = ink_a
     out = over(img, ink)
     if glow and os.path.exists(glow):
@@ -440,9 +498,13 @@ def main():
     states = [x for x in a["states"].split(",") if x in STATES]
     os.makedirs(RAW, exist_ok=True)
     os.makedirs(OUT, exist_ok=True)
+    kp, apply_style = load_style()  # before setup: it may change the camera elevation
     st = setup(int(a["samples"]))
-    k = K.Kit(outline=0.012)
-    M = Mats()
+    apply_style()  # after setup so the direction's toon group and key light win over the stage defaults
+    print(f"KEEP_STYLE {STYLE or 'v2'} el={EL} ppu={PPU}", flush=True)
+    k = KeepKit(outline=LINE)
+    k.line_k = LINE / 0.012
+    M = Mats(kp)
     # one canvas for every state: frame on the union of all of them
     lo, hi = None, None
     for state in STATES:
@@ -486,7 +548,7 @@ def main():
             K.set_glowpass(False)
             post(raw, glow, os.path.join(OUT, f"{team}_{state}.png"))
             print(f"KEEP_OK {team}_{state} {w}x{h}", flush=True)
-    man = {"ppu": PPU, "w": w, "h": h, "elevation": EL, "states": list(STATES), "teams": list(TEAMS),
+    man = {"ppu": PPU, "w": w, "h": h, "elevation": EL, "style": STYLE or "v2", "states": list(STATES), "teams": list(TEAMS),
            "footprint": round(1.22, 2), "anchors": anchors}
     with open(os.path.join(OUT, "manifest.json"), "w") as f:
         json.dump(man, f, indent=1)
