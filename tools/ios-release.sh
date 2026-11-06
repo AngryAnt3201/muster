@@ -16,7 +16,7 @@ EXPORT_DIR=ios/App/build/export
 prepare() {
   node tools/release-config.mjs "$@"
   npm run build
-  npx cap sync ios
+  node tools/cap-sync.mjs
 }
 
 jack_only() {

@@ -11,3 +11,8 @@ capacitor-cordova-ios-plugins
 # Generated Config files
 App/App/capacitor.config.json
 App/App/config.xml
+
+# Local StoreKit plugin package
+MusterStore/.build
+MusterStore/.swiftpm
+MusterStore/TestHost/*.xcodeproj

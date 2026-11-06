@@ -295,7 +295,7 @@ Then submit the version as usual (\`store/RELEASE-CHECKLIST.md\` step 7). The pu
 
 ## 3. Test it before submitting (optional, 5 min)
 
-- **Simulator, no Apple account needed:** the app's \`.storekit\` configuration file lets the Simulator buy, cancel and restore Full Army locally. In Xcode: Product > Scheme > Edit Scheme > Run > Options > StoreKit Configuration.
+- **Simulator, no Apple account needed:** \`npm run ios:open\`, pick an iPhone simulator, press Run. The shared App scheme already uses \`ios/App/Muster.storekit\` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and Restore all work locally. Debug > StoreKit > Manage Transactions refunds or deletes the test purchase. The plugin's own StoreKit tests run from \`ios/MusterStore/TestHost\` (command at the top of its project.yml).
 - **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy Full Army from a TestFlight or Xcode build. Sandbox purchases are free.
 - **Restore:** delete the app, reinstall, open Shop > Restore Purchases. Full Army comes back. (Game progress does not; it lives on the device.)
 `);
