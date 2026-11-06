@@ -1,10 +1,15 @@
-// The board view: draws the deploy scene and the battle, turns battle events into effects.
-import type { Battle, BattleEvent, Body } from "../core/battle";
+// The board view: draws the deploy scene and the battle as a 3/4 diorama, turns battle events into effects.
+// The sim is 2D; Camera (camera.ts) projects it. Draw order every frame: the warped ground texture, ground decals
+// (zones, contact shadows, mines, mounds), upright things sorted by ground y, the air layer, then bars and effects.
+import type { Battle, BattleEvent, Body, Proj } from "../core/battle";
 import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
+import { Camera, SLAB, sortDrawables, type Drawable, type Rect, type ScreenPt } from "./camera";
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { sprite, whiteOf } from "./sprites";
-import { drawRank, drawShadow, drawUnit, type DrawOpts } from "./units";
+import { drawRank, drawUnit, type DrawOpts } from "./units";
+
+export type { Rect } from "./camera";
 
 export interface DeployScene {
   mode: "deploy";
@@ -22,21 +27,28 @@ export interface BattleScene {
 }
 export type Scene = DeployScene | BattleScene;
 
-export interface Rect { x: number; y: number; w: number; h: number; }
-
 const TAU = Math.PI * 2;
 const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
 const ICE = "#bfe9ff";
 const DIRT = "rgba(120,92,60,0.9)";
+/** How high a body's sprite centre rides above its feet, as a fraction of its radius. */
+const LIFT = 0.55;
+/** World height of a flyer per unit of the sim's altitude z. */
+const AIR = 0.75;
+
+type TokenOpts = DrawOpts & { rank?: number; flat?: boolean };
 
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
   readonly fx = new Fx();
+  readonly cam = new Camera(W, H);
   dpr = 1;
   cssW = 0; cssH = 0;
-  ox = 0; oy = 0; s = 40;
+  /** The screen box of the board's ground (for UI placement). */
   rect: Rect = { x: 0, y: 0, w: 0, h: 0 };
+  /** The layout area the board was fitted into (heads and flyers may use all of it). */
+  area: Rect = { x: 0, y: 0, w: 0, h: 0 };
   time = 0;
   obstacles: Obstacle[] = [];
   onShake?: (amount: number) => void;
@@ -49,6 +61,9 @@ export class BoardView {
     this.ctx = canvas.getContext("2d")!;
   }
 
+  /** Pixels per world unit at the middle of the board (for effects that don't care about depth). */
+  get s() { return this.cam.scaleAt(H / 2); }
+
   layout(cssW: number, cssH: number, area: Rect) {
     this.dpr = Math.min(3, window.devicePixelRatio || 1);
     this.cssW = cssW; this.cssH = cssH;
@@ -56,10 +71,9 @@ export class BoardView {
     this.canvas.height = Math.round(cssH * this.dpr);
     this.canvas.style.width = cssW + "px";
     this.canvas.style.height = cssH + "px";
-    this.s = Math.min(area.w / W, area.h / H);
-    this.ox = area.x + (area.w - W * this.s) / 2;
-    this.oy = area.y + (area.h - H * this.s) / 2;
-    this.rect = { x: this.ox, y: this.oy, w: W * this.s, h: H * this.s };
+    this.area = { ...area };
+    this.cam.fit(area);
+    this.rect = this.cam.groundRect();
     this.bg = undefined;
   }
 
@@ -68,121 +82,174 @@ export class BoardView {
     this.bg = undefined;
   }
 
-  sx(x: number) { return this.ox + x * this.s; }
-  sy(y: number) { return this.oy + y * this.s; }
-  toWorld(px: number, py: number) { return { x: (px - this.ox) / this.s, y: (py - this.oy) / this.s }; }
+  /** World (on the ground, or at height z) to screen. */
+  toScreen(x: number, y: number, z = 0): ScreenPt { return this.cam.project(x, y, z); }
+  /** Screen to the ground point under it. */
+  toWorld(px: number, py: number) { return this.cam.unproject(px, py); }
+  /** Screen to the point at height z under it (for picking standing figures). */
+  toWorldAt(px: number, py: number, z: number) { return this.cam.unprojectAt(px, py, z); }
+
+  /** Run fn with the context mapped to the ground plane around (x, y): units are world units, origin at (x, y, z). */
+  private ground(x: number, y: number, fn: (ctx: CanvasRenderingContext2D) => void, z = 0) {
+    const ctx = this.ctx, p = this.cam.project(x, y, z), k = this.cam.squashAt(y);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.scale(p.s, p.s * k);
+    fn(ctx);
+    ctx.restore();
+  }
+
+  /** A soft contact shadow on the ground (r in world units). */
+  private shadow(x: number, y: number, r: number, alpha: number) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.fillStyle = "#000";
+    ctx.beginPath();
+    this.cam.groundPath(ctx, x + r * 0.08, y + r * 0.1, r);
+    ctx.fill();
+    ctx.restore();
+  }
 
   // ------------------------------------------------------------ background
-  private paintBackground(): HTMLCanvasElement {
+  /** The board as a flat top-down texture, ppu pixels per world unit. */
+  private paintGround(ppu: number): HTMLCanvasElement {
     const c = document.createElement("canvas");
-    c.width = this.canvas.width; c.height = this.canvas.height;
+    const w = Math.round(W * ppu), h = Math.round(H * ppu);
+    c.width = w; c.height = h;
     const g = c.getContext("2d")!;
-    g.scale(this.dpr, this.dpr);
-    const { x, y, w, h } = this.rect;
-    // Outer frame.
-    g.fillStyle = "#070a10";
-    g.fillRect(0, 0, this.cssW, this.cssH);
-    g.save();
-    g.shadowColor = "rgba(0,0,0,0.6)"; g.shadowBlur = 24;
-    roundRectPath(g, x - 4, y - 4, w + 8, h + 8, 14);
-    g.fillStyle = "#1c2534"; g.fill();
-    g.restore();
-    g.save();
-    roundRectPath(g, x, y, w, h, 11);
-    g.clip();
-    const grad = g.createLinearGradient(0, y, 0, y + h);
+    const s = ppu, X = (x: number) => x * s, Y = (y: number) => y * s;
+    const grad = g.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, "#1d1714");
     grad.addColorStop(0.5, BOARD.base0);
     grad.addColorStop(1, "#0f1c22");
     g.fillStyle = grad;
-    g.fillRect(x, y, w, h);
+    g.fillRect(0, 0, w, h);
     // Contour lines: a terrain map, not a grid.
-    g.strokeStyle = BOARD.line; g.lineWidth = 1;
+    g.strokeStyle = BOARD.line; g.lineWidth = s * 0.03;
     for (let k = 0; k < 14; k++) {
       g.beginPath();
       for (let i = 0; i <= 60; i++) {
         const u = i / 60;
-        const yy = y + (k / 13) * h + Math.sin(u * 7 + k * 1.3) * this.s * 0.35 + Math.sin(u * 17 + k) * this.s * 0.1;
-        i ? g.lineTo(x + u * w, yy) : g.moveTo(x + u * w, yy);
+        const yy = (k / 13) * h + Math.sin(u * 7 + k * 1.3) * s * 0.35 + Math.sin(u * 17 + k) * s * 0.1;
+        i ? g.lineTo(u * w, yy) : g.moveTo(u * w, yy);
       }
       g.stroke();
     }
-    // Speckle.
+    const hash = (i: number, k: number) => Math.abs((Math.sin(i * 127.1 + k * 311.7) * 43758.5453) % 1);
     for (let i = 0; i < 900; i++) {
-      const px = x + Math.abs(Math.sin(i * 12.9898) * 43758.5453 % 1) * w;
-      const py = y + Math.abs(Math.sin(i * 78.233) * 12543.123 % 1) * h;
       g.fillStyle = i % 3 ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.18)";
-      g.fillRect(px, py, 1.5, 1.5);
+      g.fillRect(hash(i, 21) * w, hash(i, 22) * h, s * 0.04, s * 0.04);
     }
     // Terrain: soft patches of moss, dirt and shade, then tufts and pebbles.
-    const hash = (i: number, k: number) => Math.abs((Math.sin(i * 127.1 + k * 311.7) * 43758.5453) % 1);
     for (let i = 0; i < 46; i++) {
-      const px = x + hash(i, 1) * w, py = y + hash(i, 2) * h, pr = (0.8 + hash(i, 3) * 2.2) * this.s;
+      const px = hash(i, 1) * w, py = hash(i, 2) * h, pr = (0.8 + hash(i, 3) * 2.2) * s;
       const col = i % 3 === 0 ? "rgba(70,110,80,0.13)" : i % 3 === 1 ? "rgba(110,85,60,0.10)" : "rgba(0,0,0,0.14)";
       const rg = g.createRadialGradient(px, py, 0, px, py, pr);
       rg.addColorStop(0, col); rg.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = rg;
-      g.beginPath(); g.ellipse(px, py, pr * 1.4, pr, hash(i, 4) * 3, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.ellipse(px, py, pr * 1.4, pr, hash(i, 4) * 3, 0, TAU); g.fill();
     }
     g.lineCap = "round";
     for (let i = 0; i < 110; i++) {
-      const px = x + hash(i, 5) * w, py = y + hash(i, 6) * h, k = this.s * (0.07 + hash(i, 7) * 0.08);
+      const px = hash(i, 5) * w, py = hash(i, 6) * h, k = s * (0.07 + hash(i, 7) * 0.08);
       g.strokeStyle = `rgba(${110 + hash(i, 8) * 40},${150 + hash(i, 9) * 40},${110},${0.07 + hash(i, 10) * 0.08})`;
-      g.lineWidth = 1.2;
+      g.lineWidth = s * 0.03;
       for (const a of [-0.5, 0, 0.5]) { g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.sin(a) * k, py - Math.cos(a) * k * 1.4); g.stroke(); }
     }
     for (let i = 0; i < 70; i++) {
-      const px = x + hash(i, 11) * w, py = y + hash(i, 12) * h, pr = this.s * (0.03 + hash(i, 13) * 0.05);
+      const px = hash(i, 11) * w, py = hash(i, 12) * h, pr = s * (0.03 + hash(i, 13) * 0.05);
       g.fillStyle = "rgba(0,0,0,0.35)";
-      g.beginPath(); g.ellipse(px + pr * 0.3, py + pr * 0.4, pr, pr * 0.75, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.ellipse(px + pr * 0.3, py + pr * 0.4, pr, pr * 0.75, 0, 0, TAU); g.fill();
       g.fillStyle = `rgba(${140 + hash(i, 14) * 50},${140 + hash(i, 14) * 50},${150},0.45)`;
-      g.beginPath(); g.ellipse(px, py, pr, pr * 0.75, 0, 0, Math.PI * 2); g.fill();
+      g.beginPath(); g.ellipse(px, py, pr, pr * 0.75, 0, 0, TAU); g.fill();
     }
     // Zones and the no-man's band.
-    for (const s of [0, 1] as Side[]) {
-      const a = toWorld(s, 0, 0), b = toWorld(s, 0, ZONE_DEPTH);
-      const y0 = this.sy(Math.min(a.y, b.y)), y1 = this.sy(Math.max(a.y, b.y));
-      const zg = g.createLinearGradient(0, s === 0 ? y1 : y0, 0, s === 0 ? y0 : y1);
-      zg.addColorStop(0, team(s).glow + "0.16)");
+    for (const sd of [0, 1] as Side[]) {
+      const a = toWorld(sd, 0, 0), b = toWorld(sd, 0, ZONE_DEPTH);
+      const y0 = Y(Math.min(a.y, b.y)), y1 = Y(Math.max(a.y, b.y));
+      const zg = g.createLinearGradient(0, sd === 0 ? y1 : y0, 0, sd === 0 ? y0 : y1);
+      zg.addColorStop(0, team(sd).glow + "0.16)");
       zg.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = zg;
-      g.fillRect(x, y0, w, y1 - y0);
+      g.fillRect(0, y0, w, y1 - y0);
     }
-    for (const s of [0, 1] as Side[]) {
-      const ey = this.sy(s === 0 ? H - 0.12 : 0.12);
-      const lg = g.createLinearGradient(x, 0, x + w, 0);
-      lg.addColorStop(0, team(s).glow + "0)"); lg.addColorStop(0.5, team(s).glow + "0.7)"); lg.addColorStop(1, team(s).glow + "0)");
-      g.strokeStyle = lg; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(x, ey); g.lineTo(x + w, ey); g.stroke();
+    for (const sd of [0, 1] as Side[]) {
+      const ey = Y(sd === 0 ? H - 0.12 : 0.12);
+      const lg = g.createLinearGradient(0, 0, w, 0);
+      lg.addColorStop(0, team(sd).glow + "0)"); lg.addColorStop(0.5, team(sd).glow + "0.7)"); lg.addColorStop(1, team(sd).glow + "0)");
+      g.strokeStyle = lg; g.lineWidth = s * 0.08;
+      g.beginPath(); g.moveTo(0, ey); g.lineTo(w, ey); g.stroke();
     }
-    const top = this.sy(toWorld(1, 0, ZONE_DEPTH).y), bot = this.sy(toWorld(0, 0, ZONE_DEPTH).y);
+    const top = Y(toWorld(1, 0, ZONE_DEPTH).y), bot = Y(toWorld(0, 0, ZONE_DEPTH).y);
     g.fillStyle = BOARD.band;
-    g.fillRect(x, top, w, bot - top);
-    g.setLineDash([this.s * 0.25, this.s * 0.2]);
-    g.strokeStyle = "rgba(255,255,255,0.08)"; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(x, (top + bot) / 2); g.lineTo(x + w, (top + bot) / 2); g.stroke();
+    g.fillRect(0, top, w, bot - top);
+    g.setLineDash([s * 0.25, s * 0.2]);
+    g.strokeStyle = "rgba(255,255,255,0.08)"; g.lineWidth = s * 0.05;
+    g.beginPath(); g.moveTo(0, (top + bot) / 2); g.lineTo(w, (top + bot) / 2); g.stroke();
     g.setLineDash([]);
-    // Obstacles: rocks with a lit top.
+    // Ambient occlusion where the rocks sit (the rocks themselves stand up in the sorted pass).
     for (const o of this.obstacles) {
-      const ox = this.sx(o.x), oy = this.sy(o.y), r = o.r * this.s;
-      g.fillStyle = "rgba(0,0,0,0.45)";
-      g.beginPath(); g.ellipse(ox + r * 0.15, oy + r * 0.25, r * 1.05, r * 0.85, 0, 0, TAU); g.fill();
-      const rg = g.createRadialGradient(ox - r * 0.35, oy - r * 0.4, r * 0.1, ox, oy, r);
-      rg.addColorStop(0, "#58606b"); rg.addColorStop(1, "#262b33");
+      const rg = g.createRadialGradient(X(o.x), Y(o.y), o.r * s * 0.6, X(o.x), Y(o.y), o.r * s * 1.5);
+      rg.addColorStop(0, "rgba(0,0,0,0.45)"); rg.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = rg;
-      g.beginPath();
-      for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * TAU, k = 0.85 + 0.15 * Math.abs(Math.sin(o.x * 7 + o.y * 3 + i * 1.7));
-        const px = ox + Math.cos(a) * r * k, py = oy + Math.sin(a) * r * k;
-        i ? g.lineTo(px, py) : g.moveTo(px, py);
-      }
-      g.closePath(); g.fill();
-      g.strokeStyle = INK; g.lineWidth = 2; g.stroke();
+      g.beginPath(); g.arc(X(o.x), Y(o.y), o.r * s * 1.5, 0, TAU); g.fill();
     }
-    // Vignette.
-    const vg = g.createRadialGradient(x + w / 2, y + h / 2, Math.min(w, h) * 0.3, x + w / 2, y + h / 2, Math.max(w, h) * 0.75);
+    return c;
+  }
+
+  /** The screen backdrop: surround, the board's front face, and the ground texture warped into perspective. */
+  private paintBackground(): HTMLCanvasElement {
+    const c = document.createElement("canvas");
+    c.width = this.canvas.width; c.height = this.canvas.height;
+    const g = c.getContext("2d")!;
+    const dpr = this.dpr, cam = this.cam;
+    g.scale(dpr, dpr);
+    const bgr = g.createLinearGradient(0, 0, 0, this.cssH);
+    bgr.addColorStop(0, "#05070c"); bgr.addColorStop(1, "#0b1018");
+    g.fillStyle = bgr;
+    g.fillRect(0, 0, this.cssW, this.cssH);
+    const c00 = cam.project(0, 0), c10 = cam.project(W, 0), c01 = cam.project(0, H), c11 = cam.project(W, H);
+    const d01 = cam.project(0, H, -SLAB), d11 = cam.project(W, H, -SLAB);
+    // A soft drop shadow under the whole diorama.
+    g.save();
+    g.shadowColor = "rgba(0,0,0,0.7)"; g.shadowBlur = 28; g.shadowOffsetY = 10;
+    g.fillStyle = "#10151d";
+    g.beginPath(); g.moveTo(c00.x, c00.y); g.lineTo(c10.x, c10.y); g.lineTo(d11.x, d11.y); g.lineTo(d01.x, d01.y); g.closePath(); g.fill();
+    g.restore();
+    // The front face of the board: a slab of earth.
+    const fg = g.createLinearGradient(0, c01.y, 0, d01.y);
+    fg.addColorStop(0, "#3a2c20"); fg.addColorStop(0.35, "#2a1f17"); fg.addColorStop(1, "#140f0b");
+    g.fillStyle = fg;
+    g.beginPath(); g.moveTo(c01.x, c01.y); g.lineTo(c11.x, c11.y); g.lineTo(d11.x, d11.y); g.lineTo(d01.x, d01.y); g.closePath(); g.fill();
+    g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const u = i / 4, l = cam.project(0, H, -SLAB * u), r = cam.project(W, H, -SLAB * u);
+      g.beginPath(); g.moveTo(l.x, l.y + Math.sin(i * 3.1) * 1.5); g.lineTo(r.x, r.y - Math.sin(i * 2.3) * 1.5); g.stroke();
+    }
+    // The ground: each screen row is one world row scaled across, so a row-by-row copy is an exact warp.
+    const ppu = Math.max(16, Math.min(2048 / W, Math.ceil(cam.scaleAt(H) * dpr)));
+    const tex = this.paintGround(ppu);
+    const top = Math.floor(c00.y * dpr), bot = Math.ceil(c01.y * dpr);
+    g.imageSmoothingEnabled = true;
+    for (let row = top; row < bot; row++) {
+      const ya = Math.max(0, cam.unproject(c00.x, row / dpr).y), yb = Math.min(H, cam.unproject(c00.x, (row + 1) / dpr).y);
+      if (!(yb > ya)) continue;
+      const ym = (ya + yb) / 2, l = cam.project(0, ym).x, r = cam.project(W, ym).x;
+      g.drawImage(tex, 0, ya * ppu, tex.width, Math.max(0.5, (yb - ya) * ppu), l, row / dpr, r - l, 1 / dpr + 0.02);
+    }
+    // A lit lip along the near edge, and a vignette that darkens toward the far edge.
+    g.strokeStyle = "rgba(255,240,210,0.16)"; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(c01.x, c01.y); g.lineTo(c11.x, c11.y); g.stroke();
+    g.save();
+    g.beginPath(); g.moveTo(c00.x, c00.y); g.lineTo(c10.x, c10.y); g.lineTo(c11.x, c11.y); g.lineTo(c01.x, c01.y); g.closePath(); g.clip();
+    const rr = this.rect;
+    const vg = g.createRadialGradient(rr.x + rr.w / 2, rr.y + rr.h * 0.6, Math.min(rr.w, rr.h) * 0.3, rr.x + rr.w / 2, rr.y + rr.h * 0.6, Math.max(rr.w, rr.h) * 0.75);
     vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.45)");
-    g.fillStyle = vg; g.fillRect(x, y, w, h);
+    g.fillStyle = vg; g.fillRect(rr.x, rr.y, rr.w, rr.h);
+    const hz = g.createLinearGradient(0, rr.y, 0, rr.y + rr.h * 0.35);
+    hz.addColorStop(0, "rgba(4,6,10,0.35)"); hz.addColorStop(1, "rgba(4,6,10,0)");
+    g.fillStyle = hz; g.fillRect(rr.x, rr.y, rr.w, rr.h * 0.35);
     g.restore();
     return c;
   }
@@ -413,8 +480,8 @@ export class BoardView {
     ctx.drawImage(this.bg, 0, 0);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, dx * this.dpr, dy * this.dpr);
     ctx.save();
-    roundRectPath(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, 11);
-    ctx.clip();
+    // Heads and flyers over the far edge may use the whole layout area.
+    ctx.beginPath(); ctx.rect(this.area.x, this.area.y, this.area.w, this.area.h); ctx.clip();
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
     this.drawFx();
@@ -424,37 +491,52 @@ export class BoardView {
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = this.fx.flash * 0.5;
       ctx.fillStyle = this.fx.flashColor;
-      ctx.fillRect(this.rect.x, this.rect.y, this.rect.w, this.rect.h);
+      ctx.fillRect(this.area.x, this.area.y, this.area.w, this.area.h);
       ctx.restore();
     }
   }
 
-  /** Draws a body: its Blender sprite for the rank when loaded, else the drawn token. r is the radius in px. */
-  private token(kind: BodyKind, side: Side, x: number, y: number, r: number, face: number, o: DrawOpts & { rank?: number }) {
+  /** Where a body's sprite centre sits on screen (feet at (x, y), z above ground), and its radius in px. */
+  private bodyAt(x: number, y: number, z: number, radius: number, flat = false) {
+    const p = this.cam.project(x, y, z + (flat ? 0 : radius * LIFT));
+    return { x: p.x, y: p.y, r: radius * p.s };
+  }
+
+  /** Draws a body standing at world (x, y), z above the ground. radius in world units. The stand-in look: today's
+   *  top-down sprite on a card tilted with the ground, lifted off its contact shadow. Upright 8-way frames replace
+   *  it when the character atlases land (anchor at the feet, see camera.ts). */
+  private token(kind: BodyKind, side: Side, x: number, y: number, z: number, radius: number, face: number, o: TokenOpts) {
     const ctx = this.ctx;
+    const at = this.bodyAt(x, y, z, radius, o.flat);
+    const r = at.r, squash = this.cam.squashAt(y);
     const swing = o.swing ?? -1;
     const pose = swing >= 0 && swing < 0.7 ? "attack" : "idle";
-    const sp = sprite(kind, Math.max(1, Math.min(4, o.rank ?? 1)), side, pose);
-    if (!sp) { drawUnit(ctx, kind, side, x, y, r, face, o); return; }
-    const k = r / (RADIUS(kind) * this.s);
-    // Drawn a bit larger than true scale so they read on a phone (collision is unchanged).
-    const px = sp.size * this.s * k * 1.3;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.globalAlpha *= o.alpha ?? 1;
-    if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
-    if (kind !== "mine") drawShadow(ctx, 0, 0, r * 1.3, o.ghost ? 0.2 : 0.38);
-    if ((o.rank ?? 1) >= 4 && !o.hidden) {
+    if ((o.rank ?? 1) >= 4 && !o.hidden && !o.flat) {
       // Ascended: a slow pulse of team light on the ground.
       const pulse = 0.55 + 0.45 * Math.sin(this.time * 3 + (o.id ?? 0));
-      const g = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.1);
-      g.addColorStop(0, team(side).glow + (0.35 * pulse) + ")");
-      g.addColorStop(1, team(side).glow + "0)");
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(0, 0, r * 2.1, 0, TAU); ctx.fill();
+      this.ground(x, y, (g) => {
+        const gr = g.createRadialGradient(0, 0, radius * 0.3, 0, 0, radius * 2.1);
+        gr.addColorStop(0, team(side).glow + (0.35 * pulse) + ")");
+        gr.addColorStop(1, team(side).glow + "0)");
+        g.fillStyle = gr;
+        g.beginPath(); g.arc(0, 0, radius * 2.1, 0, TAU); g.fill();
+      });
     }
+    const sp = sprite(kind, Math.max(1, Math.min(4, o.rank ?? 1)), side, pose);
+    ctx.save();
+    ctx.translate(at.x, at.y);
     const moving = (o.speed ?? 0) > 0.2;
-    if (moving) ctx.translate(0, Math.sin(this.time * 14 + (o.id ?? 0)) * r * 0.07);
+    if (moving && !o.flat) ctx.translate(0, Math.sin(this.time * 14 + (o.id ?? 0)) * r * 0.07);
+    ctx.scale(1, squash);
+    if (!sp) {
+      drawUnit(ctx, kind, side, 0, 0, r, face, { ...o, noShadow: true });
+      ctx.restore();
+      return;
+    }
+    // Drawn a bit larger than true scale so they read on a phone (collision is unchanged).
+    const px = sp.size * at.r / radius * 1.3;
+    ctx.globalAlpha *= o.alpha ?? 1;
+    if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
     ctx.rotate(face);
     if (swing >= 0 && swing < 0.5) ctx.translate(Math.sin((swing / 0.5) * Math.PI) * r * 0.22, 0);
     if (moving) ctx.scale(1 + Math.sin(this.time * 28 + (o.id ?? 0)) * 0.025, 1);
@@ -466,70 +548,126 @@ export class BoardView {
     ctx.restore();
   }
 
+  /** A rock that stands on its collision circle: the base ring is the circle, projected exactly. */
+  private drawRock(o: Obstacle) {
+    const ctx = this.ctx, cam = this.cam, n = 14, h = o.r * 0.95;
+    const jag = (i: number) => 0.86 + 0.14 * Math.abs(Math.sin(o.x * 7 + o.y * 3 + i * 1.7));
+    const at = (i: number, k: number, z: number) => {
+      const a = (i / n) * TAU;
+      return cam.project(o.x + Math.cos(a) * o.r * k * jag(i), o.y + Math.sin(a) * o.r * k * jag(i), z);
+    };
+    ctx.save();
+    // Silhouette: the near half of the base, then the far half of the top.
+    ctx.beginPath();
+    for (let i = 0; i <= n / 2; i++) { const p = at(i, 1, 0); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+    for (let i = n / 2; i <= n; i++) { const p = at(i % n, 0.62, h); ctx.lineTo(p.x, p.y); }
+    ctx.closePath();
+    const top = cam.project(o.x, o.y, h), base = cam.project(o.x, o.y + o.r, 0);
+    const sg = ctx.createLinearGradient(0, top.y, 0, base.y);
+    sg.addColorStop(0, "#4d555f"); sg.addColorStop(1, "#1d2128");
+    ctx.fillStyle = sg; ctx.fill();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2; ctx.stroke();
+    // The lit top.
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) { const p = at(i % n, 0.62, h); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }
+    ctx.closePath();
+    const tg = ctx.createRadialGradient(top.x - o.r * top.s * 0.25, top.y - o.r * top.s * 0.15, 0, top.x, top.y, o.r * top.s * 0.7);
+    tg.addColorStop(0, "#7a838e"); tg.addColorStop(1, "#555d68");
+    ctx.fillStyle = tg; ctx.fill();
+    ctx.strokeStyle = "rgba(10,14,22,0.6)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+  }
+
   private evolveAt = new Map<number, number>();
   /** A rank-up pop on a placed piece. */
   markEvolve(id: number) { this.evolveAt.set(id, this.time); }
 
+  /** A ground quad between two board rows, full width. */
+  private rowsPath(y0: number, y1: number) {
+    const ctx = this.ctx, cam = this.cam;
+    const a = cam.project(0, y0), b = cam.project(W, y0), c = cam.project(W, y1), d = cam.project(0, y1);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath();
+  }
+
   private drawZone(side: Side) {
     const ctx = this.ctx;
     const a = toWorld(side, 0, -0.05), b = toWorld(side, 0, ZONE_DEPTH);
-    const y0 = this.sy(Math.min(a.y, b.y)), y1 = this.sy(Math.max(a.y, b.y));
+    const y0 = Math.max(0, Math.min(a.y, b.y)), y1 = Math.min(H, Math.max(a.y, b.y));
     const pulse = 0.5 + 0.5 * Math.sin(this.time * 4);
     ctx.save();
     ctx.fillStyle = team(side).glow + (0.07 + 0.05 * pulse) + ")";
-    ctx.fillRect(this.rect.x, y0, this.rect.w, y1 - y0);
+    this.rowsPath(y0, y1); ctx.fill();
     ctx.strokeStyle = team(side).glow + (0.5 + 0.3 * pulse) + ")";
     ctx.lineWidth = 2;
     ctx.setLineDash([8, 6]);
-    const edge = side === 0 ? y0 : y1;
-    ctx.beginPath(); ctx.moveTo(this.rect.x, edge); ctx.lineTo(this.rect.x + this.rect.w, edge); ctx.stroke();
+    // The edge sits exactly on the sim's zone depth.
+    const ey = b.y, l = this.cam.project(0, ey), r = this.cam.project(W, ey);
+    ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(r.x, r.y); ctx.stroke();
     ctx.restore();
   }
 
   private drawDeploy(sc: DeployScene) {
-    const ctx = this.ctx, s = this.s;
     if (sc.zone !== undefined && sc.zone !== null) this.drawZone(sc.zone);
-    const list = [...sc.pieces].sort((a, b) => (a.kind === "mine" ? -1 : 0) - (b.kind === "mine" ? -1 : 0) || a.y - b.y);
-    for (const p of list) {
+    for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
+    const shown = sc.pieces.filter((p) => !(p.kind === "mine" && p.side === 1 && !sc.showEnemyMines));
+    // Ground layer: selection and range under everything, then contact shadows, then buried mines.
+    const sel = shown.find((p) => p.id === sc.selected);
+    if (sel) this.drawSelection(sel);
+    for (const p of shown) {
+      if (p.kind === "mine") continue;
+      for (const [x, y] of this.footprints(p.kind, p.x, p.y, p.side === 0 ? -1 : 1)) this.shadow(x, y, RADIUS(p.kind) * 1.1, 0.38);
+    }
+    const list: Drawable[] = [];
+    for (const p of shown) {
       const def = UNITS[p.kind];
-      const x = this.sx(p.x), y = this.sy(p.y), r = def.radius * s;
-      if (p.kind === "mine" && p.side === 1 && !sc.showEnemyMines) continue;
       const face = p.side === 0 ? -Math.PI / 2 : Math.PI / 2;
-      const sel = sc.selected === p.id;
-      if (sel) this.drawSelection(p);
       const revealT = this.reveal.get(p.id);
       let pop = revealT !== undefined ? Math.min(1, (this.time - revealT) / 0.25) : 1;
       const evo = this.evolveAt.get(p.id);
       if (evo !== undefined && this.time - evo < 0.45) pop *= 1 + 0.45 * Math.sin(((this.time - evo) / 0.45) * Math.PI);
-      if (p.kind === "blades") {
-        for (let i = 0; i < 3; i++) {
-          const a = -Math.PI / 2 * (p.side === 0 ? -1 : 1) + (i * TAU) / 3;
-          this.token("blades", p.side, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank });
-        }
-      } else {
-        this.token(p.kind, p.side, x, y, r * pop, face, { t: this.time, id: p.id, hidden: p.kind === "mine", own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
-      }
-      drawRank(ctx, x, y, Math.max(r, 0.3 * s), p.rank);
+      const mine = p.kind === "mine";
+      list.push({
+        y: p.y, layer: mine ? 0 : 1, draw: () => {
+          if (p.kind === "blades") {
+            this.footprints("blades", p.x, p.y, p.side === 0 ? -1 : 1).forEach(([x, y], i) =>
+              this.token("blades", p.side, x, y, 0, def.radius * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank }));
+          } else {
+            this.token(p.kind, p.side, p.x, p.y, 0, def.radius * pop, face, { t: this.time, id: p.id, hidden: mine, flat: mine, own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
+          }
+          const at = this.bodyAt(p.x, p.y, 0, def.radius, mine);
+          drawRank(this.ctx, at.x, at.y, Math.max(at.r, 0.3 * this.cam.scaleAt(p.y)), p.rank);
+        },
+      });
     }
+    for (const o of this.obstacles) list.push({ y: o.y, layer: 1, draw: () => this.drawRock(o) });
+    for (const d of sortDrawables(list)) d.draw();
     if (sc.ghost) {
-      const g = sc.ghost, def = UNITS[g.kind];
-      const x = this.sx(g.x), y = this.sy(g.y), r = def.radius * s;
+      const ctx = this.ctx, g = sc.ghost, def = UNITS[g.kind];
       ctx.save();
       ctx.globalAlpha = 0.75;
-      this.drawRangeHint(g.kind, x, y, g.ok);
+      this.drawRangeHint(g.kind, g.x, g.y, g.ok);
+      for (const [x, y] of this.footprints(g.kind, g.x, g.y, -1)) this.shadow(x, y, def.radius * 1.1, 0.2);
       if (g.kind === "blades") {
-        for (let i = 0; i < 3; i++) {
-          const a = Math.PI / 2 + (i * TAU) / 3;
-          this.token("blades", 0, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r, -Math.PI / 2, { t: this.time, ghost: true });
-        }
-      } else this.token(g.kind, 0, x, y, r, -Math.PI / 2, { t: this.time, ghost: true, own: true });
+        for (const [x, y] of this.footprints("blades", g.x, g.y, -1)) this.token("blades", 0, x, y, 0, def.radius, -Math.PI / 2, { t: this.time, ghost: true });
+      } else this.token(g.kind, 0, g.x, g.y, 0, def.radius, -Math.PI / 2, { t: this.time, ghost: true, own: true, flat: g.kind === "mine" });
       if (!g.ok) {
         ctx.globalAlpha = 0.9;
         ctx.strokeStyle = "#ff4d4d"; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(x, y, r * 1.5, 0, TAU); ctx.stroke();
+        ctx.beginPath(); this.cam.groundPath(ctx, g.x, g.y, def.radius * 1.5); ctx.stroke();
       }
       ctx.restore();
     }
+  }
+
+  /** Where the bodies of a piece stand: one, or Blades' trio around the placed point. */
+  private footprints(kind: BodyKind, x: number, y: number, facing: number): [number, number][] {
+    if (kind !== "blades") return [[x, y]];
+    const out: [number, number][] = [];
+    for (let i = 0; i < 3; i++) {
+      const a = (Math.PI / 2) * facing + (i * TAU) / 3;
+      out.push([x + Math.cos(a) * 0.32, y + Math.sin(a) * 0.32]);
+    }
+    return out;
   }
 
   private drawRangeHint(kind: UnitKind, x: number, y: number, ok: boolean) {
@@ -541,184 +679,223 @@ export class BoardView {
     ctx.fillStyle = kind === "mine" ? "rgba(255,120,80,0.12)" : "rgba(166,255,246,0.05)";
     ctx.lineWidth = 1.5;
     ctx.setLineDash([5, 5]);
-    ctx.beginPath(); ctx.arc(x, y, r * this.s, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); this.cam.groundPath(ctx, x, y, r); ctx.fill(); ctx.stroke();
     ctx.restore();
   }
 
   private drawSelection(p: Piece) {
     const ctx = this.ctx, def = UNITS[p.kind];
-    const x = this.sx(p.x), y = this.sy(p.y), r = (p.kind === "blades" ? 0.62 : def.radius) * this.s;
-    this.drawRangeHint(p.kind, x, y, true);
+    const r = (p.kind === "blades" ? 0.62 : def.radius) + 7 / this.cam.scaleAt(p.y);
+    this.drawRangeHint(p.kind, p.x, p.y, true);
     ctx.save();
     ctx.strokeStyle = GOLD; ctx.lineWidth = 2.5;
     ctx.setLineDash([6, 4]);
     ctx.lineDashOffset = -this.time * 20;
-    ctx.beginPath(); ctx.arc(x, y, r + 7, 0, TAU); ctx.stroke();
+    ctx.beginPath(); this.cam.groundPath(ctx, p.x, p.y, r); ctx.stroke();
     ctx.restore();
   }
 
   private drawBattle(sc: BattleScene) {
-    const ctx = this.ctx, s = this.s, b = sc.battle, a = sc.alpha;
-    const lerp = (bd: Body) => [this.sx(bd.px + (bd.x - bd.px) * a), this.sy(bd.py + (bd.y - bd.py) * a)] as const;
-    // Burning ground.
+    const ctx = this.ctx, b = sc.battle, a = sc.alpha;
+    const pos = (bd: Body) => [bd.px + (bd.x - bd.px) * a, bd.py + (bd.y - bd.py) * a] as const;
+    const height = (bd: Body) => (bd.flying ? (bd.z ?? 1.2) * AIR : 0);
+    // ---- ground decals
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
-      const x = this.sx(z.x), y = this.sy(z.y), r = z.r * s;
       const left = Math.min(1, (z.until - b.time) / 0.6);
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
       const fl = 0.75 + 0.25 * Math.sin(this.time * 17 + z.id);
-      g.addColorStop(0, `rgba(255,170,60,${0.45 * fl * left})`);
-      g.addColorStop(0.6, `rgba(255,90,30,${0.28 * fl * left})`);
-      g.addColorStop(1, "rgba(255,60,20,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      this.ground(z.x, z.y, (g) => {
+        const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
+        gr.addColorStop(0, `rgba(255,170,60,${0.45 * fl * left})`);
+        gr.addColorStop(0.6, `rgba(255,90,30,${0.28 * fl * left})`);
+        gr.addColorStop(1, "rgba(255,60,20,0)");
+        g.fillStyle = gr;
+        g.beginPath(); g.arc(0, 0, z.r, 0, TAU); g.fill();
+      });
       if (Math.random() < 0.35) this.fx.burst(z.x + frand(-z.r, z.r) * 0.7, z.y + frand(-z.r, z.r) * 0.7, 1, { color: "#ffb347", speed: 0.4, size: 0.05, max: 0.6, kind: "spark", gravity: -1.5, vz: 1 });
     }
-    // Ground layer: mines, fuses waiting to blow.
+    for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
     for (const bd of b.bodies) {
       if (bd.kind !== "mine" || !bd.alive) continue;
-      const [x, y] = lerp(bd);
-      this.token("mine", bd.side, x, y, bd.radius * s, 0, { t: this.time, state: bd.state, hidden: bd.hidden, own: bd.side === 0, rank: bd.rank });
-    }
-    for (const f of b.fuses ?? []) {
-      if (b.time >= f.at) continue;
-      const x = this.sx(f.x), y = this.sy(f.y), r = 0.11 * s;
-      drawShadow(ctx, x, y, r, 0.4);
-      ctx.fillStyle = f.kind === "keg" ? "#7a4a24" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(x, y, f.kind === "keg" ? r * 1.6 : r, 0, TAU); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = (this.time * 14) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
-      ctx.beginPath(); ctx.arc(x + r * 0.5, y - r * 0.7, r * 0.4, 0, TAU); ctx.fill();
+      const [x, y] = pos(bd);
+      this.token("mine", bd.side, x, y, 0, bd.radius, 0, { t: this.time, state: bd.state, hidden: bd.hidden, own: bd.side === 0, rank: bd.rank, flat: true });
     }
     // Tinkers' turrets going up.
     for (const bd of b.bodies) {
       if (!bd.alive || bd.kind !== "tinker" || bd.state !== "build") continue;
-      const x = this.sx(bd.ax), y = this.sy(bd.ay), u = Math.min(1, bd.t / 1.2);
-      ctx.save();
-      ctx.strokeStyle = "rgba(255,209,102,0.85)"; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(x, y, 0.3 * s, -Math.PI / 2, -Math.PI / 2 + TAU * u); ctx.stroke();
-      ctx.restore();
+      const u = Math.min(1, bd.t / 1.2);
+      this.ground(bd.ax, bd.ay, (g) => {
+        g.strokeStyle = "rgba(255,209,102,0.85)"; g.lineWidth = 0.08;
+        g.beginPath(); g.arc(0, 0, 0.3, -Math.PI / 2, -Math.PI / 2 + TAU * u); g.stroke();
+      });
     }
-    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || p.y - q.y);
+    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45));
     for (const bd of live) {
-      const [x, y] = lerp(bd);
-      const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
+      const [x, y] = pos(bd);
       if (bd.burrowed) {
         // Underground: a moving mound of earth, no body.
-        ctx.save();
-        ctx.fillStyle = "rgba(95,72,48,0.9)"; ctx.strokeStyle = "rgba(40,28,18,0.9)"; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.ellipse(x, y, 0.26 * s, 0.18 * s, Math.atan2(bd.vy, bd.vx), 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = "rgba(160,125,85,0.8)";
-        ctx.beginPath(); ctx.ellipse(x - 0.04 * s, y - 0.04 * s, 0.12 * s, 0.07 * s, 0, 0, TAU); ctx.fill();
-        ctx.restore();
+        const ang = Math.atan2(bd.vy, bd.vx);
+        this.ground(x, y, (g) => {
+          g.fillStyle = "rgba(95,72,48,0.9)"; g.strokeStyle = "rgba(40,28,18,0.9)"; g.lineWidth = 0.04;
+          g.beginPath(); g.ellipse(0, 0, 0.26, 0.18, ang, 0, TAU); g.fill(); g.stroke();
+          g.fillStyle = "rgba(160,125,85,0.8)";
+          g.beginPath(); g.ellipse(-0.04, -0.04, 0.12, 0.07, 0, 0, TAU); g.fill();
+        });
         continue;
       }
-      const swing = b.time - bd.swing < 0.35 ? (b.time - bd.swing) / 0.35 : -1;
-      const sp = Math.hypot(bd.vx, bd.vy);
-      if (bd.kind === "lancer" && bd.state === "charge" && sp > 2.5 && Math.random() < 0.5)
-        this.fx.burst(bd.x - Math.cos(bd.face) * 0.3, bd.y - Math.sin(bd.face) * 0.3, 1, { color: "rgba(170,150,120,0.55)", speed: 0.5, size: 0.12, max: 0.45, kind: "smoke", gravity: 0 });
-      if (bd.kind === "shade" && bd.hidden && Math.random() < 0.15)
-        this.fx.burst(bd.x, bd.y, 1, { color: "rgba(180,140,255,0.35)", speed: 0.3, size: 0.1, max: 0.5, kind: "smoke", gravity: 0 });
-      if (bd.kind === "keg" && bd.state === "run" && Math.random() < 0.6)
-        this.fx.burst(bd.x, bd.y, 1, { color: "#ffd166", speed: 0.8, size: 0.035, max: 0.3, kind: "spark", gravity: 0 });
-      // Auras under the unit.
+      const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
+      const z = height(bd);
+      // Contact shadow: smaller and fainter the higher the body flies.
+      this.shadow(x, y, bd.radius * (1.1 - z * 0.15), (0.38 - z * 0.08) * fade);
+      // Auras on the ground under the unit.
       if (bd.alive && ((bd.buff ?? 0) > 0 || (bd.rally ?? 0) > 0)) {
         ctx.save();
         ctx.strokeStyle = (bd.rally ?? 0) > 0 ? "rgba(255,209,102,0.55)" : team(bd.side).glow + "0.45)";
         ctx.lineWidth = 1.5;
         ctx.setLineDash([3, 3]); ctx.lineDashOffset = -this.time * 12;
-        ctx.beginPath(); ctx.arc(x, y, bd.radius * s * 1.5, 0, TAU); ctx.stroke();
+        ctx.beginPath(); this.cam.groundPath(ctx, x, y, bd.radius * 1.5); ctx.stroke();
         ctx.restore();
-      }
-      let dy = 0, scale = 1;
-      if (bd.flying) {
-        // Altitude: the body rides above its shadow.
-        const z = bd.z ?? 1.2;
-        drawShadow(ctx, x, y, bd.radius * s * (1.1 - z * 0.2), 0.32 - z * 0.12);
-        dy = -z * s * 0.55;
-        scale = 1 + z * 0.12;
-      }
-      const decoy = bd.kind === "decoy";
-      const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
-      const kind = decoy ? "trickster" : bd.kind;
-      this.token(kind, bd.side, x, y + dy, bd.radius * s * scale * (bd.alive ? 1 : 0.8 + 0.2 * fade) * (decoy ? RADIUS("trickster") / RADIUS("decoy") : 1), bd.face, {
-        t: this.time, alpha: fade * (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1), flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
-        state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
-      });
-      if (bd.alive && (bd.frozen ?? 0) > 0) this.drawIce(x, y + dy, bd.radius * s * 1.25);
-      else if (bd.alive && (bd.slow ?? 0) > 0) {
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        ctx.strokeStyle = ICE; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(x, y + dy, bd.radius * s * 1.15, 0, TAU); ctx.stroke();
-        ctx.restore();
-      }
-      if (bd.alive && bd.kind === "duelist" && (bd.parryCd ?? 1) <= 0) {
-        const gl = 0.5 + 0.5 * Math.sin(this.time * 10);
-        ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
-        ctx.beginPath(); ctx.arc(x + bd.radius * s * 0.8, y - bd.radius * s * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
       }
       if (bd.alive && bd.kind === "pikeman" && bd.braced) {
-        ctx.save();
-        ctx.strokeStyle = "rgba(232,238,245,0.7)"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(x, y, bd.radius * s * 1.6, bd.face - 0.6, bd.face + 0.6); ctx.stroke();
-        ctx.restore();
+        const face = bd.face;
+        this.ground(x, y, (g) => {
+          g.strokeStyle = "rgba(232,238,245,0.7)"; g.lineWidth = 0.06;
+          g.beginPath(); g.arc(0, 0, bd.radius * 1.6, face - 0.6, face + 0.6); g.stroke();
+        });
       }
-      if (bd.alive && bd.stun > 0.05) this.drawStun(x, y + dy - bd.radius * s * 1.1, bd.radius * s);
     }
-    // Projectiles.
+    // ---- upright and air layers, painter-sorted by ground y
+    const list: Drawable[] = [];
+    for (const o of this.obstacles) list.push({ y: o.y, layer: 1, draw: () => this.drawRock(o) });
+    for (const f of b.fuses ?? []) {
+      if (b.time >= f.at) continue;
+      list.push({ y: f.y, layer: 1, draw: () => this.drawFuse(f.x, f.y, f.kind === "keg") });
+    }
+    for (const bd of live) {
+      if (bd.burrowed) continue;
+      list.push({ y: pos(bd)[1], layer: bd.flying ? 2 : 1, draw: () => this.drawBody(b, bd, pos(bd), height(bd)) });
+    }
     for (const p of b.projs) {
       if (!p.alive) continue;
-      const x = this.sx(p.px + (p.x - p.px) * a), y = this.sy(p.py + (p.y - p.py) * a);
-      if (p.kind === "grenade" || p.kind === "shell") {
-        const shell = p.kind === "shell";
-        drawShadow(ctx, x, y, (shell ? 0.14 : 0.1) * s, 0.4);
-        const zy = y - p.z * s * 0.55;
-        if ((p as any).fx === "fire" && Math.random() < 0.7) this.fx.burst(p.x, p.y - p.z * 0.55, 1, { color: "#ff9a3d", speed: 0.3, size: 0.05, max: 0.3, kind: "spark", gravity: 0 });
-        ctx.fillStyle = shell ? "#3b4048" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(x, zy, (shell ? 0.17 : 0.12) * s, 0, TAU); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = (this.time * 12) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
-        ctx.beginPath(); ctx.arc(x + 0.06 * s, zy - 0.08 * s, 0.04 * s, 0, TAU); ctx.fill();
-      } else if (p.kind === "pellet") {
-        ctx.fillStyle = "#ffe08a";
-        ctx.beginPath(); ctx.arc(x, y, Math.max(2, 0.05 * s), 0, TAU); ctx.fill();
-      } else {
-        const ice = p.kind === "shard";
-        const ang = Math.atan2(p.vy, p.vx), len = (p.kind === "bolt" ? 0.75 : ice ? 0.32 : 0.42) * s;
-        ctx.save();
-        ctx.translate(x, y); ctx.rotate(ang);
-        const tg = ctx.createLinearGradient(-len * 1.6, 0, 0, 0);
-        tg.addColorStop(0, "rgba(255,255,255,0)"); tg.addColorStop(1, p.kind === "bolt" ? "rgba(255,230,190,0.8)" : ice ? "rgba(190,235,255,0.9)" : "rgba(255,255,255,0.6)");
-        ctx.strokeStyle = tg; ctx.lineWidth = p.kind === "bolt" ? 0.09 * s : ice ? 0.08 * s : 0.05 * s; ctx.lineCap = "round";
-        ctx.beginPath(); ctx.moveTo(-len * 1.6, 0); ctx.lineTo(0, 0); ctx.stroke();
-        if (ice) {
-          ctx.fillStyle = "#e9f9ff";
-          ctx.beginPath(); ctx.moveTo(len * 0.35, 0); ctx.lineTo(0, -0.06 * s); ctx.lineTo(-len * 0.3, 0); ctx.lineTo(0, 0.06 * s); ctx.closePath(); ctx.fill();
-        } else {
-          ctx.strokeStyle = p.kind === "bolt" ? "#e9d7b8" : "#f4efe6"; ctx.lineWidth = p.kind === "bolt" ? 0.07 * s : 0.035 * s;
-          ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(len * 0.1, 0); ctx.stroke();
-          ctx.fillStyle = "#cfd8e3";
-          ctx.beginPath(); ctx.moveTo(len * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
-        }
-        ctx.restore();
-      }
+      const lob = p.kind === "grenade" || p.kind === "shell";
+      list.push({ y: p.py + (p.y - p.py) * a, layer: lob ? 2 : 1, draw: () => this.drawProj(p, a) });
     }
-    // Health bars on top (not for illusions or bodies underground).
+    for (const d of sortDrawables(list)) d.draw();
+    // ---- bars and ranks on top (not for illusions or bodies underground)
     for (const bd of live) {
       if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed) continue;
-      const [x, y0] = lerp(bd);
-      const y = y0 - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0);
-      const w = Math.max(16, bd.radius * s * 1.9), h = 4;
-      const top = y - bd.radius * s * 1.3 - 9;
+      const [x, y] = pos(bd);
+      const at = this.bodyAt(x, y, height(bd), bd.radius);
+      const w = Math.max(16, at.r * 1.9), h = 4;
+      const top = at.y - at.r * 1.3 - 9;
       ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(x - w / 2 - 1, top - 1, w + 2, h + 2);
+      ctx.fillRect(at.x - w / 2 - 1, top - 1, w + 2, h + 2);
       ctx.fillStyle = TEAM[bd.side].main;
-      ctx.fillRect(x - w / 2, top, w * (bd.hp / bd.maxHp), h);
+      ctx.fillRect(at.x - w / 2, top, w * (bd.hp / bd.maxHp), h);
     }
     for (const bd of live) {
       if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || bd.burrowed || bd.kind === "decoy") continue;
-      const [x, y] = lerp(bd);
-      drawRank(ctx, x, y - (bd.hp < bd.maxHp ? 14 : 5) - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0), bd.radius * s * 1.3, bd.rank);
+      const [x, y] = pos(bd);
+      const at = this.bodyAt(x, y, height(bd), bd.radius);
+      drawRank(ctx, at.x, at.y - (bd.hp < bd.maxHp ? 14 : 5), at.r * 1.3, bd.rank);
     }
+  }
+
+  private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number) {
+    const ctx = this.ctx;
+    const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
+    const swing = b.time - bd.swing < 0.35 ? (b.time - bd.swing) / 0.35 : -1;
+    const sp = Math.hypot(bd.vx, bd.vy);
+    if (bd.kind === "lancer" && bd.state === "charge" && sp > 2.5 && Math.random() < 0.5)
+      this.fx.burst(bd.x - Math.cos(bd.face) * 0.3, bd.y - Math.sin(bd.face) * 0.3, 1, { color: "rgba(170,150,120,0.55)", speed: 0.5, size: 0.12, max: 0.45, kind: "smoke", gravity: 0 });
+    if (bd.kind === "shade" && bd.hidden && Math.random() < 0.15)
+      this.fx.burst(bd.x, bd.y, 1, { color: "rgba(180,140,255,0.35)", speed: 0.3, size: 0.1, max: 0.5, kind: "smoke", gravity: 0 });
+    if (bd.kind === "keg" && bd.state === "run" && Math.random() < 0.6)
+      this.fx.burst(bd.x, bd.y, 1, { color: "#ffd166", speed: 0.8, size: 0.035, max: 0.3, kind: "spark", gravity: 0 });
+    const scale = bd.flying ? 1 + (bd.z ?? 1.2) * 0.08 : 1;
+    const decoy = bd.kind === "decoy";
+    const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
+    const kind = decoy ? "trickster" : bd.kind;
+    const radius = bd.radius * scale * (bd.alive ? 1 : 0.8 + 0.2 * fade) * (decoy ? RADIUS("trickster") / RADIUS("decoy") : 1);
+    this.token(kind, bd.side, x, y, z, radius, bd.face, {
+      t: this.time, alpha: fade * (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1), flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
+      state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
+    });
+    const at = this.bodyAt(x, y, z, bd.radius);
+    if (bd.alive && (bd.frozen ?? 0) > 0) this.drawIce(at.x, at.y, at.r * 1.25);
+    else if (bd.alive && (bd.slow ?? 0) > 0) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = ICE; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(at.x, at.y, at.r * 1.15, at.r * 1.15 * this.cam.squashAt(y), 0, 0, TAU); ctx.stroke();
+      ctx.restore();
+    }
+    if (bd.alive && bd.kind === "duelist" && (bd.parryCd ?? 1) <= 0) {
+      const gl = 0.5 + 0.5 * Math.sin(this.time * 10);
+      ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
+      ctx.beginPath(); ctx.arc(at.x + at.r * 0.8, at.y - at.r * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
+    }
+    if (bd.alive && bd.stun > 0.05) this.drawStun(at.x, at.y - at.r * 1.1, at.r);
+  }
+
+  private drawFuse(x: number, y: number, keg: boolean) {
+    const ctx = this.ctx, rw = keg ? 0.18 : 0.11;
+    this.shadow(x, y, rw, 0.4);
+    const p = this.cam.project(x, y, rw), r = rw * p.s;
+    ctx.fillStyle = keg ? "#7a4a24" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = (this.time * 14) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
+    ctx.beginPath(); ctx.arc(p.x + r * 0.4, p.y - r * 0.8, Math.max(1.5, r * 0.3), 0, TAU); ctx.fill();
+  }
+
+  /** Projectiles fly on arcs: lobs use the sim's height, shots rise and fall over their path from launcher to target. */
+  private drawProj(p: Proj, a: number) {
+    const ctx = this.ctx, cam = this.cam;
+    const wx = p.px + (p.x - p.px) * a, wy = p.py + (p.y - p.py) * a;
+    if (p.kind === "grenade" || p.kind === "shell") {
+      const shell = p.kind === "shell";
+      this.shadow(wx, wy, shell ? 0.14 : 0.1, 0.4);
+      const q = cam.project(wx, wy, 0.25 + p.z * 0.6), r = (shell ? 0.17 : 0.12) * q.s;
+      if (p.fx === "fire" && Math.random() < 0.7) this.fx.burst(p.x, p.y, 1, { color: "#ff9a3d", speed: 0.3, size: 0.05, max: 0.3, kind: "spark", gravity: 0, z: (0.25 + p.z * 0.6) * 2 - 0.6 });
+      ctx.fillStyle = shell ? "#3b4048" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(q.x, q.y, r, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = (this.time * 12) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
+      ctx.beginPath(); ctx.arc(q.x + r * 0.5, q.y - r * 0.6, Math.max(1.2, r * 0.3), 0, TAU); ctx.fill();
+      return;
+    }
+    const arc = shotArc(p);
+    const hAt = (x: number, y: number) => arc.base + arc.peak * bump(progress(p, x, y));
+    const h = hAt(wx, wy);
+    const head = cam.project(wx, wy, h);
+    if (p.kind === "pellet") {
+      ctx.fillStyle = "#ffe08a";
+      ctx.beginPath(); ctx.arc(head.x, head.y, Math.max(2, 0.05 * head.s), 0, TAU); ctx.fill();
+      return;
+    }
+    const ice = p.kind === "shard";
+    const sp = Math.hypot(p.vx, p.vy) || 1, ux = p.vx / sp, uy = p.vy / sp;
+    const len = p.kind === "bolt" ? 0.75 : ice ? 0.32 : 0.42;
+    const tx = wx - ux * len * 1.6, ty = wy - uy * len * 1.6;
+    const tail = cam.project(tx, ty, hAt(tx, ty));
+    const ang = Math.atan2(head.y - tail.y, head.x - tail.x);
+    const pxLen = Math.hypot(head.x - tail.x, head.y - tail.y) / 1.6, s = head.s;
+    this.shadow(wx, wy, 0.06, 0.25);
+    ctx.save();
+    ctx.translate(head.x, head.y); ctx.rotate(ang);
+    const tg = ctx.createLinearGradient(-pxLen * 1.6, 0, 0, 0);
+    tg.addColorStop(0, "rgba(255,255,255,0)"); tg.addColorStop(1, p.kind === "bolt" ? "rgba(255,230,190,0.8)" : ice ? "rgba(190,235,255,0.9)" : "rgba(255,255,255,0.6)");
+    ctx.strokeStyle = tg; ctx.lineWidth = (p.kind === "bolt" ? 0.09 : ice ? 0.08 : 0.05) * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-pxLen * 1.6, 0); ctx.lineTo(0, 0); ctx.stroke();
+    if (ice) {
+      ctx.fillStyle = "#e9f9ff";
+      ctx.beginPath(); ctx.moveTo(pxLen * 0.35, 0); ctx.lineTo(0, -0.06 * s); ctx.lineTo(-pxLen * 0.3, 0); ctx.lineTo(0, 0.06 * s); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.strokeStyle = p.kind === "bolt" ? "#e9d7b8" : "#f4efe6"; ctx.lineWidth = (p.kind === "bolt" ? 0.07 : 0.035) * s;
+      ctx.beginPath(); ctx.moveTo(-pxLen, 0); ctx.lineTo(pxLen * 0.1, 0); ctx.stroke();
+      ctx.fillStyle = "#cfd8e3";
+      ctx.beginPath(); ctx.moveTo(pxLen * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
+    }
+    ctx.restore();
   }
 
   private drawIce(x: number, y: number, r: number) {
@@ -747,45 +924,47 @@ export class BoardView {
     ctx.restore();
   }
 
+  /** Effects live in world space: rings lie on the ground, slashes at waist height, sparks and floats above. */
   private drawFx() {
-    const ctx = this.ctx, s = this.s, fx = this.fx;
+    const ctx = this.ctx, fx = this.fx, cam = this.cam;
     for (const r of fx.rings) {
       const u = 1 - r.life / r.max;
-      const rad = (r.r0 + (r.r1 - r.r0) * easeOut(u)) * s;
+      const rad = r.r0 + (r.r1 - r.r0) * easeOut(u);
       ctx.save();
       ctx.globalAlpha = 1 - u;
-      if (r.fill) { ctx.fillStyle = r.fill; ctx.beginPath(); ctx.arc(this.sx(r.x), this.sy(r.y), rad, 0, TAU); ctx.fill(); }
-      ctx.strokeStyle = r.color; ctx.lineWidth = Math.max(1, r.width * s * (1 - u * 0.6));
-      ctx.beginPath(); ctx.arc(this.sx(r.x), this.sy(r.y), rad, 0, TAU); ctx.stroke();
+      ctx.beginPath(); cam.groundPath(ctx, r.x, r.y, rad);
+      if (r.fill) { ctx.fillStyle = r.fill; ctx.fill(); }
+      ctx.strokeStyle = r.color; ctx.lineWidth = Math.max(1, r.width * cam.scaleAt(r.y) * (1 - u * 0.6));
+      ctx.stroke();
       ctx.restore();
     }
     for (const a of fx.arcs) {
       const u = 1 - a.life / a.max;
-      ctx.save();
-      ctx.globalAlpha = 1 - u;
-      ctx.translate(this.sx(a.x), this.sy(a.y));
-      ctx.rotate(a.a);
-      const rr = a.r * s;
-      ctx.fillStyle = a.color;
-      ctx.beginPath();
-      const sp = a.spread / 2, start = -sp + u * 0.4;
-      ctx.arc(0, 0, rr, start, sp);
-      ctx.arc(0, 0, rr * 0.72, sp, start, true);
-      ctx.closePath(); ctx.fill();
-      ctx.restore();
+      this.ground(a.x, a.y, (g) => {
+        g.globalAlpha = 1 - u;
+        g.rotate(a.a);
+        g.fillStyle = a.color;
+        g.beginPath();
+        const sp = a.spread / 2, start = -sp + u * 0.4;
+        g.arc(0, 0, a.r, start, sp);
+        g.arc(0, 0, a.r * 0.72, sp, start, true);
+        g.closePath(); g.fill();
+      }, 0.3);
     }
     for (const bm of fx.beams) {
       const u = 1 - bm.life / bm.max;
+      const p0 = cam.project(bm.x0, bm.y0, 0.4), p1 = cam.project(bm.x1, bm.y1, 0.4);
       ctx.save();
       ctx.globalAlpha = 1 - u;
-      ctx.strokeStyle = bm.color; ctx.lineWidth = bm.width * s; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(this.sx(bm.x0), this.sy(bm.y0)); ctx.lineTo(this.sx(bm.x1), this.sy(bm.y1)); ctx.stroke();
+      ctx.strokeStyle = bm.color; ctx.lineWidth = bm.width * (p0.s + p1.s) / 2; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
       ctx.restore();
     }
     for (const bl of fx.bolts) {
       const u = 1 - bl.life / bl.max;
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
+      const s = this.s;
       for (const [width, alpha, color] of [[0.22, 0.25, "#6aa8ff"], [0.09, 0.9, bl.color], [0.035, 1, "#ffffff"]] as [number, number, string][]) {
         ctx.globalAlpha = alpha * (1 - u);
         ctx.strokeStyle = color; ctx.lineWidth = width * s; ctx.lineJoin = "round"; ctx.lineCap = "round";
@@ -793,12 +972,13 @@ export class BoardView {
         let k = bl.seed + Math.floor(this.time * 30);
         const jit = () => { k = (k * 16807) % 2147483647; return (k / 2147483647 - 0.5) * 0.35; };
         bl.pts.forEach(([x, y], i) => {
-          if (i === 0) { ctx.moveTo(this.sx(x), this.sy(y)); return; }
+          if (i === 0) { const q = cam.project(x, y, 0.45); ctx.moveTo(q.x, q.y); return; }
           const [px, py] = bl.pts[i - 1];
           for (let j = 1; j <= 4; j++) {
             const t = j / 4;
             const jx = j < 4 ? jit() : 0, jy = j < 4 ? jit() : 0;
-            ctx.lineTo(this.sx(px + (x - px) * t + jx), this.sy(py + (y - py) * t + jy));
+            const q = cam.project(px + (x - px) * t + jx, py + (y - py) * t + jy, 0.45);
+            ctx.lineTo(q.x, q.y);
           }
         });
         ctx.stroke();
@@ -807,11 +987,12 @@ export class BoardView {
     }
     for (const p of fx.parts) {
       const u = p.life / p.max;
-      const x = this.sx(p.x), y = this.sy(p.y) - p.z * s * 0.5;
+      const q = cam.project(p.x, p.y, p.z * 0.5 + (p.kind === "spark" || p.kind === "plus" ? 0.3 : 0));
+      const x = q.x, y = q.y;
       ctx.save();
       ctx.globalAlpha = Math.min(1, u * 1.6);
       ctx.fillStyle = p.color;
-      const size = p.size * s * (p.kind === "smoke" ? 1 + (1 - u) * 1.5 : 1);
+      const size = p.size * q.s * (p.kind === "smoke" ? 1 + (1 - u) * 1.5 : 1);
       if (p.kind === "plus") {
         const w = size * 0.35;
         ctx.fillRect(x - size, y - w, size * 2, w * 2);
@@ -829,21 +1010,36 @@ export class BoardView {
     }
     for (const f of fx.floats) {
       const u = 1 - f.life / f.max;
+      const q = cam.project(f.x, f.y, 0.6);
       ctx.save();
       ctx.globalAlpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
-      const size = f.size * s * (u < 0.15 ? 0.7 + u * 2 : 1);
+      const size = f.size * q.s * (u < 0.15 ? 0.7 + u * 2 : 1);
       ctx.font = `800 ${size}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.strokeText(f.text, this.sx(f.x), this.sy(f.y));
+      ctx.strokeText(f.text, q.x, q.y);
       ctx.fillStyle = f.color;
-      ctx.fillText(f.text, this.sx(f.x), this.sy(f.y));
+      ctx.fillText(f.text, q.x, q.y);
       ctx.restore();
     }
   }
 }
 
 const easeOut = (x: number) => 1 - (1 - x) ** 3;
+/** 0 at both ends, 1 in the middle. */
+const bump = (u: number) => 4 * u * (1 - u);
+/** How far a shot is along its launcher-to-target line, 0..1. */
+function progress(p: Proj, x: number, y: number): number {
+  const dx = p.tx - p.x0, dy = p.ty - p.y0, L2 = dx * dx + dy * dy;
+  if (L2 < 1e-6) return 0;
+  return Math.max(0, Math.min(1, ((x - p.x0) * dx + (y - p.y0) * dy) / L2));
+}
+/** Launch height and arc peak (world units) for a straight shot: arrows loop, bolts and shards fly flatter. */
+export function shotArc(p: Pick<Proj, "kind" | "x0" | "y0" | "tx" | "ty">): { base: number; peak: number } {
+  const len = Math.hypot(p.tx - p.x0, p.ty - p.y0);
+  const k = p.kind === "arrow" ? 0.16 : p.kind === "bolt" ? 0.06 : 0.08;
+  return { base: 0.45, peak: Math.min(1.4, len * k) };
+}
 
 export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();

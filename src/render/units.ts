@@ -15,6 +15,7 @@ export interface DrawOpts {
   ghost?: boolean; // placement preview
   hidden?: boolean; // cloaked / buried
   own?: boolean; // viewer's own side (mines and cloaks show faintly)
+  noShadow?: boolean; // the caller draws the contact shadow (the diorama board does)
 }
 
 const TAU = Math.PI * 2;
@@ -70,7 +71,7 @@ export function drawUnit(ctx: CanvasRenderingContext2D, kind: BodyKind, side: Si
   ctx.translate(x, y);
   ctx.globalAlpha *= o.alpha ?? 1;
   if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
-  if (kind !== "mine") drawShadow(ctx, 0, 0, kind === "lancer" ? r * 1.15 : r, o.ghost ? 0.2 : 0.35);
+  if (kind !== "mine" && !o.noShadow) drawShadow(ctx, 0, 0, kind === "lancer" ? r * 1.15 : r, o.ghost ? 0.2 : 0.35);
   // A small bob while walking.
   const gait = o.speed && o.speed > 0.2 ? Math.sin(t * 14 + (o.id ?? 0)) * r * 0.06 : 0;
   ctx.translate(0, gait);

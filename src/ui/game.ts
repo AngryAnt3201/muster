@@ -1,7 +1,7 @@
 // One match on screen: deploy (drag from the shop, move, upgrade, sell), then the battle plays out, then the damage.
 import { applyPlan, planTurnAsync, type AIProfile } from "../core/ai";
 import type { Battle } from "../core/battle";
-import { DT, UNITS, inZone, upgradeCost, type Piece, type Side, type UnitKind } from "../core/defs";
+import { DT, UNITS, clampToZone, inZone, upgradeCost, type Piece, type Side, type UnitKind } from "../core/defs";
 import { Match, type MatchConfig, type RoundReport } from "../core/match";
 import { sfx, unlockAudio } from "../audio/sfx";
 import { buzz } from "../native";
@@ -452,7 +452,9 @@ export class GameScreen {
     unlockAudio();
     if (this.phase !== "deploy" || this.watch || this.paused) return;
     const w = this.view.toWorld(e.clientX, e.clientY);
-    const mine = this.pieceAt(w.x, w.y, 0);
+    // Figures stand up off the ground: a tap on the body (not just the feet) picks it.
+    const up = this.view.toWorldAt(e.clientX, e.clientY, 0.35);
+    const mine = this.pieceAt(w.x, w.y, 0) ?? this.pieceAt(up.x, up.y, 0);
     if (mine) {
       this.drag = { type: "piece", id: mine.id, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
       return;
@@ -461,7 +463,7 @@ export class GameScreen {
       this.tryBuy(this.pickSlot, w.x, w.y);
       return;
     }
-    const theirs = this.pieceAt(w.x, w.y, 1);
+    const theirs = this.pieceAt(w.x, w.y, 1) ?? this.pieceAt(up.x, up.y, 1);
     if (theirs) { this.openPop(theirs); return; }
     this.selected = null;
     this.closePop();
@@ -480,7 +482,9 @@ export class GameScreen {
       const kind = this.match.sides[0].shop[d.slot!];
       if (!kind) return;
       const ok = inZone(0, w.x, w.y) && !this.match.canBuy(0, d.slot!);
-      this.ghost = { kind, x: w.x, y: w.y, ok };
+      // Show the ghost exactly where the sim will place it (buy clamps into the zone by the unit's radius).
+      const at = ok ? clampToZone(0, w.x, w.y, UNITS[kind].radius) : w;
+      this.ghost = { kind, x: at.x, y: at.y, ok };
     } else {
       try { this.match.move(0, d.id!, w.x, w.y); } catch { /* not now */ }
       this.selected = d.id!;
@@ -578,7 +582,7 @@ export class GameScreen {
       });
       pop.append(el("div", { class: "pop-actions" }, [up, sell]));
     }
-    const sx = this.view.sx(p.x), sy = this.view.sy(p.y);
+    const at = this.view.toScreen(p.x, p.y), sx = at.x, sy = at.y;
     pop.classList.remove("hidden");
     const r = pop.getBoundingClientRect();
     const x = Math.max(8, Math.min(window.innerWidth - r.width - 8, sx - r.width / 2));

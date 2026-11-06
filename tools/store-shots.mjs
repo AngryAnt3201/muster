@@ -82,7 +82,7 @@ async function deploy(page) {
     const r = c.getBoundingClientRect();
     return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
   });
-  const to = await page.evaluate(() => { const { g, defs } = window.__shots; return { x: g.view.sx(defs.W * 0.3), y: g.view.sy(defs.H - 2.2) }; });
+  const to = await page.evaluate(() => { const { g, defs } = window.__shots; const p = g.view.toScreen(defs.W * 0.3, defs.H - 2.2); return { x: p.x, y: p.y }; });
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   for (let i = 1; i <= 14; i++) { await page.mouse.move(from.x + (to.x - from.x) * i / 14, from.y + (to.y - from.y) * i / 14); await page.waitForTimeout(16); }
@@ -134,7 +134,7 @@ async function breakpoint(page) {
   });
   await page.waitForTimeout(1800); // intro banner gone
   const from = await page.evaluate(() => { const c = document.querySelectorAll(".shop .card")[2] ?? document.querySelector(".shop .card"); const r = c.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  const to = await page.evaluate(() => { const { g, defs } = window.__shots; return { x: g.view.sx(defs.W * 0.35), y: g.view.sy(defs.H - 3.4) }; });
+  const to = await page.evaluate(() => { const { g, defs } = window.__shots; const p = g.view.toScreen(defs.W * 0.35, defs.H - 3.4); return { x: p.x, y: p.y }; });
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
   for (let i = 1; i <= 14; i++) { await page.mouse.move(from.x + (to.x - from.x) * i / 14, from.y + (to.y - from.y) * i / 14); await page.waitForTimeout(16); }
