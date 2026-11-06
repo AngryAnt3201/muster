@@ -1,0 +1,252 @@
+import { describe, expect, it } from "vitest";
+import { DEFAULT_AI, TACTICS, applyPlan, planTurn } from "../src/core/ai";
+import { ACTS, LEVELS, rosterAt } from "../src/core/campaign";
+import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type Objective } from "../src/core/content";
+import { UNITS, UNIT_KINDS, inZone } from "../src/core/defs";
+import {
+  BOONS, MEND_HP, boardValue, boonChoices, duelConfig, endDuel, gauntletFoe, newRun, runMods, takeBoon,
+} from "../src/core/gauntlet";
+import { Match, type RoundReport } from "../src/core/match";
+import { PUZZLES, SOLUTIONS } from "../src/core/puzzles";
+import { fromStart, naive, playPuzzle, solve } from "../tools/solver";
+
+describe("campaign", () => {
+  it("has 30 levels, ids 1..30, five acts of six, a boss closing each act", () => {
+    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect(ACTS).toHaveLength(5);
+    for (const l of LEVELS) {
+      expect(l.act).toBe(Math.ceil(l.id / 6));
+      expect(!!l.boss).toBe(l.id % 6 === 0);
+      expect(l.stars[0]).toEqual({ kind: "win" });
+      expect(l.stars).toHaveLength(3);
+      expect(l.name.length).toBeGreaterThan(0);
+      expect(l.foe.length).toBeGreaterThan(0);
+    }
+    // Bosses: a set-piece board and at least one more twist.
+    for (const b of LEVELS.filter((l) => l.boss)) {
+      expect(b.start?.[1]?.length).toBeGreaterThan(0);
+      const twists = [b.obstacles?.length, b.noReroll, b.maxRounds, b.mods?.[1]?.broodStart, b.income?.[1], b.supply?.[1], b.hp[0] !== 400].filter(Boolean);
+      expect(twists.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("unlocks every unit once, each level's roster holds its unlock, rosters only grow", () => {
+    const unlocks = LEVELS.filter((l) => l.unlock).map((l) => l.unlock!);
+    expect(new Set(unlocks).size).toBe(unlocks.length);
+    for (const l of LEVELS) {
+      if (l.unlock) expect(l.roster).toContain(l.unlock);
+      if (l.id > 1) for (const k of LEVELS[l.id - 2].roster) expect(l.roster).toContain(k);
+    }
+    expect(new Set(LEVELS[29].roster)).toEqual(new Set(UNIT_KINDS));
+    expect(rosterAt(1)).toEqual(["blades", "ranger"]);
+    const at = (k: string) => LEVELS.find((l) => l.unlock === k)!.id;
+    expect(at("golem")).toBeLessThanOrEqual(23);
+    expect(at("bulwark")).toBeGreaterThanOrEqual(3);
+  });
+
+  it("ramps the foe: every tactic appears, difficulty ~0.1 to ~0.9, foe health 120ish to 400", () => {
+    expect(new Set(LEVELS.map((l) => l.ai.tactic))).toEqual(new Set(TACTICS));
+    expect(LEVELS[0].ai.difficulty).toBeLessThanOrEqual(0.15);
+    expect(LEVELS[29].ai.difficulty).toBeGreaterThanOrEqual(0.85);
+    for (let a = 1; a < 5; a++) {
+      const avg = (act: number) => LEVELS.filter((l) => l.act === act).reduce((s, l) => s + l.ai.difficulty, 0) / 6;
+      expect(avg(a + 1)).toBeGreaterThan(avg(a));
+    }
+    expect(LEVELS[0].hp[1]).toBeLessThanOrEqual(150);
+    expect(LEVELS[29].hp[1]).toBe(400);
+    for (const l of LEVELS) expect(l.hp[0]).toBe(400);
+  });
+
+  it("every level builds a valid match", () => {
+    for (const l of LEVELS) {
+      const m = new Match(levelConfig(l));
+      expect(m.round).toBe(1);
+      expect(m.phase).toBe("deploy");
+      expect(m.sides[0].hp).toBe(l.hp[0]);
+      expect(m.sides[1].hp).toBe(l.hp[1]);
+      expect(m.sides[1].name).toBe(l.foe);
+      for (const k of m.sides[0].shop) expect(l.roster).toContain(k!);
+      for (const s of [0, 1] as const) for (const p of m.sides[s].pieces) expect(inZone(s, p.x, p.y)).toBe(true);
+      expect(m.sides[1].pieces).toHaveLength(l.start?.[1]?.length ?? 0);
+      for (const o of l.obstacles ?? []) {
+        expect(o.x).toBeGreaterThan(0); expect(o.x).toBeLessThan(9);
+        expect(o.y).toBeGreaterThan(5); expect(o.y).toBeLessThan(9);
+      }
+    }
+  });
+
+  it("a level plays to the end headless and scores stars", () => {
+    const l = LEVELS[0];
+    const m = new Match(levelConfig(l, 3));
+    while (m.phase !== "over" && m.played < 40) {
+      applyPlan(m, 1, planTurn(m, 1, l.ai));
+      applyPlan(m, 0, planTurn(m, 0, { ...DEFAULT_AI, difficulty: 0.3 }));
+      m.fight();
+      m.next();
+    }
+    expect(m.phase).toBe("over");
+    const stars = starsFor(l, m);
+    if (m.winner === 0) expect(stars).toBeGreaterThanOrEqual(1);
+    else expect(stars).toBe(0);
+  });
+});
+
+describe("objectives and stars", () => {
+  const fake = (winner: -1 | 0 | 1, hp: number, results: (0 | 1)[]) => {
+    const m = new Match({ seed: 1 });
+    m.winner = winner;
+    m.sides[0].hp = hp;
+    for (const w of results) m.history.push({ round: m.history.length + 1, winner: w, damage: [0, 0] } as unknown as RoundReport);
+    return m;
+  };
+  const level = { ...LEVELS[0], stars: [{ kind: "win" }, { kind: "hpAtLeast", value: 300 }, { kind: "roundsAtMost", value: 5 }] as [Objective, Objective, Objective] };
+
+  it("counts met objectives, and none when the match is lost", () => {
+    expect(starsFor(level, fake(0, 350, [0, 0, 1, 0]))).toBe(3);
+    expect(starsFor(level, fake(0, 250, [0, 0, 1, 0]))).toBe(2);
+    expect(starsFor(level, fake(0, 250, [0, 1, 1, 0, 1, 0]))).toBe(1);
+    expect(starsFor(level, fake(1, 400, [0]))).toBe(0);
+    expect(objectiveMet({ kind: "lossesAtMost", value: 1 }, fake(0, 100, [1, 0, 0]))).toBe(true);
+    expect(objectiveMet({ kind: "lossesAtMost", value: 1 }, fake(0, 100, [1, 1, 0]))).toBe(false);
+  });
+
+  it("describes objectives in a few words", () => {
+    expect(objectiveText({ kind: "win" })).toBe("Win");
+    expect(objectiveText({ kind: "hpAtLeast", value: 300 })).toBe("Finish on 300+ health");
+    expect(objectiveText({ kind: "roundsAtMost", value: 8 })).toBe("Win within 8 rounds");
+    expect(objectiveText({ kind: "lossesAtMost", value: 0 })).toBe("Lose no rounds");
+    expect(objectiveText({ kind: "lossesAtMost", value: 2 })).toBe("Lose 2 rounds or fewer");
+    for (const l of LEVELS) for (const o of l.stars) expect(objectiveText(o).length).toBeLessThan(30);
+  });
+});
+
+describe("breakpoint puzzles", () => {
+  it("has 15 puzzles, ids 1..15, each a valid one-battle match", () => {
+    expect(PUZZLES.map((p) => p.id)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+    for (const p of PUZZLES) {
+      const m = new Match(puzzleConfig(p));
+      expect(m.sides[0].gold).toBe(p.gold);
+      expect(m.supplyCap(0)).toBe(p.supply);
+      expect(m.sides[0].shop).toEqual(p.shop);
+      expect(m.sides[1].pieces).toHaveLength(p.foe.length);
+      for (const q of m.sides[1].pieces) expect(inZone(1, q.x, q.y)).toBe(true);
+      expect(m.canReroll(0)).toBe(false);
+      expect(p.silver).toBeLessThanOrEqual(p.par);
+      expect(p.par).toBeLessThan(p.gold);
+      expect(p.par).toBeGreaterThan(0);
+      // Gold buys a full board of the cheapest kind or less: the supply limit bites.
+      expect(p.shop.length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("every puzzle is beaten by its stored solution, keeping par gold for three stars", () => {
+    for (const p of PUZZLES) {
+      const sol = SOLUTIONS[p.id];
+      expect(sol, `puzzle ${p.id} has a solution`).toBeTruthy();
+      const o = playPuzzle(p, fromStart(sol));
+      expect(o.legal, `puzzle ${p.id} solution is legal`).toBe(true);
+      expect(o.won, `puzzle ${p.id} solution wins`).toBe(true);
+      expect(puzzleStars(p, o.won, o.goldLeft)).toBe(3);
+    }
+  });
+
+  it("is not beaten by the obvious plays", () => {
+    let aiWins = 0;
+    for (const p of PUZZLES) {
+      const n = naive(p);
+      expect(n.cheapWins, `puzzle ${p.id}: a row of the cheapest unit wins`).toBe(false);
+      aiWins += n.aiRate;
+    }
+    // The 0.3 AI in every style wins a quarter of them at most, on average.
+    expect(aiWins / PUZZLES.length).toBeLessThan(0.15);
+  });
+
+  it("the solver finds a win from scratch", () => {
+    for (const id of [1, 3]) {
+      const r = solve(PUZZLES[id - 1], { evals: 1200, seed: 1, polish: 0 });
+      expect(r.best, `puzzle ${id}`).not.toBeNull();
+    }
+  });
+
+  it("stars by gold left", () => {
+    const p = { ...PUZZLES[0], silver: 1, par: 3 };
+    expect(puzzleStars(p, false, 9)).toBe(0);
+    expect(puzzleStars(p, true, 0)).toBe(1);
+    expect(puzzleStars(p, true, 1)).toBe(2);
+    expect(puzzleStars(p, true, 3)).toBe(3);
+  });
+});
+
+describe("gauntlet", () => {
+  it("has a dozen-plus boons with short names and text, all applying cleanly", () => {
+    expect(BOONS.length).toBeGreaterThanOrEqual(12);
+    expect(new Set(BOONS.map((b) => b.id)).size).toBe(BOONS.length);
+    for (const b of BOONS) {
+      expect(b.name.length).toBeLessThanOrEqual(16);
+      expect(b.text.length).toBeLessThanOrEqual(40);
+    }
+    const run = newRun(5);
+    for (const b of BOONS) takeBoon(run, b.id);
+    const m = runMods(run);
+    expect(m.income).toBe(2);
+    expect(m.hpMul).toBeCloseTo(1.15);
+    expect(m.bigMines).toBe(true);
+    expect(m.kindDmg?.lancer).toBeCloseTo(1.2);
+  });
+
+  it("rivals vary in name and style, scale with stage and with your army, and sometimes bring rocks", () => {
+    const foes = Array.from({ length: 9 }, (_, i) => gauntletFoe(i + 1, 10 + i * 6, 77));
+    expect(new Set(foes.map((f) => f.ai.tactic)).size).toBe(7);
+    expect(new Set(foes.map((f) => f.name)).size).toBeGreaterThan(5);
+    expect(foes.filter((f) => f.obstacles?.length).length).toBeGreaterThanOrEqual(3);
+    expect(foes[8].hp).toBeGreaterThan(foes[0].hp);
+    expect(foes[8].ai.difficulty).toBeGreaterThan(foes[0].ai.difficulty);
+    const value = (f: { start: { kind: keyof typeof UNITS; rank?: number; lx: number; depth: number }[] }) => boardValue(f.start);
+    expect(value(gauntletFoe(5, 60, 3))).toBeGreaterThan(value(gauntletFoe(5, 10, 3)));
+    expect(value(gauntletFoe(8, 30, 3))).toBeGreaterThan(value(gauntletFoe(1, 30, 3)));
+  });
+
+  it("a run plays duel after duel: the army, gold and health carry over and boons apply", () => {
+    const run = newRun(2024);
+    const you = { ...DEFAULT_AI, difficulty: 0.6 };
+    let duels = 0;
+    while (!run.over && duels < 3) {
+      const foe = gauntletFoe(run.stage, boardValue(run.board), run.seed);
+      const cfg = duelConfig(run, foe);
+      const m = new Match(cfg);
+      expect(m.sides[0].pieces).toHaveLength(run.board.length);
+      expect(m.supplyCap(0)).toBeGreaterThan(run.board.length);
+      for (const p of m.sides[0].pieces) expect(inZone(0, p.x, p.y)).toBe(true);
+      while (m.phase !== "over" && m.played < 40) {
+        applyPlan(m, 1, planTurn(m, 1, { ...foe.ai, difficulty: 0.2 }));
+        applyPlan(m, 0, planTurn(m, 0, you));
+        m.fight();
+        m.next();
+      }
+      const stage = run.stage;
+      const won = endDuel(run, m);
+      duels++;
+      expect(run.hp).toBe(m.sides[0].hp);
+      if (!won) { expect(run.over).toBe(true); break; }
+      expect(run.stage).toBe(stage + 1);
+      expect(run.board).toHaveLength(m.sides[0].pieces.length);
+      expect(run.gold).toBeLessThanOrEqual(10);
+      const choices = boonChoices(run);
+      expect(choices).toHaveLength(3);
+      expect(new Set(choices.map((b) => b.id)).size).toBe(3);
+      takeBoon(run, choices[0].id);
+      expect(run.boons).toContain(choices[0].id);
+    }
+    expect(duels).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Field Hospital heals, up to full health", () => {
+    const run = newRun(1);
+    run.hp = 100;
+    takeBoon(run, "mend");
+    expect(run.hp).toBe(100 + MEND_HP);
+    run.hp = run.maxHp - 10;
+    takeBoon(run, "mend");
+    expect(run.hp).toBe(run.maxHp);
+  });
+});
