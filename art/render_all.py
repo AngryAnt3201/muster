@@ -25,6 +25,11 @@ SS = 2  # supersample factor for sprites
 PORTRAIT = 256
 TEAMS = ("tide", "ember")
 POSES = ("idle", "attack")
+# portraits framed on the body (dense geometry) rather than the long pole/pike
+BODY_FRAME = {"banner": 7.0, "pikeman": 2.0, "duelist": 2.0, "lancer": 2.0}
+# portrait camera elevation per kind (flat things look better from higher up)
+PORTRAIT_EL = {"harrier": 48.0, "mine": 42.0, "hive": 34.0, "ballista": 34.0, "bombard": 32.0, "golem": 16.0, "turret": 30.0,
+               "golemling": 26.0, "mite": 38.0, "queen": 38.0, "lancer": 18.0}
 
 
 def args():
@@ -80,7 +85,9 @@ def worker(a):
         # phase 1: measure every variant so one canvas size fits all tiers and poses
         ext = 0.0
         pbox = None
-        st.portrait_view()
+        tbox = {}
+        el = PORTRAIT_EL.get(kind, 24.0)
+        st.portrait_view(el=el)
         for t in [1, 2, 3, 4] if not spec["spawned"] else [1]:
             for pose in POSES:
                 k.clear()
@@ -89,12 +96,17 @@ def worker(a):
                 ext = max(ext, float(np.abs(v[:, :2]).max()))
                 if pose == "idle":
                     xy = st.project(v)
-                    lo, hi = xy.min(0), xy.max(0)
+                    if kind in BODY_FRAME:
+                        q = BODY_FRAME[kind]
+                        lo, hi = np.percentile(xy, q, axis=0), np.percentile(xy, 100 - q, axis=0)
+                    else:
+                        lo, hi = xy.min(0), xy.max(0)
+                    tbox[t] = (lo, hi)
                     pbox = (lo, hi) if pbox is None else (np.minimum(pbox[0], lo), np.maximum(pbox[1], hi))
         margin = 0.035 + 0.05  # outline + bloom room
         size = int(math.ceil((ext + margin) * 2 * K.PPU / 4.0) * 4)
         with open(os.path.join(out, "meta.json"), "w") as f:
-            json.dump({"size": size, "tiers": tiers, "spawned": spec["spawned"], "ext": ext}, f)
+            json.dump({"size": size, "tiers": tiers, "spawned": spec["spawned"], "ext": ext, "radius": spec["radius"]}, f)
         # phase 2: render
         for t in tiers:
             for pose in POSES:
@@ -112,11 +124,11 @@ def worker(a):
                         K.set_glowpass(False)
                         n += 1
                 if pose == "idle" and not a.no_portraits:
-                    st.portrait_view()
+                    st.portrait_view(el=el)
                     K.set_team("tide")
-                    lo, hi = pbox
+                    lo, hi = tbox[t]
                     c = (lo + hi) / 2
-                    span = float(max(hi - lo)) * 1.08 + 0.06
+                    span = max(float(max(hi - lo)), 0.84 * float(max(pbox[1] - pbox[0]))) * 1.08 + 0.06
                     pd = os.path.join(RAW, "portraits")
                     os.makedirs(pd, exist_ok=True)
                     sh = (float(c[0]) / span, float(c[1]) / span)

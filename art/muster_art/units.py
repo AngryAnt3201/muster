@@ -22,7 +22,7 @@ def unit(kind, radius, spawned=False):
 
 
 def hum_scale(radius, tier, base=0.25):
-    return (radius / base) * 1.12 * TIER_SCALE[tier]
+    return (radius / base) * 1.3 * TIER_SCALE[tier]
 
 
 def T(tier, a, b, c, d):
@@ -47,6 +47,19 @@ def arc_fx(k, P, tier, R, a0, a1, z, mat=None, r=0.014):
     k.tube(pts, r, mat, outline=0, radii=radii, sides=6)
 
 
+def emblem(k, P, kind, mat, z=0.145):
+    c = H.HEAD + V((-0.03, 0, z))
+    if kind == "plus":
+        k.box((0.14, 0.045, 0.02), mat, loc=c, outline=0.006)
+        k.box((0.045, 0.14, 0.02), mat, loc=c, outline=0.006)
+    elif kind == "bolt":
+        pts = [(0.075, 0.02), (0.0, 0.035), (0.01, -0.005), (-0.075, -0.02), (0.0, -0.035), (-0.01, 0.005)]
+        k.prism(pts, 0.02, mat, loc=c, rot=(0, 0, 90), outline=0.006)
+    elif kind == "flake":
+        for i in range(3):
+            k.box((0.15, 0.024, 0.02), mat, loc=c, rot=(0, 0, 60 * i), outline=0.005)
+
+
 # ================================================================== 1 mine
 @unit("mine", 0.22)
 def mine(k, P, tier, pose):
@@ -59,7 +72,8 @@ def mine(k, P, tier, pose):
                 k.torus(r, 0.012, P.iron, loc=(0, 0, 0.05), seg=24)
             for i in range(3):
                 k.box((0.3, 0.012, 0.012), P.wood_dk, loc=(0, -0.07 + 0.07 * i, 0.072), outline=0.006)
-            k.cyl(0.06, 0.03, P.team, loc=(0, 0, 0.08), seg=14, bevel=0.008)
+            k.cyl(0.075, 0.03, P.team, loc=(0, 0, 0.08), seg=14, bevel=0.008)
+            k.torus(0.13, 0.016, P.team, loc=(0, 0, 0.072), seg=24)
             k.tube([(0.05, 0.05, 0.08), (0.12, 0.1, 0.1), (0.2, 0.06, 0.09), (0.22, -0.02, 0.08)], 0.01, P.cloth_dk, smooth_n=3)
             if armed:
                 spark(k, P, (0.22, -0.02, 0.1), 0.05)
@@ -176,7 +190,7 @@ def tower_shield(k, P, tier, center, normal, w, h):
 
 @unit("bulwark", 0.4)
 def bulwark(k, P, tier, pose):
-    S = hum_scale(0.4, tier) * 0.82
+    S = hum_scale(0.4, tier) * 0.68
     atk = pose == "attack"
     lk = look_for(tier, pads=T(tier, "cloth", "steel", "gold", "crystal"), chest=T(tier, "leather", "steel", "steel", "pearl"),
                   head=T(tier, "cap", "helm", "helm", "helm"), crest=T(tier, None, "team", "plume", "plume"),
@@ -206,7 +220,7 @@ def bulwark(k, P, tier, pose):
 def medic(k, P, tier, pose):
     S = hum_scale(0.25, tier)
     atk = pose == "attack"
-    lk = look_for(tier, head=T(tier, "hood", "hood", "hood", "hood"), torso="cloth", pads=T(tier, None, "cloth", "gold", "crystal"),
+    lk = look_for(tier, head="hood_light", torso="team", pads=T(tier, None, "cloth", "gold", "crystal"),
                   chest=T(tier, None, None, "pearl", "pearl"), cape=T(tier, None, "short", "long", "energy"),
                   legs="cloth_dk", belt=T(tier, "leather", "leather", "gold", "gold"))
     sh = V((0.3, -0.1, 0.5)) if atk else V((0.14, -0.2, 0.3))
@@ -216,13 +230,10 @@ def medic(k, P, tier, pose):
         humanoid(k, P, tier, {"R": sh, "L": off}, lk)
         H.staff(k, P, sh, top, tier)
         # green plus on the hood top: the heal mark
-        hp = H.HEAD + V((-0.02, 0, 0.12))
-        k.box((0.1, 0.03, 0.02), P.heal_t, loc=hp, outline=0.006)
-        k.box((0.03, 0.1, 0.02), P.heal_t, loc=hp, outline=0.006)
+        emblem(k, P, "plus", P.heal_t if tier < 4 else P.heal)
         # satchel
         k.box((0.1, 0.07, 0.09), P.leather, loc=(-0.02, 0.17, 0.22), bevel=0.02)
-        head = T(tier, P.heal_t, P.heal_t, P.heal, P.heal)
-        k.ball(T(tier, 0.035, 0.045, 0.05, 0.06), head, loc=top)
+        k.ball(T(tier, 0.045, 0.05, 0.055, 0.065), P.heal, loc=top)
         if tier >= 3:
             k.torus(0.06, 0.01, P.gold, loc=top, rot=(90, 0, 0))
         if tier == 4:
@@ -258,8 +269,8 @@ def grenadier(k, P, tier, pose):
     off = V((0.28, 0.08, 0.42)) if atk else V((0.12, 0.2, 0.3))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": throw, "L": off}, lk, bulk=1.05)
-        br = T(tier, 0.06, 0.065, 0.075, 0.08)
-        bomb(k, P, throw + V((0, 0, br * 0.6)), br, tier, lit=atk)
+        br = T(tier, 0.075, 0.08, 0.088, 0.095)
+        bomb(k, P, throw + V((0.02, 0, br * 0.6)), br, tier, lit=True)
         if tier >= 2:
             # bandolier with small bombs across the chest
             pts = [V((0.07, 0.15, 0.42)), V((0.11, 0.0, 0.36)), V((0.07, -0.14, 0.27))]
@@ -321,7 +332,7 @@ def mount(k, P, tier, gallop):
         dx = legs_f if sx > 0 else -legs_f
         k.rod((sx, sy, 0.36), (sx + dx, sy, 0.04), 0.035, coat)
         k.cyl(0.04, 0.05, P.darker if tier < 4 else P.glow, loc=(sx + dx, sy, 0.03))
-    k.sphere(1.0, coat, loc=(0, 0, 0.42), scale=(0.31, 0.15, 0.14))
+    k.sphere(1.0, coat, loc=(0, 0, 0.42), scale=(0.31, 0.175, 0.15))
     neck_top = V((0.36, 0, 0.62)) if not gallop else V((0.42, 0, 0.56))
     k.tube([V((0.2, 0, 0.45)), neck_top], 0.08, coat, r_end=0.055)
     hd = neck_top + V((0.08, 0, -0.03))
@@ -330,9 +341,11 @@ def mount(k, P, tier, gallop):
         k.cone(0.02, 0.06, coat, loc=neck_top + V((0.0, s * 0.03, 0.03)), rot=(0, -20, 0))
     k.tube([V((0.2, 0, 0.53)), neck_top + V((-0.02, 0, 0.05))], 0.03, mane, outline=0.008 if tier < 4 else 0)
     k.tube([V((-0.28, 0, 0.48)), V((-0.4, 0, 0.4)), V((-0.45, 0, 0.28))], 0.035, mane, r_end=0.015, smooth_n=3)
+    if tier == 1:
+        k.sphere(1.0, P.team, loc=(-0.03, 0, 0.5), scale=(0.12, 0.17, 0.06))
     if tier >= 2:
-        k.sphere(1.0, P.team, loc=(-0.02, 0, 0.47), scale=(0.24, 0.165, 0.095))
-        k.torus(1.0, 0.012, T(tier, None, P.iron, P.gold, P.gold), loc=(-0.02, 0, 0.47), scale=(0.24, 0.165, 1.0))
+        k.sphere(1.0, P.team, loc=(-0.02, 0, 0.47), scale=(0.25, 0.19, 0.1))
+        k.torus(1.0, 0.014, T(tier, None, P.iron, P.gold, P.gold), loc=(-0.02, 0, 0.47), scale=(0.25, 0.19, 1.0))
     if tier >= 3:
         k.sphere(1.0, P.steel if tier == 3 else P.gold, loc=hd + V((0.01, 0, 0.012)), scale=(0.12, 0.07, 0.06), rot=(0, 25, 0))
         k.sphere(1.0, P.steel if tier == 3 else P.pearl, loc=(0.22, 0, 0.5), scale=(0.12, 0.15, 0.1))
@@ -343,7 +356,7 @@ def mount(k, P, tier, gallop):
 
 @unit("lancer", 0.36)
 def lancer(k, P, tier, pose):
-    S = 0.36 / 0.36 * TIER_SCALE[tier] * 0.92
+    S = TIER_SCALE[tier] * 1.12
     atk = pose == "attack"
     lk = look_for(tier, head=T(tier, "hair", "helm", "helm", "helm"), crest=T(tier, None, "team", "plume", "plume"),
                   cape=T(tier, None, None, "short", "energy"), pads=T(tier, None, "steel", "gold", "crystal"))
@@ -367,7 +380,7 @@ def lancer(k, P, tier, pose):
 # ================================================================== 9 ballista
 @unit("ballista", 0.42)
 def ballista(k, P, tier, pose):
-    S = T(tier, 0.88, 1.0, 1.08, 1.16)
+    S = T(tier, 0.88, 1.0, 1.08, 1.16) * 1.3
     fire = pose == "attack"
     wood = T(tier, P.wood, P.wood, P.wood_dk, P.pearl)
     with k.at(scale=S):
@@ -378,7 +391,8 @@ def ballista(k, P, tier, pose):
         k.box((0.09, 0.5, 0.07), wood, loc=(0, 0, 0.1), bevel=0.02)
         k.cyl(0.07, 0.15, P.iron if tier > 1 else P.wood_dk, loc=(0, 0, 0.2))
         # stock
-        k.box((0.62, 0.1, 0.07), wood, loc=(0.06, 0, 0.3), bevel=0.02)
+        k.box((0.56, 0.14, 0.08), wood, loc=(0.04, 0, 0.3), bevel=0.025)
+        k.box((-0.0 + 0.16, 0.12, 0.05), P.team, loc=(-0.12, 0, 0.35), bevel=0.015)
         k.box((0.12, 0.2, 0.12), T(tier, P.wood_dk, P.iron, P.steel, P.pearl), loc=(0.3, 0, 0.32), bevel=0.02)
         # bow arms
         arm = T(tier, P.wood_dk, P.wood_dk, P.wood_dk, P.glow)
@@ -386,16 +400,16 @@ def ballista(k, P, tier, pose):
         bend = 0.05 if fire else 0.16
         for s in (1, -1):
             pts = [V((0.32, s * 0.08, 0.34)), V((0.3, s * span * 0.6, 0.35)), V((0.32 - bend, s * span, 0.36))]
-            k.tube(pts, 0.032 if tier < 4 else 0.036, arm, r_end=0.02, smooth_n=3)
+            k.tube(pts, 0.042 if tier < 4 else 0.046, arm, r_end=0.026, smooth_n=3)
             if tier >= 2:
                 k.sphere(0.03, P.iron if tier == 2 else P.gold, loc=pts[-1])
         nock_x = 0.32 - bend if fire else -0.12
         for s in (1, -1):
             k.rod(V((0.32 - bend, s * span, 0.36)), V((nock_x, 0, 0.35)), 0.007, P.bone if tier < 4 else P.glow_lt, outline=0.004)
         # bolt
-        bx0 = 0.42 if fire else -0.12
-        bl = T(tier, 0.6, 0.62, 0.66, 0.7)
-        k.rod(V((bx0, 0, 0.37)), V((bx0 + bl, 0, 0.37)), 0.016, P.wood if tier < 4 else P.glow_lt)
+        bx0 = 0.3 if fire else -0.12
+        bl = T(tier, 0.52, 0.54, 0.56, 0.58)
+        k.rod(V((bx0, 0, 0.37)), V((bx0 + bl, 0, 0.37)), 0.02, P.wood if tier < 4 else P.glow_lt)
         k.spike(V((bx0 + bl, 0, 0.37)), V((bx0 + bl + 0.1, 0, 0.37)), 0.032, P.steel if tier < 4 else P.white)
         for s in (1, -1):
             k.prism([(0, 0), (0.08, 0), (0.0, s * 0.045)], 0.008, P.team, loc=(bx0 + 0.01, 0, 0.375))
@@ -435,11 +449,13 @@ def hive(k, P, tier, pose):
             from .kit import look_mat
             from mathutils import Matrix
             with k.mat(Matrix.Translation(p) @ look_mat(nrm)):
-                k.cyl(0.075, 0.07, P.team if tier < 4 else P.pearl, seg=6, loc=(0, 0, 0.0))
+                k.cyl(T(tier, 0.095, 0.085, 0.08, 0.08), 0.07, P.team if tier < 4 else P.pearl, seg=6, loc=(0, 0, 0.0))
                 op = 0.05 if (spawn and i % 2 == 0) else 0.035
                 k.cyl(op, 0.08, P.black if tier < 3 else P.team_dk, seg=6, loc=(0, 0, 0.005), outline=0)
                 if spawn and i % 2 == 0:
                     k.ball(0.03, P.glow if tier == 4 else P.team_lt, loc=(0, 0, 0.05), outline=0.005)
+        if tier == 1:
+            k.torus(0.13, 0.03, P.team, loc=(-0.02, 0, 0.3))
         if tier >= 2:
             k.cyl(0.11, 0.06, P.team, loc=(-0.02, 0, 0.36), seg=6)
             k.cyl(0.06, 0.07, P.black, loc=(-0.02, 0, 0.37), seg=6, outline=0)
@@ -486,6 +502,9 @@ def storm(k, P, tier, pose):
     with k.at(scale=S, rot=(0, 0, 0)):
         humanoid(k, P, tier, {"R": hand, "L": off}, lk)
         H.staff(k, P, hand, top, tier, shaft=T(tier, P.wood, P.wood_dk, P.dark, P.pearl))
+        emblem(k, P, "bolt", P.fire if tier < 4 else P.glow_lt)
+        k.torus(0.12, 0.025, P.copper if tier < 3 else P.gold, loc=(0.0, 0, 0.45), scale=(0.95, 1.2, 1))
+        k.ball(T(tier, 0.045, 0.05, 0.055, 0.065), P.zap if tier < 4 else P.glow_lt, loc=top + V((0, 0, 0.035)), outline=0.006)
         if tier == 1:
             k.tube([top + V((0, 0, -0.05)), top + V((0.02, 0.02, -0.02)), top + V((0, -0.02, 0.01)), top + V((0.02, 0, 0.04))], 0.012, P.copper)
         else:
@@ -499,8 +518,8 @@ def storm(k, P, tier, pose):
             H.orbit_shards(k, P, V((0, 0, 0.3)), 0.28, n=4, h=0.08)
         if atk:
             o = top + V((0.03, 0, 0.03))
-            bolt(k, P, o, o + V((0.38, 0.02, -0.1)), P.zap if tier < 4 else P.glow_lt, seed=tier)
-            bolt(k, P, o, o + V((0.26, 0.14, -0.1)), P.zap if tier < 4 else P.glow_lt, seed=tier + 1, n=4)
+            bolt(k, P, o, o + V((0.26, 0.02, -0.1)), P.zap if tier < 4 else P.glow_lt, seed=tier)
+            bolt(k, P, o, o + V((0.18, 0.12, -0.1)), P.zap if tier < 4 else P.glow_lt, seed=tier + 1, n=4)
             k.ball(0.05, P.white, loc=o, outline=0)
 
 
@@ -517,54 +536,59 @@ def golem(k, P, tier, pose):
     with k.at(scale=S):
         # legs
         for s in (1, -1):
-            rock(k, P.stone_dk, (0.0, s * 0.16, 0.12), 0.13)
-        # torso boulders
-        rock(k, st, (0, 0, 0.42), 0.27, scale=(0.95, 1.15, 0.9))
-        rock(k, P.stone_dk, (-0.12, 0, 0.48), 0.2, scale=(1, 1.2, 0.9), rot=(0, 0, 20))
-        # head
-        hp = V((0.17, 0, 0.6))
-        rock(k, st, hp, 0.1, scale=(1.1, 1.2, 0.9))
-        for s in (1, -1):
-            k.sphere(0.022, P.glow_lt if tier == 4 else (P.fire if tier >= 2 else P.eye), loc=hp + V((0.09, s * 0.04, 0.0)), outline=0)
-        # shoulders + arms + fists
-        for s in (1, -1):
-            sh = V((0.0, s * 0.33, 0.55))
-            rock(k, st, sh, 0.15, scale=(1.05, 1, 0.9))
-            if atk:
-                fist = V((0.42, s * 0.18, 0.4))
-            else:
-                fist = V((0.18, s * 0.44, 0.22))
-            el = (sh + fist) / 2 + V((-0.04 if atk else -0.05, s * 0.06, 0.05))
-            rock(k, P.stone_dk, el, 0.1)
-            rock(k, st, fist, T(tier, 0.13, 0.14, 0.15, 0.16), scale=(1.15, 1, 0.9))
-            if tier >= 2:
-                k.torus(0.16, 0.022, P.iron if tier == 2 else P.gold, loc=sh + V((0, 0, -0.02)), scale=(1.05, 1, 1))
-                k.torus(0.12, 0.02, P.iron if tier < 3 else P.gold, loc=el, rot=(0, 70, s * 30))
-            if tier >= 3:
-                k.sphere(0.15, T(tier, None, None, P.steel, P.pearl), loc=sh + V((0, s * 0.02, 0.07)), scale=(1.1, 1.0, 0.55))
-                for i in range(3):
-                    k.spike(sh + V((-0.04 + i * 0.05, s * 0.06, 0.1)), sh + V((-0.06 + i * 0.05, s * 0.13, 0.24)), 0.025,
-                            P.gold if tier == 3 else P.glow)
-        # team glyph / bands on chest
-        if tier == 1:
-            k.cyl(0.07, 0.02, P.team, loc=(0.14, 0, 0.62), rot=(0, 30, 0), seg=6)
-        elif tier == 2:
-            k.torus(0.28, 0.025, P.iron, loc=(0, 0, 0.44), scale=(0.95, 1.15, 1))
-            k.box((0.1, 0.42, 0.05), P.team, loc=(0.0, 0, 0.66), bevel=0.02)
-        elif tier == 3:
-            k.box((0.26, 0.5, 0.06), P.steel, loc=(0.02, 0, 0.66), bevel=0.03)
-            k.box((0.12, 0.32, 0.07), P.team, loc=(0.02, 0, 0.67), bevel=0.02)
-            k.prism([(0, 0.08), (-0.25, 0.08), (-0.2, 0.0), (-0.25, -0.08), (0, -0.08)], 0.016, P.team, loc=(-0.24, 0.0, 0.6), rot=(0, -30, 0))
-        else:
-            k.crystal_at(V((-0.02, 0, 0.55)), V((0.06, 0, 0.82)), 0.09, P.glow_lt)
-            for i in range(6):
-                a = 2 * math.pi * i / 6
-                p = V((-0.08 + math.cos(a) * 0.14, math.sin(a) * 0.2, 0.62))
-                k.crystal_at(p, p + V((math.cos(a) * 0.06 - 0.06, math.sin(a) * 0.08, 0.16)), 0.035, P.glow)
-            k.tube([V((0.15, -0.2, 0.62)), V((0.05, -0.05, 0.68)), V((0.12, 0.12, 0.66)), V((0.05, 0.22, 0.6))], 0.014, P.glow_lt, outline=0, smooth_n=2)
-        if atk:
+            rock(k, P.stone_dk, (0.0, s * 0.16, 0.15), 0.155, scale=(1, 1, 1.2))
+        with k.at((0, 0, 0.12)):
+            # torso boulders
+            rock(k, st, (0, 0, 0.42), 0.27, scale=(0.95, 1.15, 0.9))
+            rock(k, P.stone_dk, (-0.12, 0, 0.48), 0.2, scale=(1, 1.2, 0.9), rot=(0, 0, 20))
+            # head
+            hp = V((0.22, 0, 0.78))
+            rock(k, st, hp, 0.14, scale=(1.1, 1.15, 0.95))
+            k.box((0.05, 0.2, 0.04), P.stone_dk, loc=hp + V((0.08, 0, 0.06)), bevel=0.015)
             for s in (1, -1):
-                spark(k, P, V((0.56, s * 0.18, 0.4)), 0.06, mat=P.white if tier < 4 else P.glow_lt)
+                k.sphere(0.028, P.glow_lt if tier == 4 else (P.fire if tier >= 2 else P.team_lt), loc=hp + V((0.12, s * 0.05, 0.0)), outline=0)
+            # shoulders + arms + fists
+            for s in (1, -1):
+                sh = V((0.0, s * 0.33, 0.55))
+                rock(k, st, sh, 0.15, scale=(1.05, 1, 0.9))
+                if atk:
+                    fist = V((0.42, s * 0.18, 0.4))
+                else:
+                    fist = V((0.18, s * 0.44, 0.22))
+                el = (sh + fist) / 2 + V((-0.04 if atk else -0.05, s * 0.06, 0.05))
+                rock(k, P.stone_dk, el, 0.1)
+                rock(k, st, fist, T(tier, 0.13, 0.14, 0.15, 0.16), scale=(1.15, 1, 0.9))
+                if tier >= 2:
+                    k.torus(0.16, 0.022, P.iron if tier == 2 else P.gold, loc=sh + V((0, 0, -0.02)), scale=(1.05, 1, 1))
+                    k.torus(0.12, 0.02, P.iron if tier < 3 else P.gold, loc=el, rot=(0, 70, s * 30))
+                if tier >= 3:
+                    k.sphere(0.15, T(tier, None, None, P.steel, P.pearl), loc=sh + V((0, s * 0.02, 0.07)), scale=(1.1, 1.0, 0.55))
+                    for i in range(3):
+                        k.spike(sh + V((-0.04 + i * 0.05, s * 0.06, 0.1)), sh + V((-0.06 + i * 0.05, s * 0.13, 0.24)), 0.025,
+                                P.gold if tier == 3 else P.glow)
+            # team glyph / bands on chest
+            if tier == 1:
+                k.cyl(0.07, 0.02, P.team, loc=(0.14, 0, 0.62), rot=(0, 30, 0), seg=6)
+                for s in (1, -1):
+                    k.cyl(0.075, 0.03, P.team, loc=(0.0, s * 0.33, 0.68), seg=6)
+                k.box((0.16, 0.08, 0.04), P.team, loc=(-0.12, 0, 0.66), rot=(0, 0, 0), bevel=0.015)
+            elif tier == 2:
+                k.torus(0.28, 0.025, P.iron, loc=(0, 0, 0.44), scale=(0.95, 1.15, 1))
+                k.box((0.1, 0.42, 0.05), P.team, loc=(0.0, 0, 0.66), bevel=0.02)
+            elif tier == 3:
+                k.box((0.26, 0.5, 0.06), P.steel, loc=(0.02, 0, 0.66), bevel=0.03)
+                k.box((0.12, 0.32, 0.07), P.team, loc=(0.02, 0, 0.67), bevel=0.02)
+                k.prism([(0, 0.08), (-0.25, 0.08), (-0.2, 0.0), (-0.25, -0.08), (0, -0.08)], 0.016, P.team, loc=(-0.24, 0.0, 0.6), rot=(0, -30, 0))
+            else:
+                k.crystal_at(V((-0.02, 0, 0.55)), V((0.06, 0, 0.82)), 0.09, P.glow_lt)
+                for i in range(6):
+                    a = 2 * math.pi * i / 6
+                    p = V((-0.08 + math.cos(a) * 0.14, math.sin(a) * 0.2, 0.62))
+                    k.crystal_at(p, p + V((math.cos(a) * 0.06 - 0.06, math.sin(a) * 0.08, 0.16)), 0.035, P.glow)
+                k.tube([V((0.15, -0.2, 0.62)), V((0.05, -0.05, 0.68)), V((0.12, 0.12, 0.66)), V((0.05, 0.22, 0.6))], 0.014, P.glow_lt, outline=0, smooth_n=2)
+            if atk:
+                for s in (1, -1):
+                    spark(k, P, V((0.56, s * 0.18, 0.4)), 0.06, mat=P.white if tier < 4 else P.glow_lt)
 
 
 # ================================================================== 13 sapper
@@ -639,7 +663,7 @@ def harrier(k, P, tier, pose):
     with k.at(scale=S):
         span = T(tier, 0.36, 0.42, 0.46, 0.5) * (0.82 if dive else 1.0)
         for s in (1, -1):
-            wing(k, P, tier, s, (-40 if dive else 0) * s, span)
+            wing(k, P, tier, s, 38 if dive else -6, span)
         k.sphere(1.0, body, loc=(0, 0, 0.45), scale=(0.2, 0.1, 0.09))
         k.sphere(1.0, P.feather_lt, loc=(0.02, 0, 0.41), scale=(0.17, 0.08, 0.07))
         # tail fan
@@ -679,10 +703,10 @@ def banner(k, P, tier, pose):
     atk = pose == "attack"
     lk = look_for(tier, head=T(tier, "hair", "helm", "helm", "helm"), crest=T(tier, None, "team", "plume", "plume"),
                   cape=T(tier, None, None, "long", "energy"))
-    h1, h2 = (V((0.2, -0.05, 0.42)), V((0.12, 0.06, 0.5))) if atk else (V((0.1, -0.16, 0.34)), V((0.12, -0.08, 0.5)))
+    h1, h2 = (V((0.2, -0.12, 0.42)), V((0.14, -0.02, 0.52))) if atk else (V((0.1, -0.16, 0.34)), V((0.13, -0.1, 0.48)))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": h1, "L": h2}, lk)
-        up = V((0.55, 0.0, 0.8)).normalized() if atk else V((0.05, -0.05, 1)).normalized()
+        up = V((0.5, -0.25, 0.85)).normalized() if atk else V((-0.3, -0.22, 1)).normalized()
         foot = h1 - up * 0.15
         L = T(tier, 0.75, 0.85, 0.9, 0.95)
         top = h1 + up * L
@@ -690,7 +714,7 @@ def banner(k, P, tier, pose):
         # flag streams backwards nearly horizontal so it reads from above
         fw = T(tier, 0.22, 0.32, 0.36, 0.4)
         fl = T(tier, 0.28, 0.36, 0.42, 0.46)
-        with k.at(top - up * 0.04, rot=(0, 0, 180 if not atk else 200)):
+        with k.at(top - up * 0.04, rot=(0, 0, 180)):
             with k.at((0, 0, 0), rot=(22, 0, 0)):
                 if tier == 1:
                     pts = [(0, 0), (fl, -fw * 0.25), (0, -fw * 0.5)]
@@ -732,7 +756,11 @@ def rime(k, P, tier, pose):
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": hand, "L": off}, lk)
         # fur collar
-        k.torus(0.11, 0.04, P.fur, loc=(0.0, 0, 0.44), scale=(0.95, 1.2, 1))
+        k.torus(0.11, 0.045, P.fur, loc=(0.0, 0, 0.44), scale=(0.95, 1.2, 1))
+        emblem(k, P, "flake", P.ice if tier < 4 else P.ice_glow)
+        for sd in (1, -1):
+            sp = V((0.0, sd * 0.17, 0.44))
+            k.crystal_at(sp, sp + V((-0.03, sd * 0.05, 0.1 + 0.02 * tier)), 0.03, P.ice if tier < 4 else P.ice_glow)
         H.staff(k, P, hand, top, tier, shaft=T(tier, P.wood, P.wood_dk, P.ice_dk, P.pearl))
         d = (top - hand).normalized()
         k.crystal_at(top - d * 0.03, top + d * T(tier, 0.08, 0.11, 0.13, 0.15), T(tier, 0.025, 0.032, 0.038, 0.045), P.ice if tier < 4 else P.ice_glow)
@@ -746,7 +774,7 @@ def rime(k, P, tier, pose):
             H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
         if atk:
             o = top + d * 0.12
-            k.crystal_at(o + V((0.05, 0, 0)), o + V((0.3, 0.0, -0.04)), 0.04, P.ice_glow)
+            k.crystal_at(o + V((0.04, 0, 0)), o + V((0.22, 0.0, -0.04)), 0.04, P.ice_glow)
             for s in (1, -1):
                 k.crystal_at(o + V((0.02, s * 0.04, 0)), o + V((0.16, s * 0.1, -0.02)), 0.022, P.ice_glow, outline=0.004)
 
@@ -754,7 +782,7 @@ def rime(k, P, tier, pose):
 # ================================================================== 17 ravager
 @unit("ravager", 0.3)
 def ravager(k, P, tier, pose):
-    S = hum_scale(0.3, tier) * 0.92
+    S = hum_scale(0.3, tier) * 0.84
     atk = pose == "attack"
     lk = look_for(tier, torso="skin", arms="skin", head=T(tier, "hair", "helm", "helm", "helm"), crest=None,
                   pads=T(tier, None, "cloth", "spiked", "crystal"), chest=None, belt=T(tier, "leather", "leather_dk", "iron", "gold"),
@@ -768,7 +796,8 @@ def ravager(k, P, tier, pose):
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": r_h, "L": l_h}, lk, bulk=1.2)
         # fur mantle across the shoulders + war paint (team) stripes
-        k.torus(0.15, 0.06, P.fur if tier < 3 else P.hair, loc=(-0.02, 0, 0.43), scale=(0.75, 1.15, 0.8))
+        k.torus(0.15, 0.065, P.team, loc=(-0.02, 0, 0.43), scale=(0.75, 1.15, 0.8))
+        k.torus(0.15, 0.03, P.fur if tier < 4 else P.glow_lt, loc=(-0.02, 0, 0.47), scale=(0.75, 1.15, 0.8), outline=0.006)
         k.box((0.06, 0.3, 0.02), P.team, loc=(0.08, 0, 0.42), rot=(0, 25, 0), outline=0.006)
         if tier >= 2:
             for s in (1, -1):
@@ -839,7 +868,7 @@ def bombard(k, P, tier, pose):
     with k.at(scale=S):
         k.box((0.56, 0.5, 0.1), wood, loc=(0, 0, 0.06), bevel=0.025)
         for s in (1, -1):
-            k.box((0.5, 0.06, 0.06), P.wood_dk, loc=(0, s * 0.27, 0.06), bevel=0.015)
+            k.box((0.5, 0.07, 0.07), P.team if tier < 4 else P.gold, loc=(0, s * 0.27, 0.07), bevel=0.018)
             k.box((0.22, 0.08, 0.2), wood, loc=(0.0, s * 0.17, 0.2), bevel=0.02)
         recoil = -0.06 if fire else 0.0
         with k.at((recoil, 0, 0.28), rot=(0, 40, 0)):
@@ -1119,7 +1148,8 @@ def golemling(k, P, tier, pose):
         for i in range(4):
             a = 2 * math.pi * i / 4 + 0.4
             p = V((-0.06 + math.cos(a) * 0.1, math.sin(a) * 0.15, 0.58))
-            k.crystal_at(p, p + V((math.cos(a) * 0.05 - 0.04, math.sin(a) * 0.06, 0.14)), 0.04, P.team)
+            k.crystal_at(p, p + V((math.cos(a) * 0.08 - 0.05, math.sin(a) * 0.1, 0.2)), 0.06, P.team)
+        k.crystal_at(V((-0.05, 0, 0.6)), V((-0.08, 0, 0.84)), 0.07, P.team_lt)
 
 
 @unit("thrall", 0.22, spawned=True)
@@ -1143,13 +1173,14 @@ def thrall(k, P, tier, pose):
 @unit("turret", 0.24, spawned=True)
 def turret(k, P, tier, pose):
     fire = pose == "attack"
-    with k.at(scale=1.0):
+    with k.at(scale=1.3):
         for i in range(3):
             a = 2 * math.pi * i / 3 + math.pi / 3
             k.rod(V((0, 0, 0.22)), V((math.cos(a) * 0.2, math.sin(a) * 0.2, 0.02)), 0.018, P.wood_dk)
         k.cyl(0.08, 0.08, P.iron, loc=(0, 0, 0.24), seg=12)
         k.box((0.32, 0.08, 0.07), P.wood, loc=(0.04, 0, 0.32), bevel=0.02)
-        k.box((0.1, 0.24, 0.12), P.team, loc=(0.1, 0, 0.3), bevel=0.02)
+        k.box((0.12, 0.3, 0.14), P.team, loc=(0.1, 0, 0.3), bevel=0.025)
+        k.cyl(0.11, 0.04, P.team_dk, loc=(-0.02, 0, 0.27), seg=14)
         for s in (1, -1):
             k.tube([V((0.18, s * 0.04, 0.34)), V((0.16, s * 0.15, 0.34)), V((0.1, s * 0.22, 0.34))], 0.016, P.iron, smooth_n=2)
         k.ball(0.04, P.copper, loc=(-0.1, 0, 0.36))

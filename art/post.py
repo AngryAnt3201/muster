@@ -99,7 +99,9 @@ def process(raw_path, glow_path, team, out_path, size, ink_r, glow_r, ghost=Fals
         bl = np.stack([blur(g[..., i], glow_r * 0.6) for i in range(3)], -1)
         out[..., :3] = np.minimum(out[..., :3] + bl * 0.45 * out[..., 3:4], out[..., 3:4])
     if ghost:
-        out *= 0.72
+        lt = np.array(TEAM[team]["light"], np.float32) / 255
+        out[..., :3] = out[..., :3] * 0.5 + lt * out[..., 3:4] * 0.5
+        out *= 0.66
     out8 = np.clip(out * 255.0 + 0.5, 0, 255).astype(np.uint8)
     im = Image.fromarray(out8, "RGBa")
     if im.size[0] != size:
@@ -112,6 +114,18 @@ def process(raw_path, glow_path, team, out_path, size, ink_r, glow_r, ghost=Fals
     else:
         im.save(out_path, optimize=True)
     return im
+
+
+RADIUS = {}
+
+
+def load_radii():
+    if not os.path.isdir(RAW):
+        return
+    for k in os.listdir(RAW):
+        mp = os.path.join(RAW, k, "meta.json")
+        if os.path.exists(mp):
+            RADIUS[k] = json.load(open(mp)).get("radius", 0.25)
 
 
 def sprites(kinds):
@@ -204,8 +218,8 @@ def contact(man, team, pose="idle", scale=1.0, name=None, cols_blocks=2):
         y0 = head_h + row * cell
         u = man["units"][kind]
         size = u["size"]
-        fit = min(1.0, (cell - 8) / size) if scale >= 0.75 else 1.0
-        s = scale * fit if scale < 0.75 else fit
+        s = scale
+        rad = RADIUS.get(kind, 0.25)
         if lab_w:
             d.text((x0, y0 + cell // 2 - 18), NAMES.get(kind, kind), fill=(235, 240, 245, 255), font=f)
             d.text((x0, y0 + cell // 2 + 2), f"{kind} {size}px", fill=(130, 150, 170, 255), font=fs)
@@ -215,11 +229,17 @@ def contact(man, team, pose="idle", scale=1.0, name=None, cols_blocks=2):
                 continue
             im = Image.open(p).convert("RGBA")
             ns = max(1, int(round(size * s)))
-            im = im.resize((ns, ns), Image.LANCZOS)
+            if ns != size:
+                im = im.resize((ns, ns), Image.LANCZOS)
             cx = x0 + lab_w + cell * (t - 1) + cell // 2
             cy = y0 + cell // 2
-            shadow(sheet, cx, cy, ns * 0.22)
-            sheet.alpha_composite(im, (cx - ns // 2, cy - ns // 2))
+            shadow(sheet, cx, cy, rad * PPU * s * 1.1)
+            # clip to the cell so true in-game scale is kept
+            cl = cell // 2 - 2
+            box = (ns // 2 - cl, ns // 2 - cl, ns // 2 + cl, ns // 2 + cl)
+            crop = Image.new("RGBA", (2 * cl, 2 * cl), (0, 0, 0, 0))
+            crop.alpha_composite(im, (max(0, -box[0]), max(0, -box[1])), (max(0, box[0]), max(0, box[1]), min(ns, box[2]), min(ns, box[3])))
+            sheet.alpha_composite(crop, (cx - cl, cy - cl))
     os.makedirs(CONTACT, exist_ok=True)
     path = os.path.join(CONTACT, name or f"sheet_{team}.png")
     save_sheet(sheet, path)
@@ -262,6 +282,7 @@ def main():
     if a.only:
         want = {x.strip() for x in a.only.split(",")}
         kinds = [k for k in kinds if k in want]
+    load_radii()
     if a.sheets_only:
         man = json.load(open(os.path.join(SPR, "manifest.json")))
     else:

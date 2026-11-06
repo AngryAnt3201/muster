@@ -578,7 +578,7 @@ class Stage:
         ims.file_format = "PNG"
         ims.color_mode = "RGBA"
         ims.color_depth = "8"
-        ims.compression = 10
+        ims.compression = 40
         w = bpy.data.worlds.new("World")
         w.color = (0, 0, 0)
         sc.world = w

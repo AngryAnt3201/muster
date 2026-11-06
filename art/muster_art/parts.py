@@ -206,6 +206,10 @@ def head(k, P, tier, lk):
     elif hd == "hood":
         k.sphere(HEAD_R * 1.18, P.team, loc=(-0.03, 0, 0.012), scale=(1.0, 1.0, 1.0))
         k.spike((-0.1, 0, 0.03), (-0.21, 0, -0.04), 0.06, P.team)
+    elif hd == "hood_light":
+        k.sphere(HEAD_R * 1.18, P.cloth, loc=(-0.03, 0, 0.012))
+        k.spike((-0.1, 0, 0.03), (-0.21, 0, -0.04), 0.06, P.cloth)
+        k.torus(HEAD_R * 1.0, 0.016, P.team, loc=(0.04, 0, 0.0), rot=(0, 90, 0))
     elif hd == "hood_dark":
         k.sphere(HEAD_R * 1.2, P.dark, loc=(-0.03, 0, 0.012))
         k.spike((-0.1, 0, 0.03), (-0.22, 0, -0.05), 0.06, P.dark)
@@ -225,7 +229,7 @@ def head(k, P, tier, lk):
         k.cyl(HEAD_R * 1.55, 0.016, P.team_dk, loc=(0, 0, 0.05), seg=18)
         k.sphere(HEAD_R * 0.9, P.team, loc=(-0.005, 0, 0.07), scale=(1.0, 1.0, 0.75))
     elif hd == "mask":
-        k.sphere(HEAD_R * 1.08, P.hair, loc=(-0.02, 0, 0.02))
+        k.sphere(HEAD_R * 1.08, P.team_dk, loc=(-0.02, 0, 0.02))
         k.sphere(HEAD_R * 0.75, P.pearl, loc=(0.05, 0, 0.0), scale=(0.6, 1.1, 1.0))
 
 
