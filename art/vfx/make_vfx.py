@@ -28,7 +28,22 @@ OUT = os.path.join(ROOT, "public", "vfx")
 SS = 2  # supersample
 ATLAS_W = 2048
 
-INK = np.array([0.07, 0.06, 0.09])
+
+
+def _style():
+    """The active art direction (art/style/active.json): its ink outlines the solid effects."""
+    sd = os.path.join(ROOT, "art", "style")
+    try:
+        with open(os.path.join(sd, "active.json")) as f:
+            name = json.load(f)["direction"]
+        with open(os.path.join(sd, f"{name}.json")) as f:
+            return json.load(f)
+    except (OSError, KeyError, ValueError):
+        return None
+
+
+STYLE = _style()
+INK = (np.array([int(STYLE["outline"]["color"][i:i + 2], 16) for i in (1, 3, 5)]) / 255.0) if STYLE else np.array([0.07, 0.06, 0.09])
 
 
 def hexc(h):
