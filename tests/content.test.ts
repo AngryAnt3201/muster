@@ -4,16 +4,16 @@ import { ACTS, LEVELS, rosterAt } from "../src/core/campaign";
 import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type Objective } from "../src/core/content";
 import { UNITS, UNIT_KINDS, inZone } from "../src/core/defs";
 import {
-  BOONS, MEND_HP, boardValue, boonChoices, duelConfig, endDuel, gauntletFoe, newRun, runMods, takeBoon,
+  BOONS, MEND_HP, boardValue, boonChoices, duelConfig, endDuel, gauntletFoe, newRun, rivalMods, runMods, takeBoon,
 } from "../src/core/gauntlet";
 import { Match, type RoundReport } from "../src/core/match";
 import { PUZZLES, SOLUTIONS } from "../src/core/puzzles";
-import { fromStart, naive, playPuzzle, solve } from "../tools/solver";
+import { fromStart, naive, pieceCost, playPuzzle, solve } from "../tools/solver";
 
 describe("campaign", () => {
-  it("has 30 levels, ids 1..30, five acts of six, a boss closing each act", () => {
-    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
-    expect(ACTS).toHaveLength(5);
+  it("has 42 levels, ids 1..42, seven acts of six, a boss closing each act", () => {
+    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 42 }, (_, i) => i + 1));
+    expect(ACTS).toHaveLength(7);
     for (const l of LEVELS) {
       expect(l.act).toBe(Math.ceil(l.id / 6));
       expect(!!l.boss).toBe(l.id % 6 === 0);
@@ -37,23 +37,34 @@ describe("campaign", () => {
       if (l.unlock) expect(l.roster).toContain(l.unlock);
       if (l.id > 1) for (const k of LEVELS[l.id - 2].roster) expect(l.roster).toContain(k);
     }
-    expect(new Set(LEVELS[29].roster)).toEqual(new Set(UNIT_KINDS));
+    expect(new Set(LEVELS[41].roster)).toEqual(new Set(UNIT_KINDS));
+    expect(LEVELS[29].roster).toHaveLength(12);
     expect(rosterAt(1)).toEqual(["blades", "ranger"]);
+    // Acts 6 and 7 bring in one new unit a level, in the spec's order.
+    const fresh = ["sapper", "harrier", "banner", "rime", "ravager", "grave", "bombard", "tinker", "duelist", "pikeman", "keg", "trickster"];
+    expect(LEVELS.slice(30).map((l) => l.unlock)).toEqual(fresh);
+    // Late foes field the new units, in their rosters or on their opening boards.
+    for (const l of LEVELS.slice(30)) {
+      const kinds = new Set([...(l.foeRoster ?? l.roster), ...(l.start?.[1] ?? []).map((p) => p.kind)]);
+      expect(fresh.some((k) => kinds.has(k as never)), `level ${l.id}`).toBe(true);
+    }
     const at = (k: string) => LEVELS.find((l) => l.unlock === k)!.id;
     expect(at("golem")).toBeLessThanOrEqual(23);
     expect(at("bulwark")).toBeGreaterThanOrEqual(3);
   });
 
-  it("ramps the foe: every tactic appears, difficulty ~0.1 to ~0.9, foe health 120ish to 400", () => {
+  it("ramps the foe: every tactic appears, difficulty ~0.1 to ~0.95, foe health 120ish to 400", () => {
     expect(new Set(LEVELS.map((l) => l.ai.tactic))).toEqual(new Set(TACTICS));
     expect(LEVELS[0].ai.difficulty).toBeLessThanOrEqual(0.15);
     expect(LEVELS[29].ai.difficulty).toBeGreaterThanOrEqual(0.85);
-    for (let a = 1; a < 5; a++) {
+    expect(LEVELS[41].ai.difficulty).toBeGreaterThanOrEqual(0.9);
+    for (let a = 1; a < 7; a++) {
       const avg = (act: number) => LEVELS.filter((l) => l.act === act).reduce((s, l) => s + l.ai.difficulty, 0) / 6;
       expect(avg(a + 1)).toBeGreaterThan(avg(a));
     }
     expect(LEVELS[0].hp[1]).toBeLessThanOrEqual(150);
     expect(LEVELS[29].hp[1]).toBe(400);
+    expect(LEVELS[41].hp[1]).toBe(400);
     for (const l of LEVELS) expect(l.hp[0]).toBe(400);
   });
 
@@ -121,8 +132,8 @@ describe("objectives and stars", () => {
 });
 
 describe("breakpoint puzzles", () => {
-  it("has 15 puzzles, ids 1..15, each a valid one-battle match", () => {
-    expect(PUZZLES.map((p) => p.id)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+  it("has 18 puzzles, ids 1..18, each a valid one-battle match", () => {
+    expect(PUZZLES.map((p) => p.id)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
     for (const p of PUZZLES) {
       const m = new Match(puzzleConfig(p));
       expect(m.sides[0].gold).toBe(p.gold);
@@ -134,6 +145,8 @@ describe("breakpoint puzzles", () => {
       expect(p.silver).toBeLessThanOrEqual(p.par);
       expect(p.par).toBeLessThan(p.gold);
       expect(p.par).toBeGreaterThan(0);
+      // No Ascended pieces: a puzzle is a round-1 battle.
+      for (const q of [...p.foe, ...(SOLUTIONS[p.id] ?? [])]) expect(q.rank ?? 1).toBeLessThanOrEqual(3);
       // Gold buys a full board of the cheapest kind or less: the supply limit bites.
       expect(p.shop.length).toBeGreaterThanOrEqual(2);
     }
@@ -157,8 +170,13 @@ describe("breakpoint puzzles", () => {
       expect(n.cheapWins, `puzzle ${p.id}: a row of the cheapest unit wins`).toBe(false);
       aiWins += n.aiRate;
     }
-    // The 0.3 AI in every style wins a quarter of them at most, on average.
+    // The 0.3 AI in every style wins few of them, on average.
+    expect(PUZZLES.slice(15).some((p) => p.shop.some((k) => ["pikeman", "rime", "tinker", "keg"].includes(k)))).toBe(true);
     expect(aiWins / PUZZLES.length).toBeLessThan(0.15);
+  });
+
+  it("prices pieces by rank, Ascended included", () => {
+    expect([1, 2, 3, 4].map((r) => pieceCost("ranger", r))).toEqual([3, 6, 12, 21]);
   });
 
   it("the solver finds a win from scratch", () => {
@@ -204,6 +222,16 @@ describe("gauntlet", () => {
     const value = (f: { start: { kind: keyof typeof UNITS; rank?: number; lx: number; depth: number }[] }) => boardValue(f.start);
     expect(value(gauntletFoe(5, 60, 3))).toBeGreaterThan(value(gauntletFoe(5, 10, 3)));
     expect(value(gauntletFoe(8, 30, 3))).toBeGreaterThan(value(gauntletFoe(1, 30, 3)));
+    // The first rival starts from nothing; later ones bring the new units and, from stage 5, Ascended pieces.
+    expect(gauntletFoe(1, 0, 9).start).toHaveLength(0);
+    const late = Array.from({ length: 6 }, (_, i) => gauntletFoe(9 + i, 420, 11 + i));
+    expect(late.some((f) => f.start.some((p) => (p.rank ?? 1) === 4))).toBe(true);
+    expect(late.every((f) => f.start.every((p) => (p.rank ?? 1) <= 4))).toBe(true);
+    for (let st = 1; st <= 4; st++) expect(gauntletFoe(st, 120, 5).start.every((p) => (p.rank ?? 1) <= 3)).toBe(true);
+    const fresh = new Set(["sapper", "harrier", "banner", "rime", "ravager", "grave", "bombard", "tinker", "duelist", "pikeman", "keg", "trickster"]);
+    expect(late.some((f) => f.start.some((p) => fresh.has(p.kind)))).toBe(true);
+    expect(rivalMods(4)).toBeUndefined();
+    expect(rivalMods(10)!.hpMul).toBeGreaterThan(1);
   });
 
   it("a run plays duel after duel: the army, gold and health carry over and boons apply", () => {
@@ -215,7 +243,7 @@ describe("gauntlet", () => {
       const cfg = duelConfig(run, foe);
       const m = new Match(cfg);
       expect(m.sides[0].pieces).toHaveLength(run.board.length);
-      expect(m.supplyCap(0)).toBeGreaterThan(run.board.length);
+      expect(m.supplyCap(0)).toBeGreaterThanOrEqual(Math.min(run.board.length + 1, 12));
       for (const p of m.sides[0].pieces) expect(inZone(0, p.x, p.y)).toBe(true);
       while (m.phase !== "over" && m.played < 40) {
         applyPlan(m, 1, planTurn(m, 1, { ...foe.ai, difficulty: 0.2 }));

@@ -1,14 +1,16 @@
 // Breakpoint puzzle solver: random drafts plus local search over the deterministic sim. Shared by tests and tools.
 import { DEFAULT_AI, TACTICS, applyPlan, planTurn, type AIProfile } from "../src/core/ai";
 import { puzzleConfig, type PuzzleDef } from "../src/core/content";
-import { UNITS, W, ZONE_DEPTH, toLocal, toWorld, type UnitKind } from "../src/core/defs";
+import { ASCEND_ROUND, MAX_RANK, UNITS, W, ZONE_DEPTH, toLocal, toWorld, type UnitKind } from "../src/core/defs";
 import { Match, type StartPiece } from "../src/core/match";
 import { Rng } from "../src/core/rng";
 
 export interface Gene { kind: UnitKind; lx: number; depth: number; rank: number; }
 
-/** Gold a piece of this rank costs in total (buy plus upgrades). */
-export const pieceCost = (kind: UnitKind, rank: number) => UNITS[kind].cost * (rank === 1 ? 1 : rank === 2 ? 2 : 4);
+/** Gold a piece of this rank costs in total: the buy plus every rank-up (cost, 2x, then 3x to Ascend). */
+export const pieceCost = (kind: UnitKind, rank: number) => UNITS[kind].cost * (1 + (rank * (rank - 1)) / 2);
+/** Puzzles are one round-1 battle, so Ascending (rank 4, from round ASCEND_ROUND) is never on offer. */
+const PUZZLE_MAX_RANK = ASCEND_ROUND > 1 ? 3 : MAX_RANK;
 export const spend = (genes: Gene[]) => genes.reduce((s, g) => s + pieceCost(g.kind, g.rank), 0);
 
 export interface Outcome { won: boolean; legal: boolean; goldLeft: number; fitness: number; margin: number; }
@@ -108,7 +110,7 @@ function mutate(p: PuzzleDef, genes: Gene[], rng: Rng, scale: number): Gene[] {
     const kinds = p.shop.filter((k) => k !== g[i].kind && pieceCost(k, g[i].rank) <= left + pieceCost(g[i].kind, g[i].rank));
     if (kinds.length) g[i].kind = rng.pick(kinds);
   } else if (r < 0.87) {
-    if (g[i].rank < 3 && pieceCost(g[i].kind, g[i].rank + 1) - pieceCost(g[i].kind, g[i].rank) <= left) g[i].rank++;
+    if (g[i].rank < PUZZLE_MAX_RANK && pieceCost(g[i].kind, g[i].rank + 1) - pieceCost(g[i].kind, g[i].rank) <= left) g[i].rank++;
     else if (g[i].rank > 1) g[i].rank--;
   } else if (r < 0.94) {
     g.splice(i, 1);
