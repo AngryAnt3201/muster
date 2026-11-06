@@ -1,7 +1,9 @@
-// The twelve v2 units, the flying and burrowing layers, and every unit's Ascended (rank 4) ability.
+// The twelve v2 units, the four 1.1 units, the flying and burrowing layers, and every unit's Ascended (rank 4) ability.
 import { describe, expect, it } from "vitest";
 import { Battle, type BattleEvent, type Body } from "../src/core/battle";
-import { ABILITIES, BODY_EXTRA, UNITS, UNIT_KINDS, rankHp, type BodyKind, type Piece, type Side, type UnitKind } from "../src/core/defs";
+import { ABILITIES, BODY_EXTRA, H, UNITS, UNIT_KINDS, W, rankHp, type BodyKind, type Piece, type Side, type UnitKind } from "../src/core/defs";
+import { DEFAULT_AI, POWER, TACTICS, draftArmy } from "../src/core/ai";
+import { LEVELS, rosterAt } from "../src/core/campaign";
 
 let nid = 1;
 const P = (kind: UnitKind, side: Side, x: number, y: number, rank = 1): Piece => ({ id: nid++, kind, side, x, y, rank, spent: UNITS[kind].cost });
@@ -12,6 +14,7 @@ const runUntil = (b: Battle, seconds: number, until: () => boolean) => {
   return false;
 };
 const events = <T extends BattleEvent["t"]>(b: Battle, t: T) => b.events.filter((e) => e.t === t) as Extract<BattleEvent, { t: T }>[];
+const dist = (a: Body, c: Body) => Math.hypot(a.x - c.x, a.y - c.y);
 const one = (b: Battle, kind: BodyKind, side?: Side) => b.bodies.find((x) => x.kind === kind && (side === undefined || x.side === side))!;
 const all = (b: Battle, kind: BodyKind, side?: Side) => b.bodies.filter((x) => x.kind === kind && (side === undefined || x.side === side));
 /** A punching bag: never acts or moves. */
@@ -536,5 +539,207 @@ describe("ascended (rank 4) abilities", () => {
     expect(decoys[0].alive).toBe(false);
     expect(events(b, "pop")).toHaveLength(1);
     expect(events(b, "boom").some((e) => e.kind === "mirror")).toBe(true);
+  });
+});
+
+describe("1.1 units: Hookwarden, Thornweaver, Outrider, Lamplighter", () => {
+  it("Hookwarden chains the back-liner behind the wall and drags it to the front", () => {
+    const b = new Battle([P("hook", 0, 4.5, 10), P("bulwark", 1, 4.5, 8.6), P("ranger", 1, 4.5, 6.6)], { seed: 3, events: true });
+    const h = one(b, "hook"), ranger = one(b, "ranger"), wall = one(b, "bulwark");
+    pin(ranger, wall);
+    const start = dist(h, ranger);
+    expect(runUntil(b, 2, () => events(b, "hook").length > 0)).toBe(true);
+    // It skips the bulwark in its face and throws at the soft ranger.
+    expect(events(b, "hook")[0].target).toBe(ranger.id);
+    expect(runUntil(b, 2, () => events(b, "reel").length > 0)).toBe(true);
+    expect(ranger.hp).toBeLessThan(ranger.maxHp);
+    run(b, 1.5);
+    expect(dist(h, ranger)).toBeLessThan(start * 0.5);
+    expect(h.state).toBe("");
+    // The chain waits for its cooldown before the next throw.
+    const thrown = events(b, "hook").length;
+    run(b, 2);
+    expect(events(b, "hook").length).toBe(thrown);
+  });
+
+  it("Hookwarden ignores flyers and what is already in its face", () => {
+    const b = new Battle([P("hook", 0, 4.5, 10), P("harrier", 1, 4.5, 7), P("blades", 1, 4.5, 9.2)], { seed: 4, events: true });
+    pin(...b.bodies.filter((x) => x.side === 1));
+    run(b, 2);
+    const ids = new Set(b.bodies.filter((x) => x.kind === "harrier" || x.kind === "blades").map((x) => x.id));
+    expect(events(b, "hook").some((e) => ids.has(e.target))).toBe(false);
+  });
+
+  it("Hookwarden, Iron Tether: two chains at once, each catch held stunned", () => {
+    const b = new Battle([P("hook", 0, 4.5, 10, 4), P("ranger", 1, 3.5, 7), P("medic", 1, 5.5, 7)], { seed: 5, events: true });
+    const r = one(b, "ranger"), m = one(b, "medic");
+    pin(r, m);
+    for (const x of [r, m]) x.hp = x.maxHp = 400; // survive the bite so the reel can finish
+    expect(runUntil(b, 2, () => events(b, "hook").length > 0)).toBe(true);
+    expect(new Set(events(b, "hook").map((e) => e.target))).toEqual(new Set([r.id, m.id]));
+    r.frozen = 0; m.frozen = 0; // let them try to walk off once caught
+    expect(runUntil(b, 3, () => one(b, "hook").state === "")).toBe(true);
+    expect(r.stun).toBeGreaterThan(0.8);
+    expect(m.stun).toBeGreaterThan(0.8);
+    // Rank 1 throws one.
+    const c = new Battle([P("hook", 0, 4.5, 10), P("ranger", 1, 3.5, 7), P("medic", 1, 5.5, 7)], { seed: 5, events: true });
+    pin(...c.bodies.filter((x) => x.side === 1));
+    runUntil(c, 2, () => events(c, "hook").length > 0);
+    expect(events(c, "hook")).toHaveLength(1);
+  });
+
+  it("Thornweaver sows brambles on the crowd that hurt and slow it, and keeps its distance", () => {
+    const b = new Battle([P("thorn", 0, 4.5, 11), P("blades", 1, 4.5, 6)], { seed: 6, events: true });
+    const t = one(b, "thorn");
+    expect(runUntil(b, 3, () => events(b, "zone").length > 0)).toBe(true);
+    const z = events(b, "zone")[0];
+    expect(z.kind).toBe("thorn");
+    expect(z.side).toBe(0);
+    expect(z.root).toBe(false);
+    expect(b.zones.some((x) => x.kind === "thorn")).toBe(true);
+    expect(runUntil(b, 2, () => all(b, "blades", 1).some((x) => x.snare > 0))).toBe(true);
+    // Snared bodies crawl.
+    run(b, 0.3);
+    const blade = all(b, "blades", 1).find((x) => x.snare > 0)!;
+    expect(Math.hypot(blade.vx, blade.vy)).toBeLessThan(blade.speed * 0.8);
+    run(b, 1);
+    expect(all(b, "blades", 1).some((x) => x.hp < x.maxHp)).toBe(true);
+    // It backs off rather than trading blows.
+    expect(t.alive).toBe(true);
+    // Brambles only catch the other side and never flyers.
+    const c = new Battle([P("thorn", 0, 4.5, 11), P("harrier", 1, 4.5, 7), P("blades", 0, 4.5, 7)], { seed: 6 });
+    c.zones.push({ id: 999, kind: "thorn", x: 4.5, y: 7, r: 1.2, side: 0, until: 5, dps: 30, tick: 0 });
+    c.step();
+    expect(one(c, "harrier").snare).toBe(0);
+    expect(one(c, "blades", 0).snare).toBe(0);
+  });
+
+  it("Thornweaver, Bramble Crown: wider, longer patches that seize what they sprout under", () => {
+    const b = new Battle([P("thorn", 0, 4.5, 11, 4), P("bulwark", 1, 4.5, 7.5)], { seed: 7, events: true });
+    const w = one(b, "bulwark");
+    pin(w);
+    expect(runUntil(b, 3, () => events(b, "zone").length > 0)).toBe(true);
+    const z = events(b, "zone")[0];
+    expect(z.root).toBe(true);
+    expect(z.r).toBeGreaterThan(1.1);
+    expect(z.until - b.time).toBeGreaterThan(4.5);
+    expect(w.stun).toBeGreaterThan(0.5);
+  });
+
+  it("Outrider shoots on the move, circling its mark, and outruns melee", () => {
+    const b = new Battle([P("outrider", 0, 4.5, 10), P("bulwark", 1, 4.5, 5)], { seed: 8, events: true });
+    const o = one(b, "outrider"), w = one(b, "bulwark");
+    pin(w);
+    run(b, 2);
+    let moving = 0, shots = 0;
+    for (let i = 0; i < 90; i++) { const last = o.swing; b.step(); if (Math.hypot(o.vx, o.vy) > 0.5) moving++; if (o.swing !== last) shots++; }
+    expect(moving).toBeGreaterThan(60);
+    expect(shots).toBeGreaterThanOrEqual(2);
+    expect(w.hp).toBeLessThan(w.maxHp);
+    expect(dist(o, w)).toBeLessThan(UNITS.outrider.range * 1.05);
+    // Melee that runs a Ranger down in six seconds can't pin the Outrider.
+    for (const foe of ["blades", "duelist", "ravager"] as UnitKind[]) {
+      const duel = (k: UnitKind) => { const c = new Battle([P(k, 0, 4.5, 10), P(foe, 1, 4.5, 7)], { seed: 9 }); run(c, 6); return one(c, k); };
+      expect(duel("ranger").alive, foe).toBe(false);
+      expect(duel("outrider").alive, foe).toBe(true);
+    }
+    // And it can shoot down a flyer.
+    const air = new Battle([P("outrider", 0, 4.5, 10), P("harrier", 1, 4.5, 7)], { seed: 9 });
+    expect(air.nearestEnemy(one(air, "outrider"))?.kind).toBe("harrier");
+  });
+
+  it("Outrider, Running Fire: two arrows a shot, at two foes when it can", () => {
+    const b = new Battle([P("outrider", 0, 4.5, 10, 4), P("golem", 1, 3.5, 7), P("golem", 1, 5.5, 7)], { seed: 10 });
+    const o = one(b, "outrider");
+    const [g1, g2] = all(b, "golem", 1);
+    pin(g1, g2);
+    expect(runUntil(b, 3, () => b.projs.some((p) => p.side === 0))).toBe(true);
+    expect(b.projs.filter((p) => p.side === 0)).toHaveLength(2);
+    run(b, 4);
+    expect(g1.hp).toBeLessThan(g1.maxHp);
+    expect(g2.hp).toBeLessThan(g2.maxHp);
+    // Rank 1 looses one at a time.
+    const c = new Battle([P("outrider", 0, 4.5, 10), P("golem", 1, 3.5, 7), P("golem", 1, 5.5, 7)], { seed: 10 });
+    pin(...all(c, "golem", 1));
+    runUntil(c, 3, () => c.projs.some((p) => p.side === 0));
+    expect(c.projs.filter((p) => p.side === 0)).toHaveLength(1);
+    expect(o.rank).toBe(4);
+  });
+
+  it("Lamplighter wards the ally under pressure; the ward soaks the next blows, then breaks", () => {
+    const b = new Battle([P("lamp", 0, 4.5, 11.5), P("blades", 0, 4.5, 9), P("golem", 1, 4.5, 7.6)], { seed: 11, events: true });
+    const l = one(b, "lamp"), g = one(b, "golem");
+    pin(g);
+    expect(runUntil(b, 2, () => events(b, "ward").length > 0)).toBe(true);
+    const w = events(b, "ward")[0];
+    expect(w.from).toBe(l.id);
+    const ally = b.bodies.find((x) => x.id === w.id)!;
+    expect(ally.side).toBe(0);
+    expect(ally.ward).toBeCloseTo(w.amt, 0);
+    const hp = ally.hp;
+    expect(b.damage(ally, w.amt - 5, g, 1)).toBe(0);
+    expect(ally.hp).toBe(hp);
+    expect(b.damage(ally, 20, g, 1)).toBeCloseTo(15, 0);
+    expect(ally.ward).toBe(0);
+    const br = events(b, "wardbreak").find((e) => e.id === ally.id)!;
+    expect(br.burst).toBe(false);
+    // Wards fade if nothing hits them.
+    const c = new Battle([P("lamp", 0, 4.5, 11.5), P("blades", 0, 4.5, 9), P("golem", 1, 4.5, 7.6)], { seed: 11, events: true });
+    pin(one(c, "golem"));
+    runUntil(c, 2, () => events(c, "ward").length > 0);
+    const warded = c.bodies.find((x) => x.id === events(c, "ward")[0].id)!;
+    pin(...c.bodies.filter((x) => x.side === 0));
+    run(c, 6.5);
+    expect(warded.ward).toBe(0);
+  });
+
+  it("Lamplighter, Beacon: four wards, and a broken one bursts and throws foes back", () => {
+    const b = new Battle([
+      P("lamp", 0, 4.5, 12, 4), P("bulwark", 0, 3, 9.5), P("bulwark", 0, 4, 9.5), P("bulwark", 0, 5, 9.5), P("bulwark", 0, 6, 9.5), P("bulwark", 0, 7, 9.5),
+      P("golem", 1, 4.5, 7.5),
+    ], { seed: 12, events: true });
+    const g = one(b, "golem");
+    pin(g);
+    expect(runUntil(b, 2, () => events(b, "ward").length > 0)).toBe(true);
+    expect(events(b, "ward")).toHaveLength(4);
+    const ally = b.bodies.find((x) => x.id === events(b, "ward")[0].id)!;
+    expect(ally.wardBurst).toBe(true);
+    // Put a foe next to it and break the ward.
+    const hp = g.hp;
+    g.x = ally.x; g.y = ally.y - ally.radius - g.radius - 0.05;
+    const gx = g.x, gy = g.y;
+    b.damage(ally, ally.ward * 3, g, 1); // a bulwark shield takes 30% off first
+    expect(events(b, "wardbreak").at(-1)!.burst).toBe(true);
+    expect(g.hp).toBeLessThan(hp);
+    g.frozen = 0;
+    b.step();
+    expect(Math.hypot(g.x - gx, g.y - gy)).toBeGreaterThan(0);
+  });
+
+  it("the AI drafts and places all four once they are on the roster", () => {
+    const seen = new Set<UnitKind>();
+    const fresh: UnitKind[] = ["hook", "thorn", "outrider", "lamp"];
+    for (let s = 1; s <= 40; s++) {
+      const army = draftArmy(1, 24, fresh, { ...DEFAULT_AI, tactic: TACTICS[s % TACTICS.length] }, s);
+      for (const p of army) {
+        seen.add(p.kind);
+        expect(p.y).toBeLessThan(H / 2);
+        expect(p.x).toBeGreaterThan(0);
+        expect(p.x).toBeLessThan(W);
+      }
+    }
+    expect(seen).toEqual(new Set(fresh));
+    for (const k of fresh) expect(POWER[k]).toBeGreaterThan(2);
+  });
+
+  it("they join the campaign late in Act 7, one beside each of its last four unlocks", () => {
+    const byId = (id: number) => LEVELS.find((l) => l.id === id)!;
+    expect(rosterAt(38).some((k) => ["hook", "thorn", "outrider", "lamp"].includes(k))).toBe(false);
+    expect(byId(39).unlocks).toEqual(["duelist", "lamp"]);
+    expect(byId(40).unlocks).toEqual(["pikeman", "thorn"]);
+    expect(byId(41).unlocks).toEqual(["keg", "hook"]);
+    expect(byId(42).unlocks).toEqual(["trickster", "outrider"]);
+    for (const id of [39, 40, 41, 42]) expect(byId(id).act).toBe(7);
+    expect(rosterAt(42)).toEqual(expect.arrayContaining(["hook", "thorn", "outrider", "lamp"]));
   });
 });

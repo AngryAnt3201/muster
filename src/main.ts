@@ -174,7 +174,7 @@ function campaign(focusAct?: number) {
         stars(best),
       ]);
       if (l.boss) n.append(el("span", { class: "node-boss" }, ["Boss"]));
-      if (l.unlock && lopen) n.append(unitIcon(l.unlock, 24));
+      if (l.unlock && lopen) for (const k of l.unlocks ?? [l.unlock]) n.append(unitIcon(k, 24));
       if (current) n.append(el("span", { class: "node-name" }, [l.name]));
       n.addEventListener("click", () => {
         if (swiped) return;
@@ -224,7 +224,7 @@ function levelSheet(l: LevelDef) {
     el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
   ]);
-  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${k === l.unlock ? "new" : ""}`).frame));
+  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${(l.unlocks ?? [l.unlock]).includes(k) ? "new" : ""}`).frame));
   sheet(el("div", {}, [
     el("div", { class: "sheet-kicker" }, [`Act ${l.act} · Level ${l.id}`]),
     el("h2", {}, [l.name]),
@@ -605,8 +605,10 @@ function showcase(n: number) {
   const sets: [string, number, number, number][][] = [
     [["pikeman", 3.0, 4.8, 4], ["ravager", 6.0, 4.6, 3], ["rime", 2.2, 2.6, 4], ["tinker", 6.8, 2.2, 3], ["banner", 4.5, 3.2, 4], ["grave", 4.5, 1.2, 3]],
     [["lancer", 2.0, 3.6, 4], ["keg", 4.5, 4.9, 3], ["harrier", 6.5, 3.4, 4], ["sapper", 7.6, 4.2, 3], ["trickster", 3.4, 2.4, 4], ["bombard", 4.5, 0.8, 3]],
+    // 1.1: the four late-Act-7 units, Ascended and not.
+    [["hook", 3.2, 4.6, 4], ["hook", 6.2, 4.4, 2], ["outrider", 1.2, 3.0, 4], ["thorn", 4.5, 1.6, 4], ["lamp", 6.6, 1.4, 4], ["outrider", 7.8, 2.6, 1]],
   ];
-  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : sets;
+  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : n === 3 ? [sets[2], sets[0]] : sets;
   const start = (list: [string, number, number, number][]) => list.map(([kind, lx, depth, rank]) => ({ kind: kind as UnitKind, lx, depth, rank }));
   const ai = (t: Tactic): AIProfile => ({ ...DEFAULT_AI, difficulty: 0.6, tactic: t, economy: 1 });
   game = new GameScreen(app, {

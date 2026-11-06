@@ -22,6 +22,7 @@ export interface LevelDef {
   roster: UnitKind[]; // what the player can draft
   foeRoster?: UnitKind[];
   unlock?: UnitKind; // the unit this level introduces (badged NEW)
+  unlocks?: UnitKind[]; // every unit it introduces, when there is more than one (unlock is the first)
   startGold?: [number, number];
   income?: [number, number];
   supply?: [number, number];

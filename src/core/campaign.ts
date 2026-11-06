@@ -12,6 +12,8 @@ const UNLOCKS: [number, UnitKind][] = [
   [11, "ballista"], [14, "shade"], [16, "hive"], [19, "storm"], [22, "golem"],
   [31, "sapper"], [32, "harrier"], [33, "banner"], [34, "rime"], [35, "ravager"], [36, "grave"],
   [37, "bombard"], [38, "tinker"], [39, "duelist"], [40, "pikeman"], [41, "keg"], [42, "trickster"],
+  // 1.1: four more join late in Act 7, alongside that level's first unlock.
+  [39, "lamp"], [40, "thorn"], [41, "hook"], [42, "outrider"],
 ];
 export const rosterAt = (id: number): UnitKind[] => UNLOCKS.filter(([at]) => at <= id).map(([, k]) => k);
 
@@ -145,7 +147,7 @@ const DRAFTS: Draft[] = [
   { name: "Clockwork", foe: "Skymarshal Ren", line: "Ren's harriers own the sky.", foeHp: 400, power: 0.99,
     foeRoster: ["harrier", "shade", "sapper", "lancer", "keg", "ravager", "trickster"],
     ai: ai(0.92, "ambush", 0.65, 0.4, 0.8, 2), stars: [WIN, hp(160), losses(5)] },
-  { name: "Crossed Steel", foe: "Blademaster Oku", line: "Oku's school teaches only the sword.", foeHp: 400, power: 1.16,
+  { name: "Crossed Steel", foe: "Blademaster Oku", line: "Oku's school teaches only the sword.", foeHp: 400, power: 1.04,
     foeRoster: ["blades", "ravager", "duelist", "banner", "sapper", "trickster", "medic", "pikeman"],
     ai: ai(0.93, "swarm", 0.7, 0.4, 0.6, 2), stars: [WIN, hp(160), rounds(14)] },
   { name: "Hold the Ford", foe: "Rider Calla", line: "Calla's lancers cross at a gallop.", foeHp: 400, power: 1.06,
@@ -167,11 +169,13 @@ const DRAFTS: Draft[] = [
 export function buildLevel(index: number, power?: number): LevelDef {
   const { foeHp, hp: hpPair, power: tuned = 1, mods, ...d } = DRAFTS[index];
   const id = index + 1;
-  const unlock = UNLOCKS.find(([at]) => at === id)?.[1];
+  const fresh = UNLOCKS.filter(([at]) => at === id).map(([, k]) => k);
+  const unlock = fresh[0];
   const p = power ?? tuned;
   const foeMods = mods?.[1] ?? {};
   const scaled = p === 1 ? mods?.[1] : { ...foeMods, hpMul: +((foeMods.hpMul ?? 1) * p).toFixed(3), dmgMul: +((foeMods.dmgMul ?? 1) * p).toFixed(3) };
   const out: LevelDef = { id, act: Math.floor(index / 6) + 1, roster: rosterAt(id), unlock, hp: hpPair ?? [400, foeHp], ...d };
+  if (fresh.length > 1) out.unlocks = fresh;
   if (mods?.[0] || scaled) out.mods = [mods?.[0], scaled];
   return out;
 }
