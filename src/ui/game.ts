@@ -220,9 +220,14 @@ export class GameScreen {
       const none = this.match.sides[0].pieces.length === 0;
       hint.textContent = none ? "Drag a card onto your half" : this.match.round === 1 ? "Tap Fight when you're ready" : "";
       hint.className = `hint ${hint.textContent ? "" : "hidden"} ${none ? "drag" : "go"}`;
-      // Sit just above the cards (drag) or the Fight button (go), wherever the tray ends up.
-      const anchor = (none ? this.h.shop : this.h.fight).getBoundingClientRect();
-      hint.style.bottom = `${window.innerHeight - anchor.top + (none ? 18 : 14)}px`;
+      // Both sit on the board just above the tray, so they never hide the shop cards. Drag is centred over the
+      // cards; Go lines up over the (pulsing) Fight button, kept on screen.
+      hint.style.bottom = `${window.innerHeight - this.h.bottom.getBoundingClientRect().top + 22}px`;
+      if (none || !hint.textContent) hint.style.left = "";
+      else {
+        const f = this.h.fight.getBoundingClientRect(), half = hint.offsetWidth / 2;
+        hint.style.left = `${Math.max(8 + half, Math.min(window.innerWidth - 8 - half, f.left + f.width / 2))}px`;
+      }
     } else hint.className = "hint hidden";
     this.renderShop();
   }
