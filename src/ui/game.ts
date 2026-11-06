@@ -561,8 +561,10 @@ export class GameScreen {
       up.addEventListener("click", () => {
         if (m.canUpgrade(0, p.id)) return;
         m.upgrade(0, p.id);
+        // Close the card so the evolution plays on the board.
+        this.closePop();
+        this.selected = null;
         this.evolve(p);
-        this.openPop(p);
         this.refreshHud();
       });
       const sell = el("button", { class: "btn small sell" }, [`Sell · +${m.sellValue(p)}`]) as HTMLButtonElement;
