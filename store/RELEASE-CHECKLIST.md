@@ -1,7 +1,8 @@
 # Muster: Tactics: release checklist (zero to "Submitted for review")
 
-About 15 minutes of your time, plus Apple's build processing (5 to 15 minutes) while you fill the listing.
-Everything to paste is in `store/LISTING.md`. Everything about the name, version and ids is in `app.config.json`.
+About 25 minutes of your time, plus Apple's build processing (5 to 15 minutes) while you fill the listing.
+Everything to paste is in `store/LISTING.md`; the Full Army in-app purchase fields are in `store/IAP.md`. Everything about the name, version and ids is in `app.config.json`.
+Version 1.1 is free to download with one in-app purchase (Full Army, `co.inflect.muster.fullarmy`, USD 4.99). If 1.0 is already live, skip step 3 (the app record exists) and use the version page for 1.1.
 
 | | |
 | --- | --- |
@@ -9,7 +10,8 @@ Everything to paste is in `store/LISTING.md`. Everything about the name, version
 | Home-screen name | Muster |
 | Bundle ID / SKU | `co.inflect.muster` |
 | Team | Jack Wakem, `F4ZF9VS4GN` |
-| Version | 1.0.0 (build 1) |
+| Version | 1.1.0 (build 1) |
+| In-app purchase | Full Army, `co.inflect.muster.fullarmy`, non-consumable, USD 4.99 |
 | Privacy Policy URL | https://muster-tactics.vercel.app/privacy.html |
 | Support URL | https://muster-tactics.vercel.app/support.html |
 
@@ -20,10 +22,15 @@ Run the commands in your own Terminal (the release scripts refuse to run inside 
 ```sh
 cd ~/Desktop/game_development/muster
 npm test && npm run build      # must pass: the release script stops if TypeScript fails
-npm run store:shots            # only if the art changed since the screenshots in store/screenshots/
+npm run release:config         # must end with "release-config: ..." and no "fix these" list: it checks the copy
+                               # against the build (Full Army, Daily Challenge, Act 8 and unit counts)
+npm run store:shots            # the art and content changed for 1.1, so re-shoot before submitting
+node tools/store-shots.mjs --only=iap-review   # the Full Army review screenshot for store/IAP.md
 ```
 
 Xcode > Settings > Accounts: your Apple ID is listed and team **Jack Wakem (F4ZF9VS4GN)** shows as a paid Apple Developer Program team (not "Personal Team").
+
+App Store Connect > Business: the **Paid Apps Agreement** is Active (bank and tax filled in). Start it first, it can take a day; see `store/IAP.md` step 0.
 
 ## 1. Put the privacy and support pages online (2 min)
 
@@ -64,7 +71,7 @@ If Apple says the name is taken, use the next free name in LISTING.md, set it as
 
 ## 4. Upload the build (2 min, then Apple processes it)
 
-Easiest: Xcode > Window > **Organizer** > Archives > "App 1.0.0 (1)" > **Distribute App** > App Store Connect > Upload > keep the defaults (automatic signing) > Upload.
+Easiest: Xcode > Window > **Organizer** > Archives > "App 1.1.0 (1)" > **Distribute App** > App Store Connect > Upload > keep the defaults (automatic signing) > Upload.
 
 Or from Terminal:
 
@@ -81,20 +88,22 @@ xcrun altool --upload-app -t ios -f ios/App/build/export/App.ipa \
 From `store/LISTING.md`:
 
 - **App Information**: Subtitle; Category = Games, subcategories Strategy and Casual; Content Rights = does not contain third-party content; **Age Rating** > Edit: answer as in LISTING.md (only "Cartoon or Fantasy Violence" = Infrequent/Mild, everything else None/No; expect **9+**).
-- **Pricing and Availability**: Price = Free (USD 0.00), all countries and regions.
-- **App Privacy**: Privacy Policy URL = `https://muster-tactics.vercel.app/privacy.html`; Get Started > "Do you or your third-party partners collect data from this app?" = **No** > Save > **Publish**. The label reads "Data Not Collected".
-- **EU (Digital Services Act)**: if App Store Connect asks for trader status (Business > or the banner on the app), answer it; a free hobby app with no income is usually "not a trader". Without an answer the app is left out of EU storefronts but the rest of the world is fine.
+- **Pricing and Availability**: Price = Free (USD 0.00), all countries and regions. The app is free; the money is in the in-app purchase.
+- **In-App Purchases**: create Full Army exactly as in `store/IAP.md` step 1 (about 3 minutes). Its status should read Ready to Submit.
+- **App Privacy**: Privacy Policy URL = `https://muster-tactics.vercel.app/privacy.html`; Get Started > "Do you or your third-party partners collect data from this app?" = **No** > Save > **Publish**. The label reads "Data Not Collected". The purchase does not change this: Apple takes the payment, and the unlock is only checked and kept on the device.
+- **EU (Digital Services Act)**: if App Store Connect asks for trader status (Business > or the banner on the app), answer it. With a paid in-app purchase you are selling, so the answer is most likely **trader**, and Apple then shows your address, phone and email on the EU product page. If you would rather not publish those yet, leave EU storefronts out under Pricing and Availability; without an answer the app is left out of EU storefronts but the rest of the world is fine.
 
-## 6. Version 1.0 page (4 min)
+## 6. Version 1.1 page (5 min)
 
-iOS App > 1.0 Prepare for Submission:
+iOS App > 1.1 Prepare for Submission (if 1.0 is live: iOS App > **+** next to the version list > 1.1):
 
 - **Screenshots**: iPhone 6.9" Display: drag in `store/screenshots/01-battle.png` to `06-ai-lab.png` in order. No iPad needed (the app is iPhone only).
-- **Promotional Text, Description, Keywords**: paste from LISTING.md.
+- **Promotional Text, Description, Keywords**: paste from LISTING.md. **What's New**: paste from LISTING.md (only shown if 1.0 is already live).
 - **Support URL**: `https://muster-tactics.vercel.app/support.html` · **Marketing URL**: `https://muster-tactics.vercel.app`
 - **Copyright**: `2026 Jack Wakem`
-- **Build**: + > pick 1.0.0 (1) once processed. No export compliance question (Info.plist says no non-exempt encryption).
-- **App Review Information**: Sign-in required: **off**; contact Jack Wakem, jackwakem@gmail.com, your phone; Notes: paste from LISTING.md.
+- **Build**: + > pick 1.1.0 (1) once processed. No export compliance question (Info.plist says no non-exempt encryption).
+- **In-App Purchases and Subscriptions**: + > tick **Full Army** > Done. Apple reviews the first in-app purchase only together with a new version, so it must be attached here.
+- **App Review Information**: Sign-in required: **off**; contact Jack Wakem, jackwakem@gmail.com, your phone; Notes: paste from LISTING.md (they tell the reviewer how to find and buy Full Army in the sandbox).
 - **Version Release**: Automatically release this version.
 
 ## 7. Submit (1 min)
@@ -104,6 +113,6 @@ iOS App > 1.0 Prepare for Submission:
 ## What to expect
 
 - Review usually starts within 24 hours and takes minutes once it starts; most apps are decided within 1 to 2 days. Statuses: Waiting for Review > In Review > Ready for Distribution (then it appears on the store within a few hours) or Rejected with a message in App Store Connect.
-- Likeliest questions for this app, with answers ready: "Is this just a website?" (no: a full offline game, all content bundled, no network); "Screenshots must show the app" (they are the real game UI); age rating (fantasy violence, no blood: 9+).
+- Likeliest questions for this app, with answers ready: "Is this just a website?" (no: a full offline game, all content bundled, no network); "Screenshots must show the app" (they are the real game UI); age rating (fantasy violence, no blood: 9+); "We could not find the in-app purchase" (review notes point to title screen > Shop and the locked Act 3 card); "Restore Purchases is missing" (it is on the Shop screen, Guideline 3.1.1); "Products did not load" (usually the Paid Apps Agreement was not Active yet).
 - If rejected for something in the binary: fix, bump `build` to 2 in `app.config.json`, `npm run ios:release`, upload again, reply in Resolution Center. Metadata-only fixes need no new build.
 - Promotional text can be edited any time; everything else on the version page needs a new version after release.

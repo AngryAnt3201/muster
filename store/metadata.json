@@ -1,5 +1,5 @@
 {
-  "_readme": "App Store Connect listing for Muster. Fields marked in _synced are rewritten from app.config.json by `npm run release:config`, which also regenerates store/LISTING.md and checks every length limit. Edit the copy here, then run that command.",
+  "_readme": "App Store Connect listing for Muster. Fields marked in _synced are rewritten from app.config.json by `npm run release:config`, which also regenerates store/LISTING.md and store/IAP.md and checks every length limit. In the copy, {{name}} is the store name and {{units}}, {{abilities}}, {{levels}}, {{acts}}, {{actsWord}}, {{bosses}}, {{puzzles}} are counted from src/core (tools/content-counts.ts), so they never go stale. Edit the copy here, then run that command.",
   "_synced": [
     "name",
     "bundleId",
@@ -18,14 +18,14 @@
     "Place your army. Watch it win",
     "Turn-based army battler"
   ],
-  "promotionalText": "24 units with minds of their own. Rank them up, Ascend them, and outplan rivals that test their plans against yours. No ads, no purchases, fully offline.",
-  "description": "Muster an army. Place it. Watch it fight.\n\n{{name}} is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.\n\n24 UNITS, EACH WITH A MIND OF ITS OWN\nNo grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.\n\nEVOLVE THEM. ASCEND THEM.\nRank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, 24 in all.\n\nRIVALS THAT THINK\nRivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.\n\nFOUR WAYS TO PLAY\n• Campaign: 30 levels across five acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.\n• Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.\n• Breakpoint: one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.\n• Skirmish: any rival, any settings, any starting health.\n\nPLAYS YOUR WAY\n• Short rounds that fit a spare minute, with 2× and 3× battle speed\n• Fully offline: no account, no sign-in, no internet needed\n• No ads, no in-app purchases, no timers\n• Your progress stays on your device",
+  "promotionalText": "New: a Daily Challenge for everyone, a new act and four new units. Free to start, and one Full Army unlock opens the whole campaign. No ads, no tracking, offline.",
+  "description": "Muster an army. Place it. Watch it fight.\n\n{{name}} is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.\n\n{{units}} UNITS, EACH WITH A MIND OF ITS OWN\nNo grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.\n\nEVOLVE THEM. ASCEND THEM.\nRank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, {{abilities}} in all.\n\nRIVALS THAT THINK\nRivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.\n\nFIVE WAYS TO PLAY\n• Campaign: {{levels}} levels across {{actsWord}} acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.\n• Daily Challenge: one board a day, the same for every player. Win it, keep your streak going and beat your best.\n• Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.\n• Breakpoint: {{puzzles}} one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.\n• Skirmish: any rival, any settings, any starting health.\n\nFREE TO START, ONE UNLOCK\nDownload free and play the first two acts of the campaign, the first Breakpoint puzzles, the Daily Challenge and Skirmish, for as long as you like. One purchase, Full Army, opens every act, the Gauntlet and every Breakpoint puzzle for good. It is a one-time unlock: no subscriptions, no coins, no energy, no loot boxes. Restore Purchases brings it back on a new iPhone.\n\nPLAYS YOUR WAY\n• Short rounds that fit a spare minute, with 2× and 3× battle speed\n• Fully offline: no account, no sign-in, no internet needed to play\n• No ads, no tracking, no timers\n• Your progress stays on your device",
   "keywords": "turn based,wargame,battle,tactical,fantasy,medieval,knights,soldiers,puzzle,offline,commander,war",
-  "whatsNew": null,
+  "whatsNew": "Daily Challenge: a new board every day, the same for every player, with a streak to keep. Free for everyone.\nA new act: Act 8, six new levels and a new boss.\nFour new units, each with its own Ascended ability.\nFull Army: Muster is now free to start with Acts 1 and 2, Skirmish, the Daily Challenge and the first Breakpoint puzzles. A one-time Full Army unlock opens every act, the Gauntlet and every puzzle. If you already reached Act 3, you keep everything you had, no purchase needed.\nSunlit new art across units, arenas and menus.",
   "primaryLanguage": "English (U.S.)",
   "bundleId": "co.inflect.muster",
   "sku": "co.inflect.muster",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "category": {
     "primary": "Games",
     "primarySubcategories": [
@@ -35,7 +35,7 @@
     "secondary": null,
     "_note": "In App Store Connect: App Information > Category. Primary = Games, then pick the two Games subcategories Strategy and Casual. Leave Secondary empty (or Entertainment)."
   },
-  "price": "Free (USD 0.00), all countries and regions",
+  "price": "Free (USD 0.00), all countries and regions. One in-app purchase (Full Army), see store/IAP.md",
   "copyright": "2026 Jack Wakem",
   "contentRights": "No, it does not contain, show, or access third-party content",
   "supportUrl": "https://muster-tactics.vercel.app/support.html",
@@ -130,12 +130,12 @@
   },
   "appPrivacy": {
     "label": "Data Not Collected",
-    "answer": "App Privacy > Get Started > 'Do you or your third-party partners collect data from this app?' = No, we do not collect data from this app. Then Publish.",
-    "tracking": "No tracking. No third-party SDKs that collect data. No analytics, ads or crash reporting."
+    "answer": "App Privacy > Get Started > 'Do you or your third-party partners collect data from this app?' = No, we do not collect data from this app. Then Publish. Still true with the Full Army purchase: Apple takes the payment outside the app, and the unlock is checked and remembered on the device only. Apple's rule: data processed only on device is not 'collected' (https://developer.apple.com/support/app-privacy-on-the-app-store/).",
+    "tracking": "No tracking. No third-party SDKs (StoreKit is Apple's own). No analytics, ads or crash reporting."
   },
   "exportCompliance": "Handled in the binary: ITSAppUsesNonExemptEncryption = NO in Info.plist, so App Store Connect does not ask.",
   "signInRequired": false,
-  "reviewNotes": "{{name}} is a single-player strategy game. There is no account or sign-in, it never uses the network, and it has no purchases or ads.\nHow to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.\nGauntlet, Breakpoint and Skirmish (AI lab) are open from the title screen.",
+  "reviewNotes": "{{name}} is a single-player strategy game. No account or sign-in, no ads, no tracking. The game itself never uses the network; the only network use is Apple's own purchase sheet (StoreKit 2).\n\nFree: Campaign Acts 1 and 2, the Daily Challenge, Skirmish (AI Lab) and the first Breakpoint puzzles.\nIn-app purchase: one non-consumable, Full Army (co.inflect.muster.fullarmy). It opens every campaign act, the Gauntlet and all Breakpoint puzzles. Players who had already reached Act 3 before this version keep that access without buying.\n\nTo test the purchase with a sandbox account: on the title screen tap Shop, then tap the Full Army price button and confirm. The price shown comes from the App Store. You can also tap Campaign and open Act 3: the locked act card offers the same purchase. Restore Purchases is on the Shop screen.\n\nHow to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.\nDaily Challenge and Skirmish are open from the title screen for everyone.",
   "reviewContact": {
     "firstName": "Jack",
     "lastName": "Wakem",
@@ -196,5 +196,20 @@
         "note": "Exact matches: Muster (Stalefish Labs, Social Networking) and muster (HATCH COLLECTIBLES, Lifestyle)."
       }
     ]
+  },
+  "_whatsNewNote": "App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.",
+  "inAppPurchase": {
+    "type": "Non-Consumable",
+    "referenceName": "Full Army unlock",
+    "productId": "co.inflect.muster.fullarmy",
+    "price": "USD 4.99 (United States base price; let Apple set the other storefronts from it)",
+    "availability": "All countries and regions (same as the app)",
+    "familySharing": "Off. Turning Family Sharing on for a non-consumable cannot be undone, so leave it off unless you want families to share the unlock.",
+    "taxCategory": "Match to parent app (the default)",
+    "displayName": "Full Army",
+    "description": "Every act, the Gauntlet and all puzzles",
+    "reviewScreenshot": "store/screenshots/iap-review.png",
+    "reviewNotes": "Full Army is a one-time unlock. Without it, Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles are free. It opens every campaign act, the Gauntlet and every Breakpoint puzzle. To find it: title screen > Shop, or Campaign > the locked Act 3 card. Restore Purchases is on the Shop screen.",
+    "promotionalImage": "None (optional; only needed for App Store promotion or win-back offers)"
   }
 }
