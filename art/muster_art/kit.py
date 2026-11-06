@@ -140,8 +140,13 @@ def set_light(vec):
 _M = {}
 
 
+def matname(name):
+    """Blender reads a trailing '.NNN' as a duplicate counter and aborts (stoi out of range) on long float tails."""
+    return name.replace(".", "p")
+
+
 def _new_mat(name):
-    m = bpy.data.materials.new(name)
+    m = bpy.data.materials.new(matname(name))
     nt = m.node_tree
     for n in list(nt.nodes):
         nt.nodes.remove(n)
@@ -231,7 +236,8 @@ def flat(col, alpha=1.0):
     return _M[key]
 
 
-def outline_mat(col=INK):
+def outline_mat(col=None):
+    col = col or INK  # read at call time so a style direction can set kit.INK
     key = ("outline", col)
     if key in _M:
         return _M[key]

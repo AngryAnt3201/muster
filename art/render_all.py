@@ -1,7 +1,10 @@
 """Muster unit art: build every unit procedurally in Blender and render sprites + portraits.
 
-    blender -b -P art/render_all.py -- [--only ranger,golem] [--jobs 4] [--no-post] [--no-portraits]
+    blender -b -P art/render_all.py -- [--only ranger,golem] [--jobs 4] [--no-post] [--no-portraits] [--style meadow|dusk|toy|active]
     npm run art
+
+--style (or MUSTER_STYLE) renders with a v3 style direction from art/style/ (ink, team colours, toon bands, rim
+light, material palette, hull outline width); without it the shipped v2 look is kept. See docs/ART-V3.md.
 
 Writes raw supersampled renders to art/build/raw, then runs art/post.py (system python3 with
 Pillow + numpy) which adds the ink silhouette, Ascended bloom, downsamples, quantises and writes
@@ -43,7 +46,16 @@ def args():
     ap.add_argument("--no-post", action="store_true")
     ap.add_argument("--no-portraits", action="store_true")
     ap.add_argument("--samples", type=int, default=16)
+    ap.add_argument("--style", default=os.environ.get("MUSTER_STYLE", ""), help="style direction id, or 'active'")
     return ap.parse_args(argv)
+
+
+def style_of(a):
+    """The v3 direction to render with, or None for the v2 look."""
+    if not a.style:
+        return None
+    from muster_art import style as S
+    return S.load(None if a.style == "active" else a.style)
 
 
 def kinds_list(a):
@@ -70,8 +82,16 @@ def worker(a):
     from muster_art.units import REG
 
     st = K.Stage(samples=a.samples)
-    P = Pal()
-    k = K.Kit()
+    sty = style_of(a)
+    if sty:
+        from muster_art import style as S
+        S.apply(sty)
+        P = S.make_pal(sty)
+        k = K.Kit(outline=sty["outline"]["hull"])
+        print(f"STYLE {sty['id']}", flush=True)
+    else:
+        P = Pal()
+        k = K.Kit()
     ks = kinds_list(a)
     if a.worker >= 0:
         ks = [x for i, x in enumerate(ks) if i % a.nworkers == a.worker]
@@ -161,6 +181,8 @@ def main():
         if a.no_portraits:
             extra.append("--no-portraits")
         extra += ["--samples", str(a.samples)]
+        if a.style:
+            extra += ["--style", a.style]
         procs = []
         for i in range(a.jobs):
             cmd = [blender, "-b", "--factory-startup", "-P", os.path.abspath(__file__), "--", "--worker", str(i), "--nworkers", str(a.jobs)] + extra
@@ -179,6 +201,8 @@ def main():
         cmd = ["python3", os.path.join(HERE, "post.py")]
         if a.only:
             cmd += ["--only", a.only]
+        if a.style:
+            cmd += ["--style", a.style]
         r = subprocess.run(cmd)
         if r.returncode != 0:
             sys.exit(r.returncode)

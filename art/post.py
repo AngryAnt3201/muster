@@ -272,11 +272,26 @@ def portrait_sheet(man):
     print("SHEET", path)
 
 
+def use_style(name):
+    """Ink and team colours from a v3 style direction (art/style/<name>.json) instead of the v2 constants."""
+    global INK
+    sys.path.insert(0, HERE)
+    from muster_art import style as S
+    st = S.load(None if name == "active" else name)
+    INK = np.array(S.hex_rgb(st["outline"]["color"]), np.float32)
+    for team, cols in st["team"].items():
+        TEAM[team] = {k: tuple(round(v * 255) for v in S.hex_rgb(h)) for k, h in cols.items()}
+    print(f"STYLE {st['id']}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default="")
     ap.add_argument("--sheets-only", action="store_true")
+    ap.add_argument("--style", default=os.environ.get("MUSTER_STYLE", ""), help="v3 style direction id, or 'active'")
     a = ap.parse_args()
+    if a.style:
+        use_style(a.style)
     kinds = [k for k in ORDER if os.path.isdir(os.path.join(RAW, k))]
     kinds += [k for k in sorted(os.listdir(RAW)) if os.path.isdir(os.path.join(RAW, k)) and k not in kinds and k != "portraits"] if os.path.isdir(RAW) else []
     if a.only:
