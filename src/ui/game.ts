@@ -318,10 +318,12 @@ export class GameScreen {
     this.acc = 0;
     // A beat to see what the rival added before the clash starts.
     const fresh = new Set(m.sides[1].pieces.filter((p) => !seen.has(p.id)).map((p) => p.id));
+    // The rival's new pieces drop in (one landing per piece; a pack's bodies fall together).
+    const landed = new Set<number>();
     for (const b of this.battle.bodies) {
-      if (b.side !== 1 || !fresh.has(b.pieceId) || b.hidden) continue;
-      this.view.fx.ring(b.x, b.y, 0.1, 0.9, 0.45, "#ffc1ad", 0.05);
-      this.view.fx.burst(b.x, b.y, 8, { color: "rgba(255,193,173,0.8)", speed: 1.4, size: 0.06, max: 0.4, kind: "spark", gravity: 0 });
+      if (b.side !== 1 || !fresh.has(b.pieceId) || b.hidden || landed.has(b.pieceId)) continue;
+      landed.add(b.pieceId);
+      this.view.dropIn([{ id: b.pieceId, x: b.x, y: b.y, radius: b.pack === b.pieceId ? 0.5 : b.radius, side: 1 }]);
     }
     this.hold = fresh.size && !this.watch ? 0.75 : 0.25;
     sfx("fight");
@@ -563,9 +565,7 @@ export class GameScreen {
     if (why) { this.flashStatus(why); sfx("deny"); return; }
     if (!inZone(0, x, y)) { this.flashStatus("Place it in your half"); sfx("deny"); return; }
     const p = this.match.buy(0, slot, x, y);
-    this.view.markReveal([p.id]);
-    this.view.fx.ring(p.x, p.y, 0.1, 0.8, 0.35, "#a6fff6", 0.05);
-    this.view.fx.burst(p.x, p.y, 10, { color: "rgba(166,255,246,0.8)", speed: 1.6, size: 0.06, max: 0.4, kind: "spark", gravity: 0 });
+    this.view.dropIn([{ id: p.id, x: p.x, y: p.y, radius: p.kind === "blades" ? 0.5 : UNITS[p.kind].radius, side: p.side }]);
     sfx("buy"); sfx("place");
     buzz("light");
     this.pickSlot = null;
