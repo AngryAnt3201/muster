@@ -81,6 +81,7 @@ export class GameScreen {
     this.ro.observe(this.h.bottom);
     this.lastT = performance.now();
     this.raf = requestAnimationFrame(this.frame);
+    if (opts.mode !== "demo") (window as any).__game = this;
   }
 
   private ro?: ResizeObserver;
