@@ -1,6 +1,6 @@
 // The board view: draws the deploy scene and the battle, turns battle events into effects.
 import type { Battle, BattleEvent, Body } from "../core/battle";
-import { BODY_EXTRA, H, UNITS, W, ZONE_DEPTH, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
+import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { sprite, whiteOf } from "./sprites";
@@ -25,7 +25,9 @@ export type Scene = DeployScene | BattleScene;
 export interface Rect { x: number; y: number; w: number; h: number; }
 
 const TAU = Math.PI * 2;
-const RADIUS = (k: BodyKind): number => (UNITS as Record<string, { radius: number }>)[k]?.radius ?? (BODY_EXTRA as Record<string, { radius: number }>)[k]?.radius ?? 0.3;
+const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
+const ICE = "#bfe9ff";
+const DIRT = "rgba(120,92,60,0.9)";
 
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
@@ -198,50 +200,35 @@ export class BoardView {
 
   private onEvent(e: BattleEvent, battle: Battle) {
     const fx = this.fx;
+    const snd = (n: string, g = 0.5) => this.onSound?.(n, g);
     switch (e.t) {
       case "slash":
-        fx.arc(e.x, e.y, e.a, e.r, e.side === 0 ? "#e9fffd" : "#fff0ea", 2.0, 0.16);
-        this.onSound?.("slash", 0.35);
+        if (e.spin) { fx.ring(e.x, e.y, e.r * 0.4, e.r, 0.22, e.side === 0 ? "#e9fffd" : "#fff0ea", 0.1); snd("slash", 0.6); }
+        else fx.arc(e.x, e.y, e.a, e.r, e.side === 0 ? "#e9fffd" : "#fff0ea", 2.0, 0.16);
+        snd("slash", 0.35);
         break;
       case "shot":
-        this.onSound?.(e.kind === "grenade" ? "throw" : e.kind === "bolt" ? "bolt" : "arrow", 0.4);
+        snd(e.kind === "grenade" || e.kind === "shell" ? "throw" : e.kind === "bolt" ? "bolt" : e.kind === "shard" ? "zap" : "arrow", e.kind === "shard" ? 0.2 : 0.4);
         break;
       case "hit": {
         const col = e.shielded ? "#cfd8e3" : team((1 - e.side) as Side).light;
         fx.burst(e.x, e.y, e.big ? 7 : 3, { color: col, speed: 2.2, size: 0.05, max: 0.3, gravity: 0, kind: "spark" });
         if (e.dmg >= 18 || e.big) fx.float(e.x, e.y - 0.45, String(e.dmg), e.big ? GOLD : e.shielded ? "#9fb0c0" : "#ffffff", e.big ? 0.38 : 0.28);
-        this.onSound?.(e.shielded ? "clank" : "hit", e.big ? 0.6 : 0.25);
+        snd(e.shielded ? "clank" : "hit", e.big ? 0.6 : 0.25);
         break;
       }
-      case "boom": {
-        const big = e.kind === "mine";
-        const col = e.kind === "slam" ? "#c9b79c" : "#ffb347";
-        fx.ring(e.x, e.y, 0.1, e.r, big ? 0.45 : 0.32, big ? "#ffd27a" : col, big ? 0.12 : 0.07, big ? "rgba(255,180,80,0.35)" : undefined);
-        if (e.kind !== "slam") {
-          fx.burst(e.x, e.y, big ? 34 : 20, { color: "#ffcf6b", speed: big ? 5 : 3.5, size: 0.07, max: 0.5, kind: "spark", gravity: 2 });
-          fx.burst(e.x, e.y, big ? 16 : 9, { color: "rgba(60,55,60,0.8)", speed: 1.4, size: 0.28, max: 1.0, kind: "smoke", gravity: 0, drag: 1.5 });
-          fx.burst(e.x, e.y, big ? 10 : 5, { color: "#3a3a3a", speed: 3, size: 0.07, max: 0.9, kind: "chunk", vz: 4, spin: 9 });
-          fx.flash = big ? 0.35 : 0.15; fx.flashColor = "#ffd9a0";
-        } else {
-          fx.burst(e.x, e.y, 14, { color: "rgba(180,160,130,0.7)", speed: 2.2, size: 0.16, max: 0.6, kind: "smoke", gravity: 0, drag: 2 });
-          fx.burst(e.x, e.y, 6, { color: "#6f7782", speed: 2.6, size: 0.06, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
-        }
-        fx.shake = Math.min(1, fx.shake + (big ? 0.8 : e.kind === "grenade" ? 0.35 : 0.25));
-        this.onShake?.(big ? 2 : 1);
-        this.onSound?.(big ? "boom" : e.kind === "grenade" ? "pop" : "slam", big ? 1 : 0.6);
-        break;
-      }
+      case "boom": this.boom(e.x, e.y, e.r, e.kind, e.side); break;
       case "zap":
         fx.bolt(e.pts, ZAP, 0.26);
         for (const [x, y] of e.pts.slice(1)) fx.burst(x, y, 4, { color: "#dff1ff", speed: 2.4, size: 0.04, max: 0.25, kind: "spark", gravity: 0 });
         fx.flash = Math.max(fx.flash, 0.08); fx.flashColor = "#cfe8ff";
-        this.onSound?.("zap", 0.6);
+        snd("zap", 0.6);
         break;
       case "heal": {
         const from = battle.bodies.find((b) => b.id === e.from);
-        if (from) fx.beam(from.x, from.y, e.x, e.y, HEAL, 0.06, 0.28);
-        fx.burst(e.x, e.y, 4, { color: HEAL, speed: 0.6, size: 0.1, max: 0.7, kind: "plus", gravity: -1.2, drag: 3, z: 0.2 });
-        this.onSound?.("heal", 0.25);
+        if (from && e.from !== e.to) fx.beam(from.x, from.y, e.x, e.y, HEAL, 0.06, 0.28);
+        fx.burst(e.x, e.y, e.from === e.to ? 2 : 4, { color: e.from === e.to ? "#ff8a8a" : HEAL, speed: 0.6, size: 0.1, max: 0.7, kind: "plus", gravity: -1.2, drag: 3, z: 0.2 });
+        snd("heal", 0.2);
         break;
       }
       case "spawn":
@@ -252,27 +239,161 @@ export class BoardView {
         const r = RADIUS(e.kind);
         fx.ring(e.x, e.y, r * 0.6, r * 1.8, 0.35, col, 0.05);
         fx.burst(e.x, e.y, e.kind === "mite" ? 4 : 12, { color: col, speed: 2.2, size: 0.07, max: 0.6, kind: "chunk", vz: 3, spin: 8 });
-        if (e.kind === "golem") { fx.shake = Math.min(1, fx.shake + 0.5); this.onSound?.("crumble", 0.9); }
-        else this.onSound?.(e.kind === "mite" ? "squish" : "down", 0.4);
+        if (e.kind === "golem") { fx.shake = Math.min(1, fx.shake + 0.5); snd("crumble", 0.9); }
+        else if (e.kind === "keg") { fx.burst(e.x, e.y, 10, { color: "rgba(80,80,80,0.7)", speed: 1, size: 0.2, max: 0.9, kind: "smoke", gravity: 0 }); snd("squish", 0.5); }
+        else snd(e.kind === "mite" ? "squish" : "down", 0.4);
         break;
       }
       case "blink":
         fx.burst(e.x0, e.y0, 10, { color: VIOLET, speed: 1.2, size: 0.18, max: 0.5, kind: "smoke", gravity: 0, drag: 2 });
         fx.burst(e.x, e.y, 12, { color: VIOLET, speed: 1.6, size: 0.16, max: 0.5, kind: "smoke", gravity: 0, drag: 2 });
         fx.beam(e.x0, e.y0, e.x, e.y, "rgba(180,140,255,0.5)", 0.05, 0.18);
-        this.onSound?.("blink", 0.5);
+        snd("blink", 0.5);
         break;
       case "charge":
         fx.burst(e.x, e.y, 8, { color: "rgba(180,160,130,0.6)", speed: 1.5, size: 0.14, max: 0.5, kind: "smoke", gravity: 0, dir: e.a + Math.PI, spread: 1.4 });
-        this.onSound?.("charge", 0.6);
+        snd("charge", 0.6);
         break;
       case "fuse":
         fx.ring(e.x, e.y, 0.2, 1.0, 0.32, "#ff4d4d", 0.04);
-        this.onSound?.("fuse", 0.6);
+        snd("fuse", 0.6);
         break;
-      case "end":
+      // ---- v2
+      case "burrow":
+        fx.burst(e.x, e.y, 14, { color: DIRT, speed: 1.8, size: 0.08, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
+        snd("slam", 0.3);
+        break;
+      case "dig":
+        fx.burst(e.x, e.y, 2, { color: DIRT, speed: 0.6, size: 0.07, max: 0.9, kind: "chunk", vz: 1.5, drag: 4 });
+        if (Math.random() < 0.5) fx.burst(e.x, e.y, 1, { color: "rgba(110,85,55,0.5)", speed: 0.2, size: 0.18, max: 1.2, kind: "smoke", gravity: 0 });
+        break;
+      case "emerge":
+        fx.ring(e.x, e.y, 0.2, e.r, 0.4, "#c9a26b", e.big ? 0.12 : 0.08, "rgba(150,110,60,0.25)");
+        fx.burst(e.x, e.y, e.big ? 30 : 18, { color: DIRT, speed: e.big ? 4.5 : 3, size: 0.09, max: 0.7, kind: "chunk", vz: 4, spin: 8 });
+        fx.burst(e.x, e.y, 8, { color: "rgba(110,85,55,0.6)", speed: 1.4, size: 0.25, max: 1, kind: "smoke", gravity: 0 });
+        fx.shake = Math.min(1, fx.shake + (e.big ? 0.6 : 0.35));
+        snd("slam", e.big ? 0.9 : 0.6);
+        break;
+      case "dive":
+        fx.burst(e.x, e.y, 5, { color: "rgba(255,255,255,0.6)", speed: 1.2, size: 0.05, max: 0.3, kind: "spark", gravity: 0 });
+        snd("blink", 0.35);
+        break;
+      case "chill":
+        fx.burst(e.x, e.y, 6, { color: ICE, speed: 1.4, size: 0.05, max: 0.45, kind: "spark", gravity: 0 });
+        break;
+      case "freeze":
+        fx.ring(e.x, e.y, 0.1, 0.7, 0.35, ICE, 0.08, "rgba(190,235,255,0.25)");
+        fx.burst(e.x, e.y, 14, { color: "#e9f9ff", speed: 2.2, size: 0.06, max: 0.5, kind: "chunk", vz: 2, spin: 6 });
+        snd("clank", 0.6);
+        break;
+      case "aura":
+        fx.ring(e.x, e.y, 0.3, e.r, 0.6, e.rally ? "rgba(255,209,102,0.55)" : team(e.side).glow + "0.4)", 0.03);
+        break;
+      case "parry":
+        fx.burst(e.x, e.y, 10, { color: "#fff6d6", speed: 3, size: 0.04, max: 0.25, kind: "spark", gravity: 0 });
+        fx.float(e.x, e.y - 0.5, e.riposte ? "RIPOSTE" : "PARRY", "#fff2b8", 0.24, 0.6);
+        snd("clank", 0.8);
+        break;
+      case "brace":
+        fx.burst(e.x, e.y, 4, { color: "#e8eef5", speed: 1, size: 0.04, max: 0.25, kind: "spark", gravity: 0, dir: e.a, spread: 0.8 });
+        snd("clank", 0.3);
+        break;
+      case "impale":
+        fx.burst(e.x, e.y, 18, { color: "#ffe2a0", speed: 3.5, size: 0.06, max: 0.4, kind: "spark", gravity: 1 });
+        fx.float(e.x, e.y - 0.55, "IMPALED", GOLD, 0.3, 0.8);
+        fx.shake = Math.min(1, fx.shake + 0.4);
+        snd("clank", 1); snd("hit", 1);
+        break;
+      case "raise":
+        fx.ring(e.x, e.y, 0.1, 0.6, 0.45, "rgba(170,255,190,0.7)", 0.05, "rgba(120,255,170,0.15)");
+        fx.burst(e.x, e.y, 10, { color: "rgba(150,255,190,0.55)", speed: 0.6, size: 0.14, max: 0.9, kind: "smoke", gravity: -0.6, drag: 1.5 });
+        snd("blink", 0.4);
+        break;
+      case "build":
+        fx.ring(e.x, e.y, 0.1, 0.45, 0.3, "#ffd166", 0.04);
+        snd("clank", 0.35);
+        break;
+      case "repair": {
+        const from = battle.bodies.find((b) => b.id === e.from);
+        if (from) fx.beam(from.x, from.y, e.x, e.y, "rgba(255,200,90,0.8)", 0.05, 0.25);
+        fx.burst(e.x, e.y, 5, { color: "#ffd166", speed: 1.2, size: 0.04, max: 0.35, kind: "spark", gravity: 0 });
+        snd("clank", 0.25);
+        break;
+      }
+      case "decoy":
+        fx.burst(e.x, e.y, 10, { color: "rgba(200,170,255,0.6)", speed: 1.2, size: 0.16, max: 0.5, kind: "smoke", gravity: 0, drag: 2 });
+        snd("blink", 0.4);
+        break;
+      case "pop":
+        fx.burst(e.x, e.y, 12, { color: "rgba(200,170,255,0.7)", speed: 1.8, size: 0.12, max: 0.45, kind: "smoke", gravity: 0, drag: 2 });
+        fx.ring(e.x, e.y, 0.1, 0.5, 0.25, VIOLET, 0.04);
+        snd("squish", 0.5);
+        break;
+      case "light":
+        fx.burst(e.x, e.y, 6, { color: "#ffd166", speed: 1.5, size: 0.04, max: 0.3, kind: "spark", gravity: 0 });
+        snd("fuse", 0.5);
+        break;
+      case "kegdrop": case "bomblets":
+        snd("throw", 0.4);
+        break;
+      case "zone":
+        snd("pop", 0.3);
+        break;
+      case "revive":
+        fx.ring(e.x, e.y, 0.1, 1.0, 0.6, "#fff2b8", 0.08, "rgba(255,230,150,0.25)");
+        fx.burst(e.x, e.y, 18, { color: "#fff2b8", speed: 1, size: 0.08, max: 1, kind: "plus", gravity: -1.5, drag: 2 });
+        fx.float(e.x, e.y - 0.6, "REVIVED", "#fff2b8", 0.3, 1);
+        snd("upgrade", 0.6);
+        break;
+      case "volley":
+        snd("arrow", 0.7);
+        break;
+      case "twin":
+        snd("bolt", 0.7);
+        break;
+      case "reset":
+        fx.burst(e.x, e.y, 8, { color: VIOLET, speed: 1.5, size: 0.05, max: 0.4, kind: "spark", gravity: 0 });
+        break;
+      default:
         break;
     }
+  }
+
+  private boom(x: number, y: number, r: number, kind: string, side: Side) {
+    const fx = this.fx, snd = (n: string, g = 0.5) => this.onSound?.(n, g);
+    const fiery = ["mine", "grenade", "shell", "keg", "bomblet", "shrapnel"].includes(kind);
+    const big = kind === "mine" || kind === "keg" || kind === "shell" || kind === "quake";
+    if (kind === "quake" || kind === "slam" || kind === "talon" || kind === "erupt") {
+      const q = kind === "quake";
+      fx.ring(x, y, 0.1, r, q ? 0.55 : 0.32, q ? "#e8d3a8" : "#c9b79c", q ? 0.14 : 0.07, q ? "rgba(200,170,120,0.22)" : undefined);
+      if (q) fx.ring(x, y, 0.1, r * 0.6, 0.4, "#fff2d6", 0.06);
+      fx.burst(x, y, q ? 26 : 14, { color: "rgba(180,160,130,0.7)", speed: q ? 3.5 : 2.2, size: 0.16, max: 0.7, kind: "smoke", gravity: 0, drag: 2 });
+      fx.burst(x, y, q ? 14 : 6, { color: "#6f7782", speed: 2.6, size: 0.06, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
+      fx.shake = Math.min(1, fx.shake + (q ? 0.9 : 0.25));
+      if (q) this.onShake?.(2);
+      snd(q ? "boom" : "slam", q ? 0.9 : 0.6);
+      return;
+    }
+    if (kind === "pop" || kind === "mirror") {
+      const col = kind === "pop" ? "rgba(170,255,140,0.8)" : VIOLET;
+      fx.ring(x, y, 0.05, r, 0.3, col, 0.05);
+      fx.burst(x, y, 12, { color: col, speed: 2.4, size: 0.06, max: 0.4, kind: "spark", gravity: 0 });
+      snd("pop", 0.35);
+      return;
+    }
+    if (fiery) {
+      fx.ring(x, y, 0.1, r, big ? 0.45 : 0.3, big ? "#ffd27a" : "#ffb347", big ? 0.12 : 0.06, big ? "rgba(255,180,80,0.35)" : undefined);
+      fx.burst(x, y, big ? 34 : kind === "bomblet" || kind === "shrapnel" ? 10 : 20, { color: "#ffcf6b", speed: big ? 5 : 3.5, size: 0.07, max: 0.5, kind: "spark", gravity: 2 });
+      fx.burst(x, y, big ? 16 : 7, { color: "rgba(60,55,60,0.8)", speed: 1.4, size: 0.28, max: 1.0, kind: "smoke", gravity: 0, drag: 1.5 });
+      fx.burst(x, y, big ? 10 : 4, { color: "#3a3a3a", speed: 3, size: 0.07, max: 0.9, kind: "chunk", vz: 4, spin: 9 });
+      fx.flash = Math.max(fx.flash, big ? 0.35 : 0.12); fx.flashColor = "#ffd9a0";
+      fx.shake = Math.min(1, fx.shake + (big ? 0.8 : 0.25));
+      this.onShake?.(big ? 2 : 1);
+      snd(big ? "boom" : "pop", big ? 1 : 0.5);
+      return;
+    }
+    fx.ring(x, y, 0.1, r, 0.3, team(side).light, 0.05);
+    snd("pop", 0.4);
   }
 
   // ------------------------------------------------------------ frame
@@ -439,66 +560,180 @@ export class BoardView {
   private drawBattle(sc: BattleScene) {
     const ctx = this.ctx, s = this.s, b = sc.battle, a = sc.alpha;
     const lerp = (bd: Body) => [this.sx(bd.px + (bd.x - bd.px) * a), this.sy(bd.py + (bd.y - bd.py) * a)] as const;
-    // Ground layer: mines and fading remains.
+    // Burning ground.
+    for (const z of b.zones ?? []) {
+      if (b.time >= z.until) continue;
+      const x = this.sx(z.x), y = this.sy(z.y), r = z.r * s;
+      const left = Math.min(1, (z.until - b.time) / 0.6);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const fl = 0.75 + 0.25 * Math.sin(this.time * 17 + z.id);
+      g.addColorStop(0, `rgba(255,170,60,${0.45 * fl * left})`);
+      g.addColorStop(0.6, `rgba(255,90,30,${0.28 * fl * left})`);
+      g.addColorStop(1, "rgba(255,60,20,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+      if (Math.random() < 0.35) this.fx.burst(z.x + frand(-z.r, z.r) * 0.7, z.y + frand(-z.r, z.r) * 0.7, 1, { color: "#ffb347", speed: 0.4, size: 0.05, max: 0.6, kind: "spark", gravity: -1.5, vz: 1 });
+    }
+    // Ground layer: mines, fuses waiting to blow.
     for (const bd of b.bodies) {
       if (bd.kind !== "mine" || !bd.alive) continue;
       const [x, y] = lerp(bd);
       this.token("mine", bd.side, x, y, bd.radius * s, 0, { t: this.time, state: bd.state, hidden: bd.hidden, own: bd.side === 0, rank: bd.rank });
     }
-    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => p.y - q.y);
+    for (const f of b.fuses ?? []) {
+      if (b.time >= f.at) continue;
+      const x = this.sx(f.x), y = this.sy(f.y), r = 0.11 * s;
+      drawShadow(ctx, x, y, r, 0.4);
+      ctx.fillStyle = f.kind === "keg" ? "#7a4a24" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, f.kind === "keg" ? r * 1.6 : r, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = (this.time * 14) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
+      ctx.beginPath(); ctx.arc(x + r * 0.5, y - r * 0.7, r * 0.4, 0, TAU); ctx.fill();
+    }
+    // Tinkers' turrets going up.
+    for (const bd of b.bodies) {
+      if (!bd.alive || bd.kind !== "tinker" || bd.state !== "build") continue;
+      const x = this.sx(bd.ax), y = this.sy(bd.ay), u = Math.min(1, bd.t / 1.2);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,209,102,0.85)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, 0.3 * s, -Math.PI / 2, -Math.PI / 2 + TAU * u); ctx.stroke();
+      ctx.restore();
+    }
+    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || p.y - q.y);
     for (const bd of live) {
       const [x, y] = lerp(bd);
       const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
+      if (bd.burrowed) {
+        // Underground: a moving mound of earth, no body.
+        ctx.save();
+        ctx.fillStyle = "rgba(95,72,48,0.9)"; ctx.strokeStyle = "rgba(40,28,18,0.9)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.ellipse(x, y, 0.26 * s, 0.18 * s, Math.atan2(bd.vy, bd.vx), 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "rgba(160,125,85,0.8)";
+        ctx.beginPath(); ctx.ellipse(x - 0.04 * s, y - 0.04 * s, 0.12 * s, 0.07 * s, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+        continue;
+      }
       const swing = b.time - bd.swing < 0.35 ? (b.time - bd.swing) / 0.35 : -1;
       const sp = Math.hypot(bd.vx, bd.vy);
       if (bd.kind === "lancer" && bd.state === "charge" && sp > 2.5 && Math.random() < 0.5)
         this.fx.burst(bd.x - Math.cos(bd.face) * 0.3, bd.y - Math.sin(bd.face) * 0.3, 1, { color: "rgba(170,150,120,0.55)", speed: 0.5, size: 0.12, max: 0.45, kind: "smoke", gravity: 0 });
       if (bd.kind === "shade" && bd.hidden && Math.random() < 0.15)
         this.fx.burst(bd.x, bd.y, 1, { color: "rgba(180,140,255,0.35)", speed: 0.3, size: 0.1, max: 0.5, kind: "smoke", gravity: 0 });
-      this.token(bd.kind, bd.side, x, y, bd.radius * s * (bd.alive ? 1 : 0.8 + 0.2 * fade), bd.face, {
-        t: this.time, alpha: fade, flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp, state: bd.state, id: bd.id,
-        hidden: bd.hidden, own: bd.side === 0, rank: bd.rank,
+      if (bd.kind === "keg" && bd.state === "run" && Math.random() < 0.6)
+        this.fx.burst(bd.x, bd.y, 1, { color: "#ffd166", speed: 0.8, size: 0.035, max: 0.3, kind: "spark", gravity: 0 });
+      // Auras under the unit.
+      if (bd.alive && ((bd.buff ?? 0) > 0 || (bd.rally ?? 0) > 0)) {
+        ctx.save();
+        ctx.strokeStyle = (bd.rally ?? 0) > 0 ? "rgba(255,209,102,0.55)" : team(bd.side).glow + "0.45)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]); ctx.lineDashOffset = -this.time * 12;
+        ctx.beginPath(); ctx.arc(x, y, bd.radius * s * 1.5, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      let dy = 0, scale = 1;
+      if (bd.flying) {
+        // Altitude: the body rides above its shadow.
+        const z = bd.z ?? 1.2;
+        drawShadow(ctx, x, y, bd.radius * s * (1.1 - z * 0.2), 0.32 - z * 0.12);
+        dy = -z * s * 0.55;
+        scale = 1 + z * 0.12;
+      }
+      const decoy = bd.kind === "decoy";
+      const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
+      const kind = decoy ? "trickster" : bd.kind;
+      this.token(kind, bd.side, x, y + dy, bd.radius * s * scale * (bd.alive ? 1 : 0.8 + 0.2 * fade) * (decoy ? RADIUS("trickster") / RADIUS("decoy") : 1), bd.face, {
+        t: this.time, alpha: fade * (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1), flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
+        state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
       });
-      if (bd.alive && bd.stun > 0.05) this.drawStun(x, y - bd.radius * s * 1.1, bd.radius * s);
+      if (bd.alive && (bd.frozen ?? 0) > 0) this.drawIce(x, y + dy, bd.radius * s * 1.25);
+      else if (bd.alive && (bd.slow ?? 0) > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = ICE; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y + dy, bd.radius * s * 1.15, 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
+      if (bd.alive && bd.kind === "duelist" && (bd.parryCd ?? 1) <= 0) {
+        const gl = 0.5 + 0.5 * Math.sin(this.time * 10);
+        ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
+        ctx.beginPath(); ctx.arc(x + bd.radius * s * 0.8, y - bd.radius * s * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
+      }
+      if (bd.alive && bd.kind === "pikeman" && bd.braced) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(232,238,245,0.7)"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, bd.radius * s * 1.6, bd.face - 0.6, bd.face + 0.6); ctx.stroke();
+        ctx.restore();
+      }
+      if (bd.alive && bd.stun > 0.05) this.drawStun(x, y + dy - bd.radius * s * 1.1, bd.radius * s);
     }
     // Projectiles.
     for (const p of b.projs) {
       if (!p.alive) continue;
       const x = this.sx(p.px + (p.x - p.px) * a), y = this.sy(p.py + (p.y - p.py) * a);
-      if (p.kind === "grenade") {
-        drawShadow(ctx, x, y, 0.1 * s, 0.4);
+      if (p.kind === "grenade" || p.kind === "shell") {
+        const shell = p.kind === "shell";
+        drawShadow(ctx, x, y, (shell ? 0.14 : 0.1) * s, 0.4);
         const zy = y - p.z * s * 0.55;
-        ctx.fillStyle = "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(x, zy, 0.12 * s, 0, TAU); ctx.fill(); ctx.stroke();
+        if ((p as any).fx === "fire" && Math.random() < 0.7) this.fx.burst(p.x, p.y - p.z * 0.55, 1, { color: "#ff9a3d", speed: 0.3, size: 0.05, max: 0.3, kind: "spark", gravity: 0 });
+        ctx.fillStyle = shell ? "#3b4048" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, zy, (shell ? 0.17 : 0.12) * s, 0, TAU); ctx.fill(); ctx.stroke();
         ctx.fillStyle = (this.time * 12) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
         ctx.beginPath(); ctx.arc(x + 0.06 * s, zy - 0.08 * s, 0.04 * s, 0, TAU); ctx.fill();
+      } else if (p.kind === "pellet") {
+        ctx.fillStyle = "#ffe08a";
+        ctx.beginPath(); ctx.arc(x, y, Math.max(2, 0.05 * s), 0, TAU); ctx.fill();
       } else {
-        const ang = Math.atan2(p.vy, p.vx), len = (p.kind === "bolt" ? 0.75 : 0.42) * s;
+        const ice = p.kind === "shard";
+        const ang = Math.atan2(p.vy, p.vx), len = (p.kind === "bolt" ? 0.75 : ice ? 0.32 : 0.42) * s;
         ctx.save();
         ctx.translate(x, y); ctx.rotate(ang);
         const tg = ctx.createLinearGradient(-len * 1.6, 0, 0, 0);
-        tg.addColorStop(0, "rgba(255,255,255,0)"); tg.addColorStop(1, p.kind === "bolt" ? "rgba(255,230,190,0.8)" : "rgba(255,255,255,0.6)");
-        ctx.strokeStyle = tg; ctx.lineWidth = p.kind === "bolt" ? 0.09 * s : 0.05 * s; ctx.lineCap = "round";
+        tg.addColorStop(0, "rgba(255,255,255,0)"); tg.addColorStop(1, p.kind === "bolt" ? "rgba(255,230,190,0.8)" : ice ? "rgba(190,235,255,0.9)" : "rgba(255,255,255,0.6)");
+        ctx.strokeStyle = tg; ctx.lineWidth = p.kind === "bolt" ? 0.09 * s : ice ? 0.08 * s : 0.05 * s; ctx.lineCap = "round";
         ctx.beginPath(); ctx.moveTo(-len * 1.6, 0); ctx.lineTo(0, 0); ctx.stroke();
-        ctx.strokeStyle = p.kind === "bolt" ? "#e9d7b8" : "#f4efe6"; ctx.lineWidth = p.kind === "bolt" ? 0.07 * s : 0.035 * s;
-        ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(len * 0.1, 0); ctx.stroke();
-        ctx.fillStyle = "#cfd8e3";
-        ctx.beginPath(); ctx.moveTo(len * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
+        if (ice) {
+          ctx.fillStyle = "#e9f9ff";
+          ctx.beginPath(); ctx.moveTo(len * 0.35, 0); ctx.lineTo(0, -0.06 * s); ctx.lineTo(-len * 0.3, 0); ctx.lineTo(0, 0.06 * s); ctx.closePath(); ctx.fill();
+        } else {
+          ctx.strokeStyle = p.kind === "bolt" ? "#e9d7b8" : "#f4efe6"; ctx.lineWidth = p.kind === "bolt" ? 0.07 * s : 0.035 * s;
+          ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(len * 0.1, 0); ctx.stroke();
+          ctx.fillStyle = "#cfd8e3";
+          ctx.beginPath(); ctx.moveTo(len * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
+        }
         ctx.restore();
       }
     }
-    // Health bars on top.
+    // Health bars on top (not for illusions or bodies underground).
     for (const bd of live) {
-      if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite") continue;
-      const [x, y] = lerp(bd);
+      if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed) continue;
+      const [x, y0] = lerp(bd);
+      const y = y0 - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0);
       const w = Math.max(16, bd.radius * s * 1.9), h = 4;
-      const top = y - bd.radius * s - 9;
+      const top = y - bd.radius * s * 1.3 - 9;
       ctx.fillStyle = "rgba(0,0,0,0.6)";
       ctx.fillRect(x - w / 2 - 1, top - 1, w + 2, h + 2);
       ctx.fillStyle = TEAM[bd.side].main;
       ctx.fillRect(x - w / 2, top, w * (bd.hp / bd.maxHp), h);
     }
-    for (const bd of live) if (bd.alive && bd.rank > 1 && bd.kind !== "mite") { const [x, y] = lerp(bd); drawRank(ctx, x, y - 5, bd.radius * s, bd.rank); }
+    for (const bd of live) {
+      if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || bd.burrowed || bd.kind === "decoy") continue;
+      const [x, y] = lerp(bd);
+      drawRank(ctx, x, y - (bd.hp < bd.maxHp ? 14 : 5) - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0), bd.radius * s * 1.3, bd.rank);
+    }
+  }
+
+  private drawIce(x: number, y: number, r: number) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = "rgba(190,235,255,0.42)"; ctx.strokeStyle = "rgba(233,249,255,0.9)"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + 0.3, k = i % 2 ? 0.85 : 1.05;
+      i ? ctx.lineTo(x + Math.cos(a) * r * k, y + Math.sin(a) * r * k) : ctx.moveTo(x + Math.cos(a) * r * k, y + Math.sin(a) * r * k);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.beginPath(); ctx.moveTo(x - r * 0.4, y - r * 0.2); ctx.lineTo(x - r * 0.1, y - r * 0.55); ctx.stroke();
+    ctx.restore();
   }
 
   private drawStun(x: number, y: number, r: number) {

@@ -380,6 +380,27 @@ function barracks() {
   screen("barracks-screen", header("Barracks", title, el("span", { class: "star-total" }, [`${UNIT_KINDS.length} units`])), list);
 }
 
+// ---------------------------------------------------------------- showcase (debug / store shots)
+function showcase(n: number) {
+  clear(); stopDemo();
+  const sets: [string, number, number, number][][] = [
+    [["pikeman", 3.0, 4.8, 4], ["ravager", 6.0, 4.6, 3], ["rime", 2.2, 2.6, 4], ["tinker", 6.8, 2.2, 3], ["banner", 4.5, 3.2, 4], ["grave", 4.5, 1.2, 3]],
+    [["lancer", 2.0, 3.6, 4], ["keg", 4.5, 4.9, 3], ["harrier", 6.5, 3.4, 4], ["sapper", 7.6, 4.2, 3], ["trickster", 3.4, 2.4, 4], ["bombard", 4.5, 0.8, 3]],
+  ];
+  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : sets;
+  const start = (list: [string, number, number, number][]) => list.map(([kind, lx, depth, rank]) => ({ kind: kind as UnitKind, lx, depth, rank }));
+  const ai = (t: Tactic): AIProfile => ({ ...DEFAULT_AI, difficulty: 0.6, tactic: t, economy: 1 });
+  game = new GameScreen(app, {
+    cfg: { seed: 7 + n, hp: [400, 400], firstRound: 6, start: [start(mine), start(theirs)], names: ["Tide", "Ember"] },
+    foe: ai("balanced"),
+    you: ai("balanced"),
+    mode: "watch",
+    title: "Showcase",
+    onEnd: () => title(),
+    onQuit: title,
+  });
+}
+
 // ---------------------------------------------------------------- boot
 async function boot() {
   const s = load();
@@ -396,6 +417,7 @@ async function boot() {
   if (q.has("lab")) return skirmish();
   if (q.has("barracks")) return barracks();
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
+  if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });
   title();
 }
