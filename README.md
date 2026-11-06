@@ -27,7 +27,7 @@ Upgrade a placed unit to rank 2 and 3; sell for half of what it cost. Unspent go
 
 ## Modes
 
-- **Campaign**: 30 levels in 5 acts, a boss at the end of each, a new unit unlocked along the way, three stars per level.
+- **Campaign**: acts of six levels with a boss at the end of each, a new unit unlocked along the way, three stars per level. The current level, act and puzzle counts come from `src/core/counts.ts` (`npm run release:config` prints them).
 - **Gauntlet**: one health pool against rival after rival; your army carries over and each win brings a boon.
 - **Breakpoint**: one-battle puzzles against a fixed visible board with fixed gold; win, then win cheaper for stars.
 - **Skirmish**: any AI profile, any health, or watch two AIs.
