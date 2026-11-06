@@ -1,0 +1,33 @@
+// Progress on this device.
+export interface Save {
+  campaign: Record<number, number>; // level id -> best stars
+  puzzles: Record<number, number>;
+  gauntlet: { best: number; runs: number };
+  settings: { sound: boolean; haptics: boolean; speed: number };
+  seen: string[]; // unit kinds seen in a shop (NEW badge)
+  lab?: unknown;
+}
+
+const KEY = "muster.save.v1";
+const blank = (): Save => ({ campaign: {}, puzzles: {}, gauntlet: { best: 0, runs: 0 }, settings: { sound: true, haptics: true, speed: 1 }, seen: [] });
+
+let cache: Save | null = null;
+export function load(): Save {
+  if (cache) return cache;
+  try {
+    const raw = localStorage.getItem(KEY);
+    cache = raw ? { ...blank(), ...JSON.parse(raw) } : blank();
+  } catch {
+    cache = blank();
+  }
+  return cache!;
+}
+export function save(mut?: (s: Save) => void) {
+  const s = load();
+  mut?.(s);
+  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode */ }
+}
+export function resetSave() {
+  cache = blank();
+  save();
+}

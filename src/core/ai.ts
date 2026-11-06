@@ -288,9 +288,11 @@ export function* planSteps(match: Match, side: Side, ai: AIProfile, opts: PlanOp
     rerolls++;
   }
   // 2. What it believes it will face.
+  // Mines are buried: it knows how many it has met, not where they are now, so its test battles leave them out.
+  const visible = other.seen.filter((p) => p.kind !== "mine");
   const theirs = ai.difficulty >= 0.55
-    ? guessAdditions(opp, other.seen, other.gold, match.supplyCap(opp), other.roster, rng.fork(3))
-    : other.seen.map((p) => ({ ...p }));
+    ? guessAdditions(opp, visible, other.gold, match.supplyCap(opp), other.roster, rng.fork(3))
+    : visible.map((p) => ({ ...p }));
   const n = opts.candidates ?? Math.max(1, Math.round(1 + ai.difficulty * 15));
   const base: Draft = { gold: st.gold, pieces: st.pieces.map((p) => ({ ...p })), shop: [...st.shop], supply: match.supplyCap(side), shopFixed: !!match.cfg.fixedShop?.[side] };
   const candidates: Plan[] = [];

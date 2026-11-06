@@ -1,0 +1,603 @@
+// One match on screen: deploy (drag from the shop, move, upgrade, sell), then the battle plays out, then the damage.
+import { applyPlan, planTurnAsync, type AIProfile } from "../core/ai";
+import type { Battle } from "../core/battle";
+import { DT, UNITS, inZone, upgradeCost, type Piece, type Side, type UnitKind } from "../core/defs";
+import { Match, type MatchConfig, type RoundReport } from "../core/match";
+import { sfx, unlockAudio } from "../audio/sfx";
+import { buzz } from "../native";
+import { BoardView, type Scene } from "../render/board";
+import { drawIcon } from "../render/units";
+import { load, save } from "../save";
+import { el, fmt } from "./dom";
+
+export interface GameOpts {
+  cfg: MatchConfig;
+  foe?: AIProfile; // the rival's AI (omit for a puzzle: the foe board stands still)
+  you?: AIProfile; // set to let an AI play your side (watch mode)
+  mode: "campaign" | "skirmish" | "gauntlet" | "puzzle" | "watch" | "demo";
+  title?: string;
+  showEnemyMines?: boolean;
+  /** First-time coaching: drag a card down, then Fight. */
+  hint?: boolean;
+  onEnd: (m: Match) => void;
+  onQuit: () => void;
+  onRestart?: () => void;
+}
+
+type Phase = "deploy" | "battle" | "result" | "over";
+
+export class GameScreen {
+  readonly root: HTMLElement;
+  readonly match: Match;
+  readonly view: BoardView;
+  private o: GameOpts;
+  private canvas: HTMLCanvasElement;
+  private phase: Phase = "deploy";
+  private battle?: Battle;
+  private acc = 0;
+  private raf = 0;
+  private lastT = 0;
+  private endT = 0;
+  private hold = 0;
+  private plans: Promise<void>[] = [];
+  private planning = false;
+  private selected: number | null = null;
+  private pickSlot: number | null = null;
+  private ghost: { kind: UnitKind; x: number; y: number; ok: boolean } | null = null;
+  private drag: { type: "card" | "piece"; slot?: number; id?: number; sx: number; sy: number; moved: boolean; pid: number } | null = null;
+  private tipTimer = 0;
+  private hpShown: [number, number];
+  private destroyed = false;
+  private paused = false;
+  private speed = load().settings.speed || 1;
+  // HUD nodes
+  private h!: {
+    foeName: HTMLElement; foeHp: HTMLElement; foeHpText: HTMLElement; foeGold: HTMLElement; round: HTMLElement;
+    youHp: HTMLElement; youHpText: HTMLElement; gold: HTMLElement; supply: HTMLElement; shop: HTMLElement; reroll: HTMLButtonElement;
+    fight: HTMLButtonElement; banner: HTMLElement; pop: HTMLElement; tip: HTMLElement; speed: HTMLButtonElement; skip: HTMLButtonElement;
+    bottom: HTMLElement; top: HTMLElement; status: HTMLElement; menu: HTMLElement;
+  };
+
+  constructor(host: HTMLElement, opts: GameOpts) {
+    this.o = opts;
+    this.match = new Match(opts.cfg);
+    this.hpShown = [this.match.sides[0].hp, this.match.sides[1].hp];
+    this.root = el("div", { class: `game mode-${opts.mode}` });
+    this.canvas = el("canvas", { class: "board" }) as HTMLCanvasElement;
+    this.root.append(this.canvas);
+    this.buildHud();
+    host.append(this.root);
+    this.view = new BoardView(this.canvas);
+    this.view.setObstacles(opts.cfg.obstacles);
+    this.view.onSound = (n, g) => sfx(n, g);
+    this.view.onShake = (a) => { if (a >= 2) buzz("heavy"); };
+    window.addEventListener("resize", this.onResize);
+    this.bindInput();
+    this.startDeploy(true);
+    this.layout();
+    // The HUD settles after fonts and shop cards; keep the board fitted to the space between.
+    this.ro = new ResizeObserver(() => this.layout());
+    this.ro.observe(this.h.top);
+    this.ro.observe(this.h.bottom);
+    this.lastT = performance.now();
+    this.raf = requestAnimationFrame(this.frame);
+  }
+
+  private ro?: ResizeObserver;
+
+  destroy() {
+    this.ro?.disconnect();
+    this.destroyed = true;
+    cancelAnimationFrame(this.raf);
+    window.removeEventListener("resize", this.onResize);
+    this.root.remove();
+  }
+
+  private get watch() { return !!this.o.you; }
+
+  // ------------------------------------------------------------ HUD
+  private buildHud() {
+    const top = el("div", { class: "hud-top" });
+    const foe = el("div", { class: "cmdr foe" }, [
+      el("div", { class: "cmdr-row" }, [el("span", { class: "cmdr-name" }), el("span", { class: "cmdr-gold" })]),
+      el("div", { class: "hpbar foe" }, [el("i"), el("span")]),
+    ]);
+    const round = el("div", { class: "round" });
+    const pause = el("button", { class: "icon-btn", "aria-label": "Pause" }, [el("span", { class: "pause-glyph" })]);
+    pause.addEventListener("click", () => this.openMenu());
+    top.append(foe, round, pause);
+
+    const bottom = el("div", { class: "hud-bottom" });
+    const you = el("div", { class: "cmdr you" }, [
+      el("div", { class: "hpbar you" }, [el("i"), el("span")]),
+      el("div", { class: "pills" }, [el("span", { class: "pill gold" }), el("span", { class: "pill supply" })]),
+    ]);
+    const shop = el("div", { class: "shop" });
+    const reroll = el("button", { class: "btn small reroll" }) as HTMLButtonElement;
+    reroll.addEventListener("click", () => this.reroll());
+    const fight = el("button", { class: "btn fight" }, ["FIGHT"]) as HTMLButtonElement;
+    fight.addEventListener("click", () => void this.fight());
+    const speed = el("button", { class: "btn small speed" }) as HTMLButtonElement;
+    speed.addEventListener("click", () => this.toggleSpeed());
+    const skip = el("button", { class: "btn small skip" }, ["Skip"]) as HTMLButtonElement;
+    skip.addEventListener("click", () => this.skipBattle());
+    const status = el("div", { class: "status" });
+    const actions = el("div", { class: "actions" }, [reroll, status, speed, skip, fight]);
+    bottom.append(you, shop, actions);
+
+    const banner = el("div", { class: "banner" });
+    const pop = el("div", { class: "pop hidden" });
+    const tip = el("div", { class: "tip hidden" });
+    const menu = el("div", { class: "overlay hidden" });
+    const hint = el("div", { class: "hint hidden" });
+    this.root.append(top, bottom, banner, pop, tip, menu, hint);
+    const q = (s: string, r: HTMLElement = this.root) => r.querySelector(s) as HTMLElement;
+    this.h = {
+      foeName: q(".cmdr-name", foe), foeHp: q("i", foe), foeHpText: q(".hpbar span", foe), foeGold: q(".cmdr-gold", foe), round,
+      youHp: q("i", you), youHpText: q(".hpbar span", you), gold: q(".gold", you), supply: q(".supply", you), shop, reroll, fight,
+      banner, pop, tip, speed, skip, bottom, top, status, menu,
+    };
+    this.h.foeName.textContent = this.match.sides[1].name;
+  }
+
+  private onResize = () => this.layout();
+
+  private layout() {
+    const w = window.innerWidth, hgt = window.innerHeight;
+    const topR = this.h.top.getBoundingClientRect(), botR = this.h.bottom.getBoundingClientRect();
+    const area = this.o.mode === "demo"
+      ? { x: 0, y: 0, w, h: hgt }
+      : { x: 8, y: topR.bottom + 6, w: w - 16, h: Math.max(200, botR.top - topR.bottom - 12) };
+    this.view.layout(w, hgt, area);
+  }
+
+  private refreshHud() {
+    const m = this.match, you = m.sides[0], foe = m.sides[1];
+    this.h.round.innerHTML = this.o.mode === "puzzle" ? `<small>BREAKPOINT</small>` : `<small>ROUND</small><b>${m.round}</b>`;
+    this.setHp(this.h.youHp, this.h.youHpText, this.hpShown[0], you.maxHp);
+    this.setHp(this.h.foeHp, this.h.foeHpText, this.hpShown[1], foe.maxHp);
+    this.h.gold.innerHTML = `<b>${you.gold}</b>`;
+    this.h.supply.innerHTML = `<b>${m.supplyUsed(0)}</b>/${m.supplyCap(0)}`;
+    this.h.foeGold.textContent = this.o.mode === "puzzle" ? "" : `${foe.gold}g`;
+    const deploy = this.phase === "deploy" && !this.watch;
+    this.root.classList.toggle("in-battle", this.phase !== "deploy");
+    this.h.reroll.innerHTML = `↻ <b>${m.rerollCost(0)}</b>`;
+    this.h.reroll.disabled = !deploy || !m.canReroll(0);
+    this.h.reroll.classList.toggle("gone", !!m.cfg.noReroll || !!m.cfg.fixedShop?.[0]);
+    this.h.fight.disabled = !deploy;
+    this.h.fight.textContent = this.planning && deploy ? "…" : "FIGHT";
+    this.h.speed.textContent = `${this.speed}×`;
+    const hint = this.root.querySelector(".hint") as HTMLElement;
+    if (this.o.hint && this.phase === "deploy" && this.match.round <= 2) {
+      const none = this.match.sides[0].pieces.length === 0;
+      hint.textContent = none ? "Drag a card onto your half" : this.match.round === 1 ? "Tap Fight when you're ready" : "";
+      hint.className = `hint ${hint.textContent ? "" : "hidden"} ${none ? "drag" : "go"}`;
+    } else hint.className = "hint hidden";
+    this.h.status.textContent = this.phase === "battle" ? "" : this.watch ? "Watching" : "";
+    this.renderShop();
+  }
+
+  private setHp(bar: HTMLElement, text: HTMLElement, hp: number, max: number) {
+    bar.style.width = `${Math.max(0, (hp / max) * 100)}%`;
+    text.textContent = `${Math.max(0, Math.round(hp))}`;
+  }
+
+  private renderShop() {
+    const st = this.match.sides[0];
+    const seen = new Set(load().seen);
+    const shop = this.h.shop;
+    if (shop.childElementCount !== st.shop.length) {
+      shop.replaceChildren(...st.shop.map((_, i) => {
+        const card = el("div", { class: "card", "data-slot": String(i) }, [
+          el("canvas", { class: "card-icon" }), el("div", { class: "card-name" }), el("div", { class: "card-cost" }), el("div", { class: "card-new" }, ["NEW"]),
+        ]);
+        return card;
+      }));
+    }
+    st.shop.forEach((k, i) => {
+      const card = shop.children[i] as HTMLElement;
+      const was = card.dataset.kind;
+      card.dataset.kind = k ?? "";
+      card.classList.toggle("sold", !k);
+      const why = k ? this.match.canBuy(0, i) : "Sold";
+      card.classList.toggle("off", !!why || this.phase !== "deploy" || this.watch);
+      card.classList.toggle("picked", this.pickSlot === i);
+      card.classList.toggle("is-new", !!k && !seen.has(k));
+      if (k && was !== k) {
+        (card.querySelector(".card-name") as HTMLElement).textContent = UNITS[k].name;
+        (card.querySelector(".card-cost") as HTMLElement).textContent = String(UNITS[k].cost);
+        requestAnimationFrame(() => drawIcon(card.querySelector("canvas") as HTMLCanvasElement, k));
+        card.classList.remove("deal"); void card.offsetWidth; card.classList.add("deal");
+      }
+      if (!k) (card.querySelector(".card-name") as HTMLElement).textContent = "";
+    });
+    if (st.shop.some((k) => k && !seen.has(k))) save((s) => { for (const k of st.shop) if (k && !s.seen.includes(k)) s.seen.push(k); });
+  }
+
+  private bannerT = 0;
+  private showBanner(html: string, cls = "", ms = 1100) {
+    if (this.o.mode === "demo") return;
+    const b = this.h.banner;
+    b.className = `banner show ${cls}`;
+    b.innerHTML = html;
+    clearTimeout(this.bannerT);
+    this.bannerT = window.setTimeout(() => { b.className = "banner"; }, ms);
+  }
+
+  // ------------------------------------------------------------ rounds
+  private startDeploy(first = false) {
+    this.phase = "deploy";
+    this.selected = null;
+    this.pickSlot = null;
+    this.battle = undefined;
+    this.closePop();
+    const m = this.match;
+    const inc = m.sides[0].lastIncome;
+    if (this.o.mode === "puzzle") this.showBanner(`<b>${this.o.title ?? "Breakpoint"}</b><small>Win this one battle</small>`, "intro", 1600);
+    else if (first) this.showBanner(`<b>${this.o.title ?? "Muster"}</b><small>vs ${m.sides[1].name}</small>`, "intro", 1600);
+    else {
+      const extra = inc.interest ? ` +${inc.interest} interest` : "";
+      this.showBanner(`<b>Round ${m.round}</b><small>+${inc.base + inc.bonus} gold${extra}</small>`, "round", 1200);
+      sfx("round");
+    }
+    // The rival plans now, from what it could see at the start of the round.
+    this.plans = [];
+    const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+    if (this.o.foe) {
+      this.planning = true;
+      this.plans.push(planTurnAsync(m, 1, this.o.foe, { tick }).then((p) => { if (!this.destroyed) applyPlan(m, 1, p); }));
+    }
+    if (this.o.you) this.plans.push(planTurnAsync(m, 0, this.o.you, { tick }).then((p) => { if (!this.destroyed) applyPlan(m, 0, p); }));
+    void Promise.all(this.plans).then(() => {
+      this.planning = false;
+      if (this.destroyed) return;
+      this.refreshHud();
+      if (this.watch) setTimeout(() => void this.fight(), 900);
+    });
+    this.refreshHud();
+  }
+
+  private async fight() {
+    if (this.phase !== "deploy" || this.paused) return;
+    unlockAudio();
+    this.closePop();
+    this.pickSlot = null;
+    this.h.fight.disabled = true;
+    await Promise.all(this.plans);
+    if (this.destroyed || this.phase !== "deploy") return;
+    const m = this.match;
+    const seen = new Set(m.sides[1].seen.map((p) => p.id));
+    this.view.markReveal(m.sides[1].pieces.filter((p) => !seen.has(p.id)).map((p) => p.id));
+    this.battle = m.makeBattle(true);
+    this.phase = "battle";
+    this.acc = 0;
+    // A beat to see what the rival added before the clash starts.
+    const fresh = new Set(m.sides[1].pieces.filter((p) => !seen.has(p.id)).map((p) => p.id));
+    for (const b of this.battle.bodies) {
+      if (b.side !== 1 || !fresh.has(b.pieceId) || b.hidden) continue;
+      this.view.fx.ring(b.x, b.y, 0.1, 0.9, 0.45, "#ffc1ad", 0.05);
+      this.view.fx.burst(b.x, b.y, 8, { color: "rgba(255,193,173,0.8)", speed: 1.4, size: 0.06, max: 0.4, kind: "spark", gravity: 0 });
+    }
+    this.hold = fresh.size && !this.watch ? 0.75 : 0.25;
+    sfx("fight");
+    buzz("medium");
+    this.showBanner(`<b>Fight</b>`, "fight", 700);
+    this.refreshHud();
+  }
+
+  private reroll() {
+    if (this.phase !== "deploy" || this.watch || !this.match.canReroll(0)) { sfx("deny"); return; }
+    this.match.reroll(0);
+    this.pickSlot = null;
+    sfx("reroll");
+    buzz("light");
+    this.refreshHud();
+  }
+
+  private skipBattle() {
+    if (this.phase !== "battle" || !this.battle) return;
+    while (!this.battle.done) { this.battle.step(); this.battle.events.length = 0; }
+    this.view.fx.clear();
+  }
+
+  private toggleSpeed() {
+    this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 3 : 1;
+    save((s) => { s.settings.speed = this.speed; });
+    this.refreshHud();
+  }
+
+  private finishBattle() {
+    const b = this.battle!;
+    const rep = this.match.resolve(b.result());
+    this.phase = this.match.phase === "over" ? "over" : "result";
+    this.showRound(rep);
+  }
+
+  private showRound(rep: RoundReport) {
+    const won = rep.winner === 0, lost = rep.winner === 1;
+    const dmgFoe = rep.damage[1], dmgYou = rep.damage[0];
+    const head = won ? "Round won" : lost ? "Round lost" : "Draw";
+    const detail = [dmgFoe ? `<span class="dmg foe">-${dmgFoe}</span>` : "", dmgYou ? `<span class="dmg you">-${dmgYou}</span>` : ""].join(" ");
+    this.showBanner(`<b>${head}</b><small>${detail}</small>`, won ? "won" : lost ? "lost" : "draw", 1500);
+    sfx(won ? "round" : lost ? "hurt" : "tap", 1);
+    if (lost) buzz("heavy");
+    // Health bars count down.
+    const from: [number, number] = [...this.hpShown];
+    const to: [number, number] = [this.match.sides[0].hp, this.match.sides[1].hp];
+    const t0 = performance.now();
+    const step = () => {
+      const u = Math.min(1, (performance.now() - t0) / 700);
+      this.hpShown = [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
+      this.refreshHud();
+      if (u < 1 && !this.destroyed) requestAnimationFrame(step);
+    };
+    setTimeout(step, 300);
+    if (lost) this.root.classList.add("hurt"), setTimeout(() => this.root.classList.remove("hurt"), 500);
+    setTimeout(() => {
+      if (this.destroyed) return;
+      if (this.match.phase === "over") {
+        sfx(this.match.winner === 0 ? "win" : "lose");
+        buzz(this.match.winner === 0 ? "success" : "error");
+        this.o.onEnd(this.match);
+      } else {
+        this.match.next();
+        this.startDeploy();
+      }
+    }, this.watch ? 1500 : 1900);
+  }
+
+  // ------------------------------------------------------------ frame
+  private frame = (now: number) => {
+    if (this.destroyed) return;
+    const dt = Math.min(0.05, (now - this.lastT) / 1000);
+    this.lastT = now;
+    if (!this.paused) {
+      if (this.phase === "battle" && this.battle && this.hold > 0) this.hold -= dt;
+      else if (this.phase === "battle" && this.battle) {
+        const slow = this.battle.done ? 0.35 : 1;
+        this.acc += dt * this.speed * slow;
+        while (this.acc >= DT && !this.battle.done) {
+          this.battle.step();
+          this.view.consume(this.battle);
+          this.acc -= DT;
+        }
+        if (this.battle.done) {
+          this.endT += dt;
+          if (this.endT > 0.9) { this.endT = 0; this.finishBattle(); }
+        }
+      }
+      this.view.update(dt * (this.phase === "battle" ? Math.min(this.speed, 2) : 1));
+    }
+    this.view.render(this.scene());
+    this.raf = requestAnimationFrame(this.frame);
+  };
+
+  private scene(): Scene {
+    if ((this.phase === "battle" || ((this.phase === "result" || this.phase === "over") && this.battle)) && this.battle)
+      return { mode: "battle", battle: this.battle, alpha: Math.min(1, this.acc / DT) };
+    const m = this.match;
+    const theirs = this.o.mode === "puzzle" || this.watch ? m.sides[1].pieces : m.sides[1].seen;
+    return {
+      mode: "deploy",
+      pieces: [...m.sides[0].pieces, ...theirs],
+      showEnemyMines: this.o.showEnemyMines,
+      ghost: this.ghost ?? undefined,
+      selected: this.selected ?? undefined,
+      zone: this.ghost || this.drag?.type === "piece" && this.drag.moved ? 0 : null,
+    };
+  }
+
+  // ------------------------------------------------------------ input
+  private bindInput() {
+    const c = this.canvas;
+    c.addEventListener("pointerdown", (e) => this.boardDown(e));
+    window.addEventListener("pointermove", this.move);
+    window.addEventListener("pointerup", this.up);
+    window.addEventListener("pointercancel", this.up);
+    this.h.shop.addEventListener("pointerdown", (e) => {
+      const card = (e.target as HTMLElement).closest(".card") as HTMLElement | null;
+      if (!card) return;
+      unlockAudio();
+      const slot = Number(card.dataset.slot);
+      const kind = this.match.sides[0].shop[slot];
+      if (!kind) return;
+      e.preventDefault();
+      this.drag = { type: "card", slot, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
+      clearTimeout(this.tipTimer);
+      this.tipTimer = window.setTimeout(() => { if (this.drag && !this.drag.moved) this.showTip(kind, card); }, 380);
+    });
+  }
+
+  private pieceAt(x: number, y: number, side: Side): Piece | undefined {
+    const m = this.match;
+    const list = side === 0 ? m.sides[0].pieces : this.o.mode === "puzzle" ? m.sides[1].pieces : m.sides[1].seen;
+    let best: Piece | undefined, bd = Infinity;
+    for (const p of list) {
+      if (side === 1 && p.kind === "mine" && !this.o.showEnemyMines) continue;
+      const r = (p.kind === "blades" ? 0.62 : UNITS[p.kind].radius) + 0.3;
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d < r && d < bd) { bd = d; best = p; }
+    }
+    return best;
+  }
+
+  private boardDown(e: PointerEvent) {
+    unlockAudio();
+    if (this.phase !== "deploy" || this.watch || this.paused) return;
+    const w = this.view.toWorld(e.clientX, e.clientY);
+    const mine = this.pieceAt(w.x, w.y, 0);
+    if (mine) {
+      this.drag = { type: "piece", id: mine.id, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
+      return;
+    }
+    if (this.pickSlot !== null) {
+      this.tryBuy(this.pickSlot, w.x, w.y);
+      return;
+    }
+    const theirs = this.pieceAt(w.x, w.y, 1);
+    if (theirs) { this.openPop(theirs); return; }
+    this.selected = null;
+    this.closePop();
+  }
+
+  private move = (e: PointerEvent) => {
+    const d = this.drag;
+    if (!d || d.pid !== e.pointerId) return;
+    const dist = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
+    if (!d.moved && dist > 8) { d.moved = true; clearTimeout(this.tipTimer); this.hideTip(); this.closePop(); }
+    if (!d.moved) return;
+    // Lift the preview above the finger so it stays visible.
+    const lift = e.pointerType === "touch" ? 46 : 0;
+    const w = this.view.toWorld(e.clientX, e.clientY - lift);
+    if (d.type === "card") {
+      const kind = this.match.sides[0].shop[d.slot!];
+      if (!kind) return;
+      const ok = inZone(0, w.x, w.y) && !this.match.canBuy(0, d.slot!);
+      this.ghost = { kind, x: w.x, y: w.y, ok };
+    } else {
+      try { this.match.move(0, d.id!, w.x, w.y); } catch { /* not now */ }
+      this.selected = d.id!;
+    }
+  };
+
+  private up = (e: PointerEvent) => {
+    const d = this.drag;
+    if (!d || d.pid !== e.pointerId) return;
+    this.drag = null;
+    clearTimeout(this.tipTimer);
+    this.hideTip();
+    if (d.type === "card") {
+      if (d.moved && this.ghost) {
+        const g = this.ghost;
+        this.ghost = null;
+        if (g.ok) this.tryBuy(d.slot!, g.x, g.y);
+        else if (this.view.toWorld(e.clientX, e.clientY).y < 14) { sfx("deny"); }
+      } else if (!d.moved) {
+        // Tap: pick the card, then tap the board to place it.
+        const why = this.match.canBuy(0, d.slot!);
+        if (why) { this.flashStatus(why); sfx("deny"); }
+        else { this.pickSlot = this.pickSlot === d.slot ? null : d.slot!; sfx("tap"); }
+        this.refreshHud();
+      }
+      return;
+    }
+    if (d.moved) { sfx("place", 0.6); buzz("light"); this.selected = null; this.refreshHud(); return; }
+    // Tap on own piece: upgrade / sell popover.
+    const p = this.match.sides[0].pieces.find((x) => x.id === d.id);
+    if (p) { this.selected = p.id; this.openPop(p); sfx("tap"); }
+  };
+
+  private tryBuy(slot: number, x: number, y: number) {
+    const why = this.match.canBuy(0, slot);
+    if (why) { this.flashStatus(why); sfx("deny"); return; }
+    if (!inZone(0, x, y)) { this.flashStatus("Place it in your half"); sfx("deny"); return; }
+    const p = this.match.buy(0, slot, x, y);
+    this.view.markReveal([p.id]);
+    this.view.fx.ring(p.x, p.y, 0.1, 0.8, 0.35, "#a6fff6", 0.05);
+    this.view.fx.burst(p.x, p.y, 10, { color: "rgba(166,255,246,0.8)", speed: 1.6, size: 0.06, max: 0.4, kind: "spark", gravity: 0 });
+    sfx("buy"); sfx("place");
+    buzz("light");
+    this.pickSlot = null;
+    this.refreshHud();
+  }
+
+  private flashStatus(text: string) {
+    this.h.status.textContent = text;
+    this.h.status.classList.remove("flash"); void this.h.status.offsetWidth; this.h.status.classList.add("flash");
+  }
+
+  // ------------------------------------------------------------ popover & tips
+  private openPop(p: Piece) {
+    const pop = this.h.pop;
+    const def = UNITS[p.kind];
+    const own = p.side === 0;
+    const m = this.match;
+    pop.replaceChildren();
+    pop.className = `pop ${own ? "own" : "theirs"}`;
+    pop.append(el("div", { class: "pop-head" }, [el("b", {}, [def.name]), el("span", { class: "pop-rank" }, ["★".repeat(p.rank)])]));
+    pop.append(el("div", { class: "pop-text" }, [def.short]));
+    if (own && this.phase === "deploy") {
+      const up = el("button", { class: "btn small up" }, [p.rank >= 3 ? "Max" : `Rank up · ${upgradeCost(p.kind, p.rank)}`]) as HTMLButtonElement;
+      up.disabled = !!m.canUpgrade(0, p.id);
+      up.addEventListener("click", () => {
+        if (m.canUpgrade(0, p.id)) return;
+        m.upgrade(0, p.id);
+        sfx("upgrade"); buzz("medium");
+        this.view.fx.ring(p.x, p.y, 0.2, 1.0, 0.4, "#ffd166", 0.06);
+        this.view.fx.burst(p.x, p.y, 14, { color: "#ffd166", speed: 2, size: 0.06, max: 0.5, kind: "spark", gravity: 0 });
+        this.openPop(p);
+        this.refreshHud();
+      });
+      const sell = el("button", { class: "btn small sell" }, [`Sell · +${m.sellValue(p)}`]) as HTMLButtonElement;
+      sell.addEventListener("click", () => {
+        m.sell(0, p.id);
+        sfx("sell");
+        this.view.fx.burst(p.x, p.y, 10, { color: "#ffd166", speed: 1.4, size: 0.07, max: 0.5, kind: "chunk", vz: 2 });
+        this.selected = null;
+        this.closePop();
+        this.refreshHud();
+      });
+      pop.append(el("div", { class: "pop-actions" }, [up, sell]));
+    }
+    const sx = this.view.sx(p.x), sy = this.view.sy(p.y);
+    pop.classList.remove("hidden");
+    const r = pop.getBoundingClientRect();
+    const x = Math.max(8, Math.min(window.innerWidth - r.width - 8, sx - r.width / 2));
+    const above = sy - r.height - 28;
+    const y = above > this.view.rect.y ? above : sy + 30;
+    pop.style.left = `${x}px`;
+    pop.style.top = `${y}px`;
+  }
+
+  private closePop() {
+    this.h.pop.classList.add("hidden");
+  }
+
+  private showTip(kind: UnitKind, card: HTMLElement) {
+    const d = UNITS[kind];
+    const tip = this.h.tip;
+    tip.innerHTML = `<b>${d.name}</b><span>${d.short}</span><em>${statsLine(kind)}</em>`;
+    tip.classList.remove("hidden");
+    const r = card.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+    tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tr.width - 8, r.left + r.width / 2 - tr.width / 2))}px`;
+    tip.style.top = `${r.top - tr.height - 10}px`;
+  }
+  private hideTip() { this.h.tip.classList.add("hidden"); }
+
+  // ------------------------------------------------------------ pause
+  private openMenu() {
+    this.paused = true;
+    const s = load().settings;
+    const m = this.h.menu;
+    m.replaceChildren(el("div", { class: "sheet" }, [
+      el("h2", {}, ["Paused"]),
+      button("Resume", "primary", () => this.closeMenu()),
+      ...(this.o.onRestart ? [button("Restart", "", () => { this.closeMenu(); this.o.onRestart!(); })] : []),
+      button(`Sound: ${s.sound ? "on" : "off"}`, "ghost", () => { save((x) => { x.settings.sound = !x.settings.sound; }); import("../audio/sfx").then((a) => a.setSound(load().settings.sound)); this.openMenu(); }),
+      button(`Haptics: ${s.haptics ? "on" : "off"}`, "ghost", () => { save((x) => { x.settings.haptics = !x.settings.haptics; }); import("../native").then((n) => n.setHaptics(load().settings.haptics)); this.openMenu(); }),
+      button("Quit", "danger", () => { this.closeMenu(); this.o.onQuit(); }),
+    ]));
+    m.classList.remove("hidden");
+  }
+  private closeMenu() {
+    this.paused = false;
+    this.lastT = performance.now();
+    this.h.menu.classList.add("hidden");
+  }
+}
+
+export function statsLine(kind: UnitKind) {
+  const d = UNITS[kind];
+  const parts = [`${d.hp * (d.bodies ?? 1)} hp`];
+  if (d.dmg) parts.push(`${fmt(d.dmg)} dmg${d.bodies ? " each" : ""}`);
+  if (d.range >= 1.5) parts.push(`range ${fmt(d.range)}`);
+  if (d.speed) parts.push(d.speed >= 2.2 ? "fast" : d.speed <= 1 ? "slow" : "steady");
+  else parts.push("fixed");
+  return parts.join(" · ");
+}
+
+function button(label: string, cls: string, fn: () => void) {
+  const b = el("button", { class: `btn ${cls}` }, [label]);
+  b.addEventListener("click", () => { sfx("tap"); fn(); });
+  return b;
+}
