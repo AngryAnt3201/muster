@@ -4,6 +4,8 @@ import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { sprite, whiteOf } from "./sprites";
+import { Assault, type AssaultEvent, type Shot } from "./assault";
+import { KEEP_RX, KEEP_RY, KEEP_SCALE, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepPoint, keepState, loadKeeps, KEEP_STATES, type KeepState } from "./keeps";
 import { drawRank, drawShadow, drawUnit, type DrawOpts } from "./units";
 
 export interface DeployScene {
@@ -43,10 +45,18 @@ export class BoardView {
   onSound?: (name: string, gain?: number) => void;
   private bg?: HTMLCanvasElement;
   private reveal = new Map<number, number>(); // piece id -> time revealed
+  /** Each commander's shown hp over max hp: drives the keep's damage state (the game keeps it in step with the bar). */
+  keepHp: [number, number] = [1, 1];
+  /** Draw the commander keeps (off for boards with no commanders to show). */
+  showKeeps = true;
+  /** The round-end march on the losing keep, while it plays. */
+  assault?: Assault;
+  private keeps = [0, 1].map(() => ({ state: "" as KeepState | "", flash: 0, shake: 0, alpha: 1, see: false, ember: 0, smoke: 0 }));
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    void loadKeeps();
   }
 
   layout(cssW: number, cssH: number, area: Rect) {
@@ -400,6 +410,7 @@ export class BoardView {
   update(dt: number) {
     this.time += dt;
     this.fx.update(dt);
+    if (this.showKeeps) this.updateKeeps(dt);
   }
 
   render(scene: Scene) {
@@ -490,7 +501,9 @@ export class BoardView {
     const ctx = this.ctx, s = this.s;
     if (sc.zone !== undefined && sc.zone !== null) this.drawZone(sc.zone);
     const list = [...sc.pieces].sort((a, b) => (a.kind === "mine" ? -1 : 0) - (b.kind === "mine" ? -1 : 0) || a.y - b.y);
+    const keeps = this.keepQueue([...list.filter((p) => p.kind !== "mine"), ...(sc.ghost ? [{ ...sc.ghost, kind: sc.ghost.kind }] : [])]);
     for (const p of list) {
+      if (p.kind !== "mine") keeps.flush(p.y);
       const def = UNITS[p.kind];
       const x = this.sx(p.x), y = this.sy(p.y), r = def.radius * s;
       if (p.kind === "mine" && p.side === 1 && !sc.showEnemyMines) continue;
@@ -511,6 +524,7 @@ export class BoardView {
       }
       drawRank(ctx, x, y, Math.max(r, 0.3 * s), p.rank);
     }
+    keeps.done();
     if (sc.ghost) {
       const g = sc.ghost, def = UNITS[g.kind];
       const x = this.sx(g.x), y = this.sy(g.y), r = def.radius * s;
@@ -558,8 +572,11 @@ export class BoardView {
   }
 
   private drawBattle(sc: BattleScene) {
-    const ctx = this.ctx, s = this.s, b = sc.battle, a = sc.alpha;
-    const lerp = (bd: Body) => [this.sx(bd.px + (bd.x - bd.px) * a), this.sy(bd.py + (bd.y - bd.py) * a)] as const;
+    const ctx = this.ctx, s = this.s, b = sc.battle, a = sc.alpha, as = this.assault;
+    const lerp = (bd: Body) => {
+      const st = as?.pose(bd.id);
+      return st ? [this.sx(st.x), this.sy(st.y)] as const : [this.sx(bd.px + (bd.x - bd.px) * a), this.sy(bd.py + (bd.y - bd.py) * a)] as const;
+    };
     // Burning ground.
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
@@ -598,8 +615,13 @@ export class BoardView {
       ctx.beginPath(); ctx.arc(x, y, 0.3 * s, -Math.PI / 2, -Math.PI / 2 + TAU * u); ctx.stroke();
       ctx.restore();
     }
-    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || p.y - q.y);
+    const wy = (bd: Body) => as?.pose(bd.id)?.y ?? bd.y;
+    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || wy(p) - wy(q));
+    const keeps = this.keepQueue(live.filter((bd) => bd.alive && !bd.flying).map((bd) => ({ x: as?.pose(bd.id)?.x ?? bd.x, y: wy(bd), kind: bd.kind })));
     for (const bd of live) {
+      if (bd.flying) keeps.done(); else keeps.flush(wy(bd));
+      const st = as?.pose(bd.id);
+      if (st) { this.drawStriker(bd, st); continue; }
       const [x, y] = lerp(bd);
       const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
       if (bd.burrowed) {
@@ -665,6 +687,8 @@ export class BoardView {
       }
       if (bd.alive && bd.stun > 0.05) this.drawStun(x, y + dy - bd.radius * s * 1.1, bd.radius * s);
     }
+    keeps.done();
+    if (as) this.drawShots(as);
     // Projectiles.
     for (const p of b.projs) {
       if (!p.alive) continue;
@@ -704,7 +728,7 @@ export class BoardView {
     }
     // Health bars on top (not for illusions or bodies underground).
     for (const bd of live) {
-      if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed) continue;
+      if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed || as?.pose(bd.id)) continue;
       const [x, y0] = lerp(bd);
       const y = y0 - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0);
       const w = Math.max(16, bd.radius * s * 1.9), h = 4;
@@ -715,10 +739,246 @@ export class BoardView {
       ctx.fillRect(x - w / 2, top, w * (bd.hp / bd.maxHp), h);
     }
     for (const bd of live) {
-      if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || bd.burrowed || bd.kind === "decoy") continue;
+      const st = as?.pose(bd.id);
+      if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || (bd.burrowed && !st) || bd.kind === "decoy" || st?.gone) continue;
       const [x, y] = lerp(bd);
-      drawRank(ctx, x, y - (bd.hp < bd.maxHp ? 14 : 5) - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0), bd.radius * s * 1.3, bd.rank);
+      drawRank(ctx, x, y - (bd.hp < bd.maxHp && !st ? 14 : 5) - (bd.flying ? (st?.z ?? bd.z ?? 1.2) * s * 0.55 : 0), bd.radius * s * 1.3, bd.rank);
     }
+  }
+
+  // ------------------------------------------------------------ keeps and the round-end assault
+  /** Draws the two keeps in depth order with the bodies: flush(y) before a body at y, done() after the last. */
+  private keepQueue(bodies: { x: number; y: number; kind: string }[]) {
+    const order: Side[] = [1, 0]; // the rival's keep is further up the board
+    for (const s of order) this.keeps[s].see = bodies.some((p) => behindKeep(s, p.x, p.y, RADIUS(p.kind as BodyKind)));
+    let i = this.showKeeps ? 0 : order.length;
+    return {
+      flush: (y: number) => { while (i < order.length && keepAnchor(order[i]).y <= y) this.drawKeep(order[i++]); },
+      done: () => { while (i < order.length) this.drawKeep(order[i++]); },
+    };
+  }
+
+  private drawKeep(side: Side) {
+    const k = this.keeps[side];
+    const state = keepState(this.keepHp[side]);
+    const img = keepImage(side, state);
+    if (!img) return;
+    const ctx = this.ctx, m = keepManifest(), s = this.s;
+    const a = keepAnchor(side), u = (KEEP_SCALE / m.ppu) * s;
+    const jig = k.shake * 0.07 * s;
+    const x = this.sx(a.x) + (jig ? frand(-jig, jig) : 0), y = this.sy(a.y) + (jig ? frand(-jig * 0.5, jig * 0.5) : 0);
+    ctx.save();
+    // Contact shadow on the ground under the plinth.
+    ctx.fillStyle = "rgba(0,0,0,0.38)";
+    ctx.beginPath(); ctx.ellipse(this.sx(a.x), this.sy(a.y) + KEEP_RY * 0.25 * s, KEEP_RX * 1.08 * s, KEEP_RY * 1.05 * s, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = k.alpha;
+    const dx = x - m.anchors.ground[0] * u, dy = y - m.anchors.ground[1] * u, w = m.w * u, h = m.h * u;
+    ctx.drawImage(img, dx, dy, w, h);
+    if (k.flash > 0) {
+      ctx.globalAlpha = k.alpha * Math.min(1, k.flash) * 0.75;
+      ctx.drawImage(whiteOf({ img, size: 1 }), dx, dy, w, h);
+    }
+    ctx.globalAlpha = k.alpha;
+    if (state === "burning" || state === "ruined") {
+      const fires = state === "burning" ? m.anchors.fires : m.anchors.fires.slice(1, 3);
+      fires.forEach((f, i) => {
+        const p = keepPoint(side, f, m);
+        this.drawFlame(this.sx(p.x) + (x - this.sx(a.x)), this.sy(p.y) + (y - this.sy(a.y)), s * (state === "burning" ? 0.3 : 0.2), i + side * 7);
+      });
+    }
+    ctx.restore();
+  }
+
+  private drawFlame(x: number, y: number, size: number, seed: number) {
+    const ctx = this.ctx, t = this.time * 9 + seed * 1.7;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(x, y - size * 0.3, 0, x, y - size * 0.3, size * 1.6);
+    g.addColorStop(0, "rgba(255,170,60,0.45)"); g.addColorStop(1, "rgba(255,90,20,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y - size * 0.3, size * 1.6, 0, TAU); ctx.fill();
+    for (const [k, col, w] of [[1, "rgba(255,110,40,0.85)", 1], [0.68, "rgba(255,200,80,0.9)", 0.7], [0.38, "rgba(255,250,210,0.95)", 0.45]] as [number, string, number][]) {
+      const hgt = size * k * (1.7 + 0.35 * Math.sin(t + k * 3) + 0.2 * Math.sin(t * 2.3 + seed));
+      const half = size * w * 0.55, lean = Math.sin(t * 0.7 + seed) * size * 0.18;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(x - half, y);
+      ctx.quadraticCurveTo(x - half * 1.1, y - hgt * 0.55, x + lean, y - hgt);
+      ctx.quadraticCurveTo(x + half * 1.1, y - hgt * 0.55, x + half, y);
+      ctx.quadraticCurveTo(x, y + half * 0.5, x - half, y);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  private updateKeeps(dt: number) {
+    const m = keepManifest(), snd = (n: string, g = 0.5) => this.onSound?.(n, g);
+    for (const side of [0, 1] as Side[]) {
+      const k = this.keeps[side];
+      k.flash = Math.max(0, k.flash - dt * 6);
+      k.shake = Math.max(0, k.shake - dt * 3.5);
+      k.alpha += ((k.see ? 0.42 : 1) - k.alpha) * Math.min(1, dt * 10);
+      const state = keepState(this.keepHp[side]);
+      if (k.state && state !== k.state && KEEP_STATES.indexOf(state) > KEEP_STATES.indexOf(k.state)) {
+        // A stage of damage: masonry comes down.
+        const c = keepAnchor(side);
+        this.fx.burst(c.x, c.y - 0.5, 22, { color: "#8d929b", speed: 2.4, size: 0.08, max: 0.9, kind: "chunk", vz: 3.5, spin: 8 });
+        this.fx.burst(c.x, c.y - 0.2, 8, { color: "rgba(140,130,120,0.32)", speed: 1.3, size: 0.17, max: 0.9, kind: "smoke", gravity: -0.3, drag: 1.5 });
+        k.shake = 1;
+        this.fx.shake = Math.min(1, this.fx.shake + 0.4);
+        snd("crumble", 0.8);
+      }
+      k.state = state;
+      // Embers off the flames, smoke from the broken stone.
+      if (state === "burning" || state === "ruined") {
+        k.ember += dt * (state === "burning" ? 7 : 3);
+        while (k.ember >= 1) {
+          k.ember -= 1;
+          const f = m.anchors.fires[Math.floor(Math.random() * m.anchors.fires.length)], p = keepPoint(side, f, m);
+          this.fx.burst(p.x, p.y, 1, { color: "#ffb347", speed: 0.35, size: 0.035, max: 0.9, kind: "spark", gravity: -1.6, vz: 1.2, z: 0.1, drag: 1 });
+        }
+      }
+      if (state !== "intact") {
+        k.smoke += dt * (state === "ruined" ? 2.4 : state === "burning" ? 1.6 : 0.4);
+        while (k.smoke >= 1) {
+          k.smoke -= 1;
+          const f = m.anchors.smoke[Math.floor(Math.random() * m.anchors.smoke.length)], p = keepPoint(side, f, m);
+          this.fx.burst(p.x, p.y, 1, { color: state === "cracked" ? "rgba(150,145,140,0.18)" : "rgba(50,46,52,0.3)", speed: 0.15, size: 0.1, max: 1.6, kind: "smoke", gravity: -0.55, vz: 0.6, z: 0.2, drag: 0.5 });
+        }
+      }
+    }
+  }
+
+  /** Starts the round-end assault from where the battle left off. */
+  startAssault(battle: Battle, damage: [number, number], linger?: number): Assault {
+    this.assault = new Assault(battle.bodies, { damage, obstacles: this.obstacles, linger });
+    return this.assault;
+  }
+
+  /** Advances the assault and turns what happens into effects. */
+  updateAssault(dt: number) {
+    this.assault?.update(dt, (e) => this.onAssault(e));
+  }
+
+  private onAssault(e: AssaultEvent) {
+    const fx = this.fx, snd = (n: string, g = 0.5) => this.onSound?.(n, g);
+    if (e.t === "swing") {
+      const st = e.s;
+      if (st.style === "melee") {
+        const k = keepHitPoint(st.target, st.x, st.y);
+        fx.arc(st.x, st.y, Math.atan2(k.y - st.y, k.x - st.x), st.radius + 0.35, st.side === 0 ? "#e9fffd" : "#fff0ea", 2.0, 0.18);
+        snd("slash", 0.3);
+      } else if (st.style === "keg") snd("fuse", 0.5);
+      else if (st.style === "dive") snd("blink", 0.35);
+      return;
+    }
+    if (e.t === "launch") {
+      const sh = e.shot;
+      if (sh.style === "zap") {
+        fx.bolt([[sh.x0, sh.y0], [(sh.x0 + sh.x1) / 2 + frand(-0.3, 0.3), (sh.y0 + sh.y1) / 2], [sh.x1, sh.y1]], ZAP, 0.3);
+        fx.flash = Math.max(fx.flash, 0.06); fx.flashColor = "#cfe8ff";
+        snd("zap", 0.5);
+      } else snd(sh.style === "lob" || sh.style === "shell" ? "throw" : sh.style === "bolt" ? "bolt" : sh.style === "shard" ? "zap" : "arrow", 0.35);
+      return;
+    }
+    // Impact on the keep.
+    const k = this.keeps[e.target];
+    const big = e.style === "shell" || e.style === "keg" || e.style === "slam";
+    k.flash = 1;
+    k.shake = Math.min(1.4, k.shake + (big ? 1 : 0.45));
+    const stone = { color: "#8d929b", speed: big ? 2.6 : 1.6, size: 0.06, max: 0.7, kind: "chunk" as const, vz: 2.5, spin: 8 };
+    switch (e.style) {
+      case "lob": this.boom(e.x, e.y, 0.8, "grenade", (1 - e.target) as Side); break;
+      case "shell": this.boom(e.x, e.y, 1.1, "shell", (1 - e.target) as Side); break;
+      case "keg": this.boom(e.x, e.y, 1.2, "keg", (1 - e.target) as Side); break;
+      case "slam": this.boom(e.x, e.y + 0.4, 1.0, "slam", (1 - e.target) as Side); break;
+      case "shard":
+        fx.ring(e.x, e.y, 0.05, 0.45, 0.3, ICE, 0.05);
+        fx.burst(e.x, e.y, 10, { color: "#e9f9ff", speed: 2, size: 0.05, max: 0.4, kind: "chunk", vz: 2, spin: 6 });
+        snd("clank", 0.4);
+        break;
+      case "zap":
+        fx.burst(e.x, e.y, 10, { color: "#dff1ff", speed: 2.6, size: 0.04, max: 0.3, kind: "spark", gravity: 0 });
+        break;
+      default:
+        fx.burst(e.x, e.y, e.style === "bolt" ? 10 : 6, { color: "#fff2d6", speed: 2.6, size: 0.045, max: 0.28, kind: "spark", gravity: 0 });
+        snd(e.style === "melee" || e.style === "dive" ? "hit" : "clank", 0.35);
+    }
+    fx.burst(e.x, e.y, big ? 10 : 4, stone);
+    fx.burst(e.x, e.y, big ? 5 : 2, { color: "rgba(150,140,130,0.45)", speed: 0.8, size: 0.2, max: 0.8, kind: "smoke", gravity: 0, drag: 2 });
+    if (e.first && this.assault) {
+      const dmg = this.assault.damage[e.target];
+      const top = keepPoint(e.target, keepManifest().anchors.top);
+      // Above our keep; in front of the rival's, which sits against the top edge.
+      fx.float(top.x, e.target === 0 ? top.y - 0.15 : top.y + 1.0, `-${dmg}`, e.target === 0 ? "#ff6b5a" : GOLD, 0.62, 1.5);
+      fx.shake = Math.min(1, fx.shake + 0.35);
+      this.onShake?.(e.target === 0 ? 2 : 1);
+      snd("crumble", 0.7);
+    }
+  }
+
+  /** A survivor on the march or striking the keep, from the assault's pose rather than the battle's. */
+  private drawStriker(bd: Body, st: NonNullable<ReturnType<Assault["pose"]>>) {
+    if (st.gone || !this.assault) return;
+    const s = this.s, x = this.sx(st.x), y = this.sy(st.y);
+    let dy = 0, scale = 1;
+    if (bd.flying) {
+      drawShadow(this.ctx, x, y, bd.radius * s * (1.1 - st.z * 0.2), 0.32 - st.z * 0.12);
+      dy = -st.z * s * 0.55;
+      scale = 1 + st.z * 0.12;
+    }
+    this.token(bd.kind, bd.side, x, y + dy, bd.radius * s * scale, st.face, {
+      t: this.time, swing: this.assault.swing(st), swingA: st.face, speed: this.assault.speed(st), state: "run", id: bd.id, own: bd.side === 0, rank: bd.rank,
+    });
+  }
+
+  /** Arrows, bolts and bombs in flight to a keep. */
+  private drawShots(as: Assault) {
+    const ctx = this.ctx, s = this.s;
+    for (const sh of as.shots) {
+      if (as.t < sh.t0) continue;
+      const u = Math.min(1, (as.t - sh.t0) / Math.max(0.01, sh.t1 - sh.t0));
+      const wx = sh.x0 + (sh.x1 - sh.x0) * u, wy = sh.y0 + (sh.y1 - sh.y0) * u;
+      const x = this.sx(wx), y = this.sy(wy);
+      if (sh.style === "lob" || sh.style === "shell") {
+        const big = sh.style === "shell";
+        const zy = y - Math.sin(u * Math.PI) * (big ? 2.4 : 1.5) * s * 0.55;
+        drawShadow(ctx, x, y, (big ? 0.14 : 0.1) * s, 0.35);
+        ctx.fillStyle = big ? "#3b4048" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, zy, (big ? 0.17 : 0.12) * s, 0, TAU); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = (this.time * 12) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
+        ctx.beginPath(); ctx.arc(x + 0.06 * s, zy - 0.08 * s, 0.04 * s, 0, TAU); ctx.fill();
+        continue;
+      }
+      this.drawStreak(sh, x, y);
+    }
+  }
+
+  private drawStreak(sh: Shot, x: number, y: number) {
+    const ctx = this.ctx, s = this.s;
+    const ice = sh.style === "shard", bolt = sh.style === "bolt";
+    if (sh.style === "pellet") {
+      ctx.fillStyle = "#ffe08a";
+      ctx.beginPath(); ctx.arc(x, y, Math.max(2, 0.05 * s), 0, TAU); ctx.fill();
+      return;
+    }
+    const ang = Math.atan2(sh.y1 - sh.y0, sh.x1 - sh.x0), len = (bolt ? 0.75 : ice ? 0.32 : 0.42) * s;
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(ang);
+    const tg = ctx.createLinearGradient(-len * 1.6, 0, 0, 0);
+    tg.addColorStop(0, "rgba(255,255,255,0)"); tg.addColorStop(1, bolt ? "rgba(255,230,190,0.8)" : ice ? "rgba(190,235,255,0.9)" : "rgba(255,255,255,0.6)");
+    ctx.strokeStyle = tg; ctx.lineWidth = bolt ? 0.09 * s : ice ? 0.08 * s : 0.05 * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-len * 1.6, 0); ctx.lineTo(0, 0); ctx.stroke();
+    if (ice) {
+      ctx.fillStyle = "#e9f9ff";
+      ctx.beginPath(); ctx.moveTo(len * 0.35, 0); ctx.lineTo(0, -0.06 * s); ctx.lineTo(-len * 0.3, 0); ctx.lineTo(0, 0.06 * s); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.strokeStyle = bolt ? "#e9d7b8" : "#f4efe6"; ctx.lineWidth = bolt ? 0.07 * s : 0.035 * s;
+      ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(len * 0.1, 0); ctx.stroke();
+      ctx.fillStyle = "#cfd8e3";
+      ctx.beginPath(); ctx.moveTo(len * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
+    }
+    ctx.restore();
   }
 
   private drawIce(x: number, y: number, r: number) {
