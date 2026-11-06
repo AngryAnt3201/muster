@@ -420,8 +420,9 @@ export function applyPlan(match: Match, side: Side, plan: Plan) {
   }
 }
 
-/** Drafts a starting army worth about `budget` gold (Gauntlet opponents, campaign set pieces). */
-export function draftArmy(side: Side, budget: number, roster: UnitKind[], ai: AIProfile, seed: number, maxPieces = 12): Piece[] {
+/** Drafts a starting army worth about `budget` gold (Gauntlet opponents, campaign set pieces); ranks go up to `maxRank`
+ * once the board is full (4 = Ascended, for armies that start late in a match). */
+export function draftArmy(side: Side, budget: number, roster: UnitKind[], ai: AIProfile, seed: number, maxPieces = 12, maxRank = 3): Piece[] {
   const rng = new Rng(seed);
   const pieces: Piece[] = [];
   let g = budget, id = 1000;
@@ -429,7 +430,7 @@ export function draftArmy(side: Side, budget: number, roster: UnitKind[], ai: AI
     const pool = roster.filter((x) => UNITS[x].cost <= g);
     if (!pool.length) break;
     if (pieces.length >= maxPieces) {
-      const up = pieces.filter((p) => p.rank < 3 && upgradeCost(p.kind, p.rank) <= g);
+      const up = pieces.filter((p) => p.rank < Math.min(maxRank, MAX_RANK) && upgradeCost(p.kind, p.rank) <= g);
       if (!up.length) break;
       const p = up[rng.int(0, up.length - 1)];
       g -= upgradeCost(p.kind, p.rank);
