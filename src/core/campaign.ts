@@ -1,10 +1,10 @@
-// The 42-level campaign in seven acts of six. Each act ends with a boss: a named rival, a set-piece board and a twist.
+// The 48-level campaign in eight acts of six. Each act ends with a boss: a named rival, a set-piece board and a twist.
 // New units unlock along the way; the level that introduces one sets the foe up so the new unit matters.
 import type { AIProfile, Tactic } from "./ai";
 import type { LevelDef, Objective } from "./content";
 import type { UnitKind } from "./defs";
 
-export const ACTS = ["The Borderlands", "Ash Fields", "The Hollow Wood", "Iron Pass", "The High Keep", "The Frozen Reach", "The Sky Throne"];
+export const ACTS = ["The Borderlands", "Ash Fields", "The Hollow Wood", "Iron Pass", "The High Keep", "The Frozen Reach", "The Sky Throne", "The Mirelight Fen"];
 
 /** The level each unit first appears on (the player's roster is everything unlocked so far). */
 const UNLOCKS: [number, UnitKind][] = [
@@ -163,6 +163,35 @@ const DRAFTS: Draft[] = [
     start: [undefined, [{ kind: "ravager", lx: 4.5, depth: 4.8, rank: 2 }, { kind: "storm", lx: 4.5, depth: 2.2 }, { kind: "bombard", lx: 4.5, depth: 0.8 },
       { kind: "harrier", lx: 2, depth: 3.5 }, { kind: "bulwark", lx: 6.5, depth: 4.4 }, { kind: "medic", lx: 3, depth: 2.4 }]],
     ai: ai(0.95, "balanced", 0.6, 0.55, 0.6, 2), stars: [WIN, hp(140), losses(5)] },
+
+  // ---------------------------------------------------------------- Act 8: The Mirelight Fen (1.1)
+  // No new units here: every foe is built around one of the four 1.1 units (Hookwarden, Thornweaver, Outrider,
+  // Lamplighter), and the boss puts all four on her opening board.
+  { name: "Reedwater", foe: "Bargeman Holt", line: "Holt's chains come out of the reeds.", foeHp: 400, power: 0.86,
+    foeRoster: ["hook", "bulwark", "pikeman", "medic", "ranger", "lamp", "ballista"],
+    obstacles: [{ x: 2, y: 7, r: 0.6 }, { x: 7, y: 7, r: 0.6 }],
+    ai: ai(0.94, "fortress", 0.3, 0.5, 0.6, 2), stars: [WIN, hp(150), rounds(15)] },
+  { name: "Will-o'-Wisp", foe: "Sister Ama", line: "Ama's lanterns never seem to go out.", foeHp: 400, power: 1.04,
+    foeRoster: ["lamp", "medic", "banner", "blades", "duelist", "ravager", "bulwark", "trickster"],
+    ai: ai(0.94, "balanced", 0.6, 0.45, 0.6, 2), stars: [WIN, hp(150), losses(5)] },
+  { name: "Bramble Causeway", foe: "Thornwife Esk", line: "The causeway grows shut behind you.", foeHp: 400, power: 1.04,
+    foeRoster: ["thorn", "hive", "mine", "sapper", "rime", "grenadier", "storm", "bulwark"],
+    obstacles: [{ x: 1.4, y: 6.6, r: 0.5 }, { x: 4.5, y: 7.4, r: 0.55 }, { x: 7.6, y: 6.6, r: 0.5 }],
+    ai: ai(0.95, "ambush", 0.5, 0.45, 0.8, 2), stars: [WIN, hp(140), rounds(15)] },
+  { name: "Running Water", foe: "Captain Saro", line: "Saro's riders circle and never close.", foeHp: 400, power: 1.15,
+    foeRoster: ["outrider", "harrier", "lancer", "ranger", "keg", "shade", "banner"],
+    ai: ai(0.95, "blitz", 0.85, 0.35, 0.7, 2), stars: [WIN, hp(140), losses(5)] },
+  { name: "The Drowned Bell", foe: "Ferryman Coyle", line: "Coyle drags you under his guns.", foeHp: 400, power: 0.86,
+    foeRoster: ["hook", "bombard", "thorn", "tinker", "pikeman", "ballista", "lamp", "medic"],
+    obstacles: [{ x: 4.5, y: 7, r: 0.65 }],
+    ai: ai(0.96, "siege", 0.5, 0.5, 0.5, 2), stars: [WIN, hp(130), rounds(16)] },
+  { name: "Mirelight", foe: "Mother Wick", line: "Her lanterns ward every soldier before the first blow.", foeHp: 400, power: 0.7, boss: true,
+    startGold: [14, 0], supply: [2, 1], mods: [undefined, { litStart: true }],
+    obstacles: [{ x: 1.5, y: 7, r: 0.55 }, { x: 4.5, y: 6.5, r: 0.5 }, { x: 7.5, y: 7, r: 0.55 }],
+    start: [undefined, [{ kind: "hook", lx: 4.5, depth: 4.8, rank: 2 }, { kind: "lamp", lx: 4.5, depth: 2.6, rank: 2 }, { kind: "thorn", lx: 3, depth: 2.2 },
+      { kind: "outrider", lx: 6.5, depth: 3 }, { kind: "bulwark", lx: 3, depth: 4.4 }, { kind: "medic", lx: 6, depth: 2 }]],
+    foeRoster: ["hook", "thorn", "outrider", "lamp", "bulwark", "medic", "pikeman", "bombard", "banner"],
+    ai: ai(0.97, "balanced", 0.55, 0.55, 0.6, 2), stars: [WIN, hp(130), losses(5)] },
 ];
 
 /** Builds a level from its draft; `power` overrides the tuned foe strength (for the balance tool). */

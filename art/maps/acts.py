@@ -1,4 +1,4 @@
-"""The seven campaign act maps: palette, road, terrain and props per act, indexed like ACTS in src/core/campaign.ts.
+"""The eight campaign act maps: palette, road, terrain and props per act, indexed like ACTS in src/core/campaign.ts.
 
 Colours are written for the Sunlit Meadow brightness. render_maps.py shifts them for the active style direction
 (darker and cooler with lanterns lit for dusk, pastel for toy), so the acts stay recognisable in every direction.
@@ -75,5 +75,16 @@ ACTS = [
         "road_pts": [(0.46, 0.86), (0.66, 0.78), (0.62, 0.69), (0.36, 0.63), (0.34, 0.54), (0.62, 0.46), (0.64, 0.37), (0.40, 0.30), (0.50, 0.22)],
         "props": [("pillar", 16), ("crystal_gold", 14), ("cloudpuff", 46), ("bush_gold", 10), ("statue", 4)],
         "boss": "throne",
+    },
+    {   # 7: The Mirelight Fen, reed-banked meres, willows and lantern posts, Mother Wick's lantern hall on stilts
+        "id": "fen",
+        "ground": ["#86bb60", "#6aa24f", "#a6d27a"], "noise": 0.65,
+        "road": ["#d9b98a", "#8a6440"],
+        "hills": 0.8, "edge": 1.0,
+        "road_pts": [(0.40, 0.86), (0.66, 0.80), (0.66, 0.70), (0.38, 0.64), (0.30, 0.55), (0.56, 0.48), (0.68, 0.39), (0.44, 0.31), (0.50, 0.22)],
+        "water": {"kind": "ponds", "ponds": [(0.14, 0.74, 1.15), (0.88, 0.60, 1.2), (0.13, 0.44, 1.0), (0.86, 0.29, 0.95), (0.20, 0.97, 1.0), (0.84, 0.92, 0.9)],
+                  "color": ["#3a9fb6", "#7fd2dc"]},
+        "props": [("willow", 22), ("reeds", 46), ("lily", 26), ("lanternpost", 9), ("bush", 16), ("stump", 6), ("flowers", 14)],
+        "boss": "lanternhall",
     },
 ]

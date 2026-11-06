@@ -243,6 +243,11 @@ export class Battle {
     for (const p of pieces) this.addPiece(p);
     for (const b of this.bodies) if (b.kind === "hive" && this.mods[b.side].broodStart) { this.spawnMite(b); this.spawnMite(b); }
     for (const b of this.bodies) {
+      if (!this.mods[b.side].litStart || b.kind === "mine" || isSpawn(b.kind)) continue;
+      b.ward = WARD_HP; b.wardT = WARD_TIME;
+      this.emit({ t: "ward", id: b.id, from: b.id, x: b.x, y: b.y, amt: WARD_HP });
+    }
+    for (const b of this.bodies) {
       if (b.kind === "banner") this.banners.push(b);
       if (b.kind === "bulwark" && b.rank >= 4) this.bastions.push(b);
       if (b.kind === "grave") this.graves.push(b);

@@ -184,4 +184,6 @@ export interface Mods {
   bigMines?: boolean;
   /** Hives start with two mites. */
   broodStart?: boolean;
+  /** Every unit (not mines) starts each battle behind a lantern ward. */
+  litStart?: boolean;
 }
