@@ -502,6 +502,16 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 .act-dot.locked { background: rgba(255,255,255,0.15); }
 .act-dot.on { background: var(--gold); transform: scale(1.3); }
 
+/* Daily Challenge */
+.menu .btn.daily-btn { --b: var(--k-accent); }
+.screen.daily { display: flex; flex-direction: column; gap: 14px; }
+.daily-card { gap: 14px; }
+.daily-rule { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px 12px; border-radius: 14px; background: var(--k-well); text-align: center; font-size: 16px; font-weight: 700; color: var(--k-text); }
+.daily-today { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border-radius: 14px; background: var(--k-well); }
+.daily-today b { font: 400 24px/1 var(--display); color: var(--k-text); }
+.daily-today.won b { color: var(--ember-d); }
+.daily-today small { font-size: 13px; font-weight: 800; color: var(--k-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
 /* ---------------------------------------------------------------- Full Army: shop, paywall, gates */
 .shop-offer { display: flex; flex-direction: column; gap: 14px; align-items: stretch; }
 .shop-offer.panel { margin-top: 30px; padding-top: 34px; }
