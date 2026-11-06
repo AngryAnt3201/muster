@@ -8,6 +8,8 @@ import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { frame, hasAtlas, spriteHeight } from "./sprites";
 import { SPRITE_VIS, animFor, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
+import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
+import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
 
 export type { Rect } from "./camera";
 
@@ -27,6 +29,10 @@ export interface BattleScene {
 }
 export type Scene = DeployScene | BattleScene;
 
+/** Seconds the leftovers (mid-death bodies, illusions) take to clear once the assault begins. */
+const VANISH = 0.4;
+/** Height on the keep's wall where blows land, world units. */
+const WALL_Z = 0.75;
 const TAU = Math.PI * 2;
 const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
 const ICE = "#bfe9ff";
@@ -55,10 +61,18 @@ export class BoardView {
   onSound?: (name: string, gain?: number) => void;
   private bg?: HTMLCanvasElement;
   private reveal = new Map<number, number>(); // piece id -> time revealed
+  /** Each commander's shown hp over max hp: drives the keep's damage state (the game keeps it in step with the bar). */
+  keepHp: [number, number] = [1, 1];
+  /** Draw the commander keeps (off for boards with no commanders to show). */
+  showKeeps = true;
+  /** The round-end march on the losing keep, while it plays. */
+  assault?: Assault;
+  private keeps = [0, 1].map(() => ({ state: "" as KeepState | "", flash: 0, shake: 0, alpha: 1, see: false, ember: 0, smoke: 0 }));
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    void loadKeeps();
   }
 
   /** Pixels per world unit at the middle of the board (for effects that don't care about depth). */
@@ -467,6 +481,7 @@ export class BoardView {
   update(dt: number) {
     this.time += dt;
     this.fx.update(dt);
+    if (this.showKeeps) this.updateKeeps(dt);
   }
 
   render(scene: Scene) {
@@ -652,6 +667,7 @@ export class BoardView {
       });
     }
     for (const o of this.obstacles) list.push({ y: o.y, layer: 1, draw: () => this.drawRock(o) });
+    this.pushKeeps(list, [...shown.filter((p) => p.kind !== "mine"), ...(sc.ghost ? [sc.ghost] : [])]);
     for (const d of sortDrawables(list)) d.draw();
     if (sc.ghost) {
       const ctx = this.ctx, g = sc.ghost, def = UNITS[g.kind];
@@ -708,9 +724,13 @@ export class BoardView {
   }
 
   private drawBattle(sc: BattleScene) {
-    const ctx = this.ctx, b = sc.battle, a = sc.alpha;
-    const pos = (bd: Body) => [bd.px + (bd.x - bd.px) * a, bd.py + (bd.y - bd.py) * a] as const;
-    const height = (bd: Body) => (bd.flying ? (bd.z ?? 1.2) * AIR : 0);
+    const ctx = this.ctx, b = sc.battle, a = sc.alpha, as = this.assault;
+    // During the round-end assault the survivors move on the assault's clock, not the battle's.
+    const pos = (bd: Body) => {
+      const st = as?.pose(bd.id);
+      return st ? [st.x, st.y] as const : [bd.px + (bd.x - bd.px) * a, bd.py + (bd.y - bd.py) * a] as const;
+    };
+    const height = (bd: Body) => (bd.flying ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
     // ---- ground decals
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
@@ -741,9 +761,20 @@ export class BoardView {
         g.beginPath(); g.arc(0, 0, 0.3, -Math.PI / 2, -Math.PI / 2 + TAU * u); g.stroke();
       });
     }
-    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45));
+    // Once the assault starts the battle clock has stopped: bodies caught mid-death and the trickster's
+    // illusions fade out on the assault's clock instead of hanging on the field.
+    const vanish = as ? Math.max(0, 1 - as.t / VANISH) : 1;
+    const fading = (bd: Body) => !!as && (!bd.alive || bd.kind === "decoy");
+    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45) && !(fading(bd) && vanish <= 0));
+    const fadeOf = (bd: Body) => (bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45) * (fading(bd) ? vanish : 1);
     for (const bd of live) {
       const [x, y] = pos(bd);
+      const st = as?.pose(bd.id);
+      if (st) {
+        // A striker: its shadow follows the march (a burrower surfaces for it).
+        if (!st.gone) this.shadow(x, y, bd.radius * (1.1 - height(bd) * 0.15), 0.38 - height(bd) * 0.08);
+        continue;
+      }
       if (bd.burrowed) {
         // Underground: a moving mound of earth, no body.
         const ang = Math.atan2(bd.vy, bd.vx);
@@ -755,7 +786,7 @@ export class BoardView {
         });
         continue;
       }
-      const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
+      const fade = fadeOf(bd);
       const z = height(bd);
       // Contact shadow: smaller and fainter the higher the body flies.
       this.shadow(x, y, bd.radius * (1.1 - z * 0.15), (0.38 - z * 0.08) * fade);
@@ -784,18 +815,26 @@ export class BoardView {
       list.push({ y: f.y, layer: 1, draw: () => this.drawFuse(f.x, f.y, f.kind === "keg") });
     }
     for (const bd of live) {
+      const st = as?.pose(bd.id);
+      if (st) {
+        if (!st.gone) list.push({ y: st.y, layer: bd.flying ? 2 : 1, draw: () => this.drawStriker(bd, st, height(bd)) });
+        continue;
+      }
       if (bd.burrowed) continue;
-      list.push({ y: pos(bd)[1], layer: bd.flying ? 2 : 1, draw: () => this.drawBody(b, bd, pos(bd), height(bd)) });
+      list.push({ y: pos(bd)[1], layer: bd.flying ? 2 : 1, draw: () => this.drawBody(b, bd, pos(bd), height(bd), fadeOf(bd)) });
     }
+    // The battle's own projectiles stopped mid-air when it ended: they fade out with the leftovers.
     for (const p of b.projs) {
-      if (!p.alive) continue;
+      if (!p.alive || vanish <= 0) continue;
       const lob = p.kind === "grenade" || p.kind === "shell";
-      list.push({ y: p.py + (p.y - p.py) * a, layer: lob ? 2 : 1, draw: () => this.drawProj(p, a) });
+      list.push({ y: p.py + (p.y - p.py) * a, layer: lob ? 2 : 1, draw: () => { ctx.save(); ctx.globalAlpha *= vanish; this.drawProj(p, a); ctx.restore(); } });
     }
+    if (as) this.pushShots(list, as);
+    this.pushKeeps(list, live.filter((bd) => bd.alive && !bd.flying && !as?.pose(bd.id)?.gone).map((bd) => ({ x: pos(bd)[0], y: pos(bd)[1], kind: bd.kind })));
     for (const d of sortDrawables(list)) d.draw();
-    // ---- bars and ranks on top (not for illusions or bodies underground)
+    // ---- bars and ranks on top (not for illusions, bodies underground or the assault's strikers)
     for (const bd of live) {
-      if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed) continue;
+      if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed || as?.pose(bd.id)) continue;
       const [x, y] = pos(bd);
       const at = this.headAt(bd.kind, bd.rank, x, y, height(bd), bd.radius);
       const w = Math.max(16, at.r * 1.9), h = 4;
@@ -806,16 +845,16 @@ export class BoardView {
       ctx.fillRect(at.x - w / 2, top, w * (bd.hp / bd.maxHp), h);
     }
     for (const bd of live) {
-      if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || bd.burrowed || bd.kind === "decoy") continue;
+      const st = as?.pose(bd.id);
+      if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || (bd.burrowed && !st) || bd.kind === "decoy" || st?.gone) continue;
       const [x, y] = pos(bd);
       const at = this.headAt(bd.kind, bd.rank, x, y, height(bd), bd.radius);
-      drawRank(ctx, at.x, at.y + at.r * 1.3 - (bd.hp < bd.maxHp ? 14 : 5), at.r * 1.3, bd.rank);
+      drawRank(ctx, at.x, at.y + at.r * 1.3 - (bd.hp < bd.maxHp && !st ? 14 : 5), at.r * 1.3, bd.rank);
     }
   }
 
-  private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number) {
+  private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number, fade: number) {
     const ctx = this.ctx;
-    const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
     const swing = b.time - bd.swing < 0.35 ? (b.time - bd.swing) / 0.35 : -1;
     const sp = Math.hypot(bd.vx, bd.vy);
     if (bd.kind === "lancer" && bd.state === "charge" && sp > 2.5 && Math.random() < 0.5)
@@ -832,7 +871,7 @@ export class BoardView {
     const kind = decoy && !art ? "trickster" : bd.kind;
     const radius = bd.radius * scale * (decoy && !art ? RADIUS("trickster") / RADIUS("decoy") : 1);
     this.token(kind, bd.side, x, y, z, radius, bd.face, {
-      t: this.time, alpha: decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1, dying: bd.alive ? undefined : 1 - fade,
+      t: this.time, alpha: (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1) * (bd.alive ? fade : 1), dying: bd.alive ? undefined : 1 - fade,
       flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
       state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
     });
@@ -909,6 +948,270 @@ export class BoardView {
       ctx.beginPath(); ctx.moveTo(-pxLen, 0); ctx.lineTo(pxLen * 0.1, 0); ctx.stroke();
       ctx.fillStyle = "#cfd8e3";
       ctx.beginPath(); ctx.moveTo(pxLen * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------ keeps and the round-end assault
+  /** Adds the two keeps to the depth-sorted list, and fades a keep that stands in front of a body behind it. */
+  private pushKeeps(list: Drawable[], bodies: { x: number; y: number; kind: BodyKind }[]) {
+    if (!this.showKeeps) return;
+    for (const side of [0, 1] as Side[]) {
+      this.keeps[side].see = bodies.some((p) => behindKeep(side, p.x, p.y, RADIUS(p.kind)));
+      list.push({ y: keepAnchor(side).y, layer: 1, draw: () => this.drawKeep(side) });
+    }
+  }
+
+  /** A point on the keep image (manifest pixels) as a world point standing on the keep: x across, z up. */
+  private keepPt(side: Side, px: [number, number]): { x: number; y: number; z: number } {
+    const m = keepManifest(), a = keepAnchor(side), g = m.anchors.ground, u = KEEP_SCALE / m.ppu;
+    // The keep art is rendered at the board camera's elevation, so image height reads as height on the board.
+    return { x: a.x + (px[0] - g[0]) * u, y: a.y + 0.05, z: Math.max(0, ((g[1] - px[1]) * u) / this.cam.sin) };
+  }
+
+  /** Where a blow aimed at keepHitPoint lands: on the wall facing the attacker, partway up. */
+  private wallPt(side: Side, x: number, y: number): { x: number; y: number; z: number } {
+    const k = keepAnchor(side), front = y > k.y - 0.55;
+    return { x, y: k.y + (front ? 1 : -1) * KEEP_RY * 0.8, z: WALL_Z };
+  }
+
+  private drawKeep(side: Side) {
+    const k = this.keeps[side];
+    const state = keepState(this.keepHp[side]);
+    const img = keepImage(side, state);
+    if (!img) return;
+    const ctx = this.ctx, m = keepManifest(), a = keepAnchor(side);
+    const base = this.cam.project(a.x, a.y), u = (KEEP_SCALE / m.ppu) * base.s;
+    const jig = k.shake * 0.07 * base.s;
+    const ox = jig ? frand(-jig, jig) : 0, oy = jig ? frand(-jig * 0.5, jig * 0.5) : 0;
+    ctx.save();
+    // Contact shadow on the ground under the plinth.
+    ctx.globalAlpha *= 0.38;
+    ctx.fillStyle = "#000";
+    ctx.beginPath(); this.cam.groundPath(ctx, a.x + 0.06, a.y + 0.08, KEEP_SCALE * 1.2); ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha *= k.alpha;
+    const dx = base.x + ox - m.anchors.ground[0] * u, dy = base.y + oy - m.anchors.ground[1] * u, w = m.w * u, h = m.h * u;
+    ctx.drawImage(img, dx, dy, w, h);
+    if (k.flash > 0) {
+      // The hit flash: the keep's own pixels added over themselves.
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = k.alpha * Math.min(1, k.flash) * 0.55;
+      ctx.drawImage(img, dx, dy, w, h);
+      ctx.globalCompositeOperation = "source-over";
+    }
+    ctx.globalAlpha = k.alpha;
+    if (state === "burning" || state === "ruined") {
+      const fires = state === "burning" ? m.anchors.fires : m.anchors.fires.slice(1, 3);
+      fires.forEach((f, i) => {
+        this.drawFlame(dx + f[0] * u, dy + f[1] * u, base.s * (state === "burning" ? 0.3 : 0.2), i + side * 7);
+      });
+    }
+    ctx.restore();
+  }
+
+  private drawFlame(x: number, y: number, size: number, seed: number) {
+    const ctx = this.ctx, t = this.time * 9 + seed * 1.7;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(x, y - size * 0.3, 0, x, y - size * 0.3, size * 1.6);
+    g.addColorStop(0, "rgba(255,170,60,0.45)"); g.addColorStop(1, "rgba(255,90,20,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y - size * 0.3, size * 1.6, 0, TAU); ctx.fill();
+    for (const [k, col, w] of [[1, "rgba(255,110,40,0.85)", 1], [0.68, "rgba(255,200,80,0.9)", 0.7], [0.38, "rgba(255,250,210,0.95)", 0.45]] as [number, string, number][]) {
+      const hgt = size * k * (1.7 + 0.35 * Math.sin(t + k * 3) + 0.2 * Math.sin(t * 2.3 + seed));
+      const half = size * w * 0.55, lean = Math.sin(t * 0.7 + seed) * size * 0.18;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(x - half, y);
+      ctx.quadraticCurveTo(x - half * 1.1, y - hgt * 0.55, x + lean, y - hgt);
+      ctx.quadraticCurveTo(x + half * 1.1, y - hgt * 0.55, x + half, y);
+      ctx.quadraticCurveTo(x, y + half * 0.5, x - half, y);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  private updateKeeps(dt: number) {
+    const m = keepManifest(), snd = (n: string, g = 0.5) => this.onSound?.(n, g);
+    // Particles are drawn at half their z (drawFx), so heights on the keep are doubled going in.
+    const puff = (side: Side, px: [number, number], n: number, o: Parameters<Fx["burst"]>[3]) => {
+      const p = this.keepPt(side, px);
+      this.fx.burst(p.x, p.y, n, { ...o, z: p.z * 2 + (o?.z ?? 0) });
+    };
+    for (const side of [0, 1] as Side[]) {
+      const k = this.keeps[side];
+      k.flash = Math.max(0, k.flash - dt * 6);
+      k.shake = Math.max(0, k.shake - dt * 3.5);
+      k.alpha += ((k.see ? 0.42 : 1) - k.alpha) * Math.min(1, dt * 10);
+      const state = keepState(this.keepHp[side]);
+      if (k.state && state !== k.state && KEEP_STATES.indexOf(state) > KEEP_STATES.indexOf(k.state)) {
+        // A stage of damage: masonry comes down.
+        const mid: [number, number] = [m.anchors.ground[0], (m.anchors.ground[1] + m.anchors.top[1]) / 2];
+        puff(side, mid, 22, { color: "#8d929b", speed: 2.4, size: 0.08, max: 0.9, kind: "chunk", vz: 3.5, spin: 8 });
+        puff(side, m.anchors.ground, 8, { color: "rgba(140,130,120,0.32)", speed: 1.3, size: 0.17, max: 0.9, kind: "smoke", gravity: -0.3, drag: 1.5 });
+        k.shake = 1;
+        this.fx.shake = Math.min(1, this.fx.shake + 0.4);
+        snd("crumble", 0.8);
+      }
+      k.state = state;
+      // Embers off the flames, smoke from the broken stone.
+      if (state === "burning" || state === "ruined") {
+        k.ember += dt * (state === "burning" ? 7 : 3);
+        while (k.ember >= 1) {
+          k.ember -= 1;
+          puff(side, m.anchors.fires[Math.floor(Math.random() * m.anchors.fires.length)], 1, { color: "#ffb347", speed: 0.35, size: 0.035, max: 0.9, kind: "spark", gravity: -1.6, vz: 1.2, drag: 1 });
+        }
+      }
+      if (state !== "intact") {
+        k.smoke += dt * (state === "ruined" ? 2.4 : state === "burning" ? 1.6 : 0.4);
+        while (k.smoke >= 1) {
+          k.smoke -= 1;
+          puff(side, m.anchors.smoke[Math.floor(Math.random() * m.anchors.smoke.length)], 1, { color: state === "cracked" ? "rgba(150,145,140,0.18)" : "rgba(50,46,52,0.3)", speed: 0.15, size: 0.1, max: 1.6, kind: "smoke", gravity: -0.55, vz: 0.6, drag: 0.5 });
+        }
+      }
+    }
+  }
+
+  /** Starts the round-end assault from where the battle left off. */
+  startAssault(battle: Battle, damage: [number, number], linger?: number): Assault {
+    this.assault = new Assault(battle.bodies, { damage, obstacles: this.obstacles, linger });
+    // The illusions break as the round ends.
+    for (const bd of battle.bodies) {
+      if (!bd.alive || bd.kind !== "decoy") continue;
+      this.fx.burst(bd.x, bd.y, 10, { color: "rgba(200,170,255,0.7)", speed: 1.4, size: 0.12, max: 0.45, kind: "smoke", gravity: 0, drag: 2, z: 0.6 });
+      this.fx.ring(bd.x, bd.y, 0.1, 0.45, 0.25, VIOLET, 0.04);
+    }
+    return this.assault;
+  }
+
+  /** Advances the assault and turns what happens into effects. */
+  updateAssault(dt: number) {
+    this.assault?.update(dt, (e) => this.onAssault(e));
+  }
+
+  private onAssault(e: AssaultEvent) {
+    const fx = this.fx, snd = (n: string, g = 0.5) => this.onSound?.(n, g);
+    if (e.t === "swing") {
+      const st = e.s;
+      if (st.style === "melee") {
+        const k = keepHitPoint(st.target, st.x, st.y);
+        fx.arc(st.x, st.y, Math.atan2(k.y - st.y, k.x - st.x), st.radius + 0.35, st.side === 0 ? "#e9fffd" : "#fff0ea", 2.0, 0.18);
+        snd("slash", 0.3);
+      } else if (st.style === "keg") snd("fuse", 0.5);
+      else if (st.style === "dive") snd("blink", 0.35);
+      return;
+    }
+    if (e.t === "launch") {
+      const sh = e.shot;
+      if (sh.style === "zap") {
+        const w = this.wallPt(e.s.target, sh.x1, sh.y1);
+        fx.bolt([[sh.x0, sh.y0], [(sh.x0 + w.x) / 2 + frand(-0.3, 0.3), (sh.y0 + w.y) / 2], [w.x, w.y]], ZAP, 0.3);
+        fx.flash = Math.max(fx.flash, 0.06); fx.flashColor = "#cfe8ff";
+        snd("zap", 0.5);
+      } else snd(sh.style === "lob" || sh.style === "shell" ? "throw" : sh.style === "bolt" ? "bolt" : sh.style === "shard" ? "zap" : "arrow", 0.35);
+      return;
+    }
+    // Impact on the keep: blasts on the ground at its foot, sparks and stone off the wall.
+    const k = this.keeps[e.target], w = this.wallPt(e.target, e.x, e.y), z = w.z * 2;
+    const big = e.style === "shell" || e.style === "keg" || e.style === "slam";
+    k.flash = 1;
+    k.shake = Math.min(1.4, k.shake + (big ? 1 : 0.45));
+    const stone = { color: "#8d929b", speed: big ? 2.6 : 1.6, size: 0.06, max: 0.7, kind: "chunk" as const, vz: 2.5, spin: 8, z };
+    switch (e.style) {
+      case "lob": this.boom(w.x, w.y, 0.8, "grenade", (1 - e.target) as Side); break;
+      case "shell": this.boom(w.x, w.y, 1.1, "shell", (1 - e.target) as Side); break;
+      case "keg": this.boom(w.x, w.y, 1.2, "keg", (1 - e.target) as Side); break;
+      case "slam": this.boom(w.x, w.y, 1.0, "slam", (1 - e.target) as Side); break;
+      case "shard":
+        fx.ring(w.x, w.y, 0.05, 0.45, 0.3, ICE, 0.05);
+        fx.burst(w.x, w.y, 10, { color: "#e9f9ff", speed: 2, size: 0.05, max: 0.4, kind: "chunk", vz: 2, spin: 6, z });
+        snd("clank", 0.4);
+        break;
+      case "zap":
+        fx.burst(w.x, w.y, 10, { color: "#dff1ff", speed: 2.6, size: 0.04, max: 0.3, kind: "spark", gravity: 0, z });
+        break;
+      default:
+        fx.burst(w.x, w.y, e.style === "bolt" ? 10 : 6, { color: "#fff2d6", speed: 2.6, size: 0.045, max: 0.28, kind: "spark", gravity: 0, z });
+        snd(e.style === "melee" || e.style === "dive" ? "hit" : "clank", 0.35);
+    }
+    fx.burst(w.x, w.y, big ? 10 : 4, stone);
+    fx.burst(w.x, w.y, big ? 5 : 2, { color: "rgba(150,140,130,0.45)", speed: 0.8, size: 0.2, max: 0.8, kind: "smoke", gravity: 0, drag: 2, z });
+    if (e.first && this.assault) {
+      const dmg = this.assault.damage[e.target];
+      // Over the keep's flag; the rival's number sits in front of its keep, which stands against the far edge.
+      const a = keepAnchor(e.target);
+      let at = { x: a.x, y: a.y + 1.0 };
+      if (e.target === 0) {
+        const top = this.keepPt(0, keepManifest().anchors.top), q = this.cam.project(top.x, top.y, top.z);
+        at = this.cam.unprojectAt(q.x, q.y - 0.3 * q.s, 0.6);
+      }
+      fx.float(at.x, at.y, `-${dmg}`, e.target === 0 ? "#ff6b5a" : GOLD, 0.62, 1.5);
+      fx.shake = Math.min(1, fx.shake + 0.35);
+      this.onShake?.(e.target === 0 ? 2 : 1);
+      snd("crumble", 0.7);
+    }
+  }
+
+  /** A survivor on the march or striking the keep, from the assault's pose rather than the battle's. */
+  private drawStriker(bd: Body, st: Striker, z: number) {
+    if (st.gone || !this.assault) return;
+    const scale = bd.flying ? 1 + st.z * 0.08 : 1;
+    this.token(bd.kind, bd.side, st.x, st.y, z, bd.radius * scale, st.face, {
+      t: this.time, swing: this.assault.swing(st), swingA: st.face, speed: this.assault.speed(st), state: "run", id: bd.id, own: bd.side === 0, rank: bd.rank,
+    });
+  }
+
+  /** Arrows, bolts and bombs in flight to a keep, depth-sorted with everything else. */
+  private pushShots(list: Drawable[], as: Assault) {
+    for (const sh of as.shots) {
+      if (as.t < sh.t0) continue;
+      const u = Math.min(1, (as.t - sh.t0) / Math.max(0.01, sh.t1 - sh.t0));
+      const end = this.wallPt(sh.side === 0 ? 1 : 0, sh.x1, sh.y1);
+      const at = (v: number) => ({ x: sh.x0 + (end.x - sh.x0) * v, y: sh.y0 + (end.y - sh.y0) * v });
+      const lob = sh.style === "lob" || sh.style === "shell";
+      const peak = lob ? (sh.style === "shell" ? 1.4 : 0.9) : Math.min(1.2, Math.hypot(end.x - sh.x0, end.y - sh.y0) * 0.1);
+      const hAt = (v: number) => 0.45 + (end.z - 0.45) * v + peak * bump(v);
+      const p = at(u);
+      list.push({ y: p.y, layer: lob ? 2 : 1, draw: () => this.drawShot(sh, at, hAt, u) });
+    }
+  }
+
+  private drawShot(sh: Shot, at: (v: number) => { x: number; y: number }, hAt: (v: number) => number, u: number) {
+    const ctx = this.ctx, cam = this.cam, p = at(u);
+    const head = cam.project(p.x, p.y, hAt(u)), s = head.s;
+    this.shadow(p.x, p.y, sh.style === "shell" ? 0.14 : 0.08, 0.3);
+    if (sh.style === "lob" || sh.style === "shell") {
+      const r = (sh.style === "shell" ? 0.17 : 0.12) * s;
+      ctx.fillStyle = sh.style === "shell" ? "#3b4048" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(head.x, head.y, r, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = (this.time * 12) % 1 > 0.5 ? "#ffd166" : "#ff6a3d";
+      ctx.beginPath(); ctx.arc(head.x + r * 0.5, head.y - r * 0.6, Math.max(1.2, r * 0.3), 0, TAU); ctx.fill();
+      return;
+    }
+    if (sh.style === "pellet") {
+      ctx.fillStyle = "#ffe08a";
+      ctx.beginPath(); ctx.arc(head.x, head.y, Math.max(2, 0.05 * s), 0, TAU); ctx.fill();
+      return;
+    }
+    const ice = sh.style === "shard", bolt = sh.style === "bolt";
+    const back = Math.max(0, u - 0.12), t = at(back), tail = cam.project(t.x, t.y, hAt(back));
+    const ang = Math.atan2(head.y - tail.y, head.x - tail.x), len = (bolt ? 0.75 : ice ? 0.32 : 0.42) * s;
+    ctx.save();
+    ctx.translate(head.x, head.y); ctx.rotate(ang);
+    const tg = ctx.createLinearGradient(-len * 1.6, 0, 0, 0);
+    tg.addColorStop(0, "rgba(255,255,255,0)"); tg.addColorStop(1, bolt ? "rgba(255,230,190,0.8)" : ice ? "rgba(190,235,255,0.9)" : "rgba(255,255,255,0.6)");
+    ctx.strokeStyle = tg; ctx.lineWidth = (bolt ? 0.09 : ice ? 0.08 : 0.05) * s; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-len * 1.6, 0); ctx.lineTo(0, 0); ctx.stroke();
+    if (ice) {
+      ctx.fillStyle = "#e9f9ff";
+      ctx.beginPath(); ctx.moveTo(len * 0.35, 0); ctx.lineTo(0, -0.06 * s); ctx.lineTo(-len * 0.3, 0); ctx.lineTo(0, 0.06 * s); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.strokeStyle = bolt ? "#e9d7b8" : "#f4efe6"; ctx.lineWidth = (bolt ? 0.07 : 0.035) * s;
+      ctx.beginPath(); ctx.moveTo(-len, 0); ctx.lineTo(len * 0.1, 0); ctx.stroke();
+      ctx.fillStyle = "#cfd8e3";
+      ctx.beginPath(); ctx.moveTo(len * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
     }
     ctx.restore();
   }
