@@ -30,7 +30,7 @@ Click **Create**, then on the purchase's page:
 | App Store Localization (English (U.S.)) | Description | `Every act, the Gauntlet and all puzzles` (39/45) |
 | Family Sharing | | Off. Turning Family Sharing on for a non-consumable cannot be undone, so leave it off unless you want families to share the unlock. |
 | Tax Category | | Match to parent app (the default) |
-| Review Information | Screenshot | `store/screenshots/iap-review.png`: **not shot yet.** With the Shop screen in the build, run `npm run dev` in one terminal, then `node tools/store-shots.mjs --only=iap-review`. Any iPhone screenshot of the Shop screen with the price showing also works. |
+| Review Information | Screenshot | `store/screenshots/iap-review.png` (the Shop screen with the Full Army price, 1320x2868). Re-shoot with `node tools/store-shots.mjs --only=iap-review` while `npm run dev` runs. |
 | Review Information | Review Notes | the block below |
 | Promotional Image | | None (optional; only needed for App Store promotion or win-back offers) |
 
