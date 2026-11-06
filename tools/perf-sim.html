@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Muster perf</title>
+<style>html,body{margin:0;height:100%;background:#000}iframe{border:0;width:100%;height:100%;display:block}</style>
+</head>
+<body>
+<!-- Opened in the iOS Simulator's Safari by tools/perf-sim.mjs: runs tools/perf-bench.js inside the game and posts the result back. -->
+<iframe id="g" src="/?level=1"></iframe>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const post = (o) => fetch(q.get("report"), { method: "POST", mode: "no-cors", headers: { "content-type": "text/plain" }, body: JSON.stringify(o) });
+const w = document.getElementById("g").contentWindow;
+w.addEventListener?.("error", (e) => post({ error: String(e.message) }));
+try {
+  const t0 = performance.now();
+  while (!w.__game) { if (performance.now() - t0 > 120000) throw new Error("no __game"); await new Promise((r) => setTimeout(r, 200)); }
+  // Import and run the bench in the game's own realm so its modules, timers and rAF are the game's.
+  const { bench } = await w.eval('import("/tools/perf-bench.js")');
+  const res = await bench(w.__game, (p) => w.eval(`import(${JSON.stringify(p)})`), Number(q.get("secs") || 8));
+  await post({ ua: navigator.userAgent, dpr: devicePixelRatio, viewport: [innerWidth, innerHeight], ...res });
+} catch (e) { await post({ error: String(e && e.stack || e) }); }
+</script>
+</body>
+</html>
