@@ -426,9 +426,50 @@ export function playEvent(fx: Fx, e: BattleEvent, env: VfxEnv) {
       break;
     }
     case "zone":
+      if (e.kind === "thorn") {
+        // Brambles burst out of the ground; an Ascended crown seizes whatever is standing there.
+        fx.anim("dirt", e.x, e.y, { size: e.r * 1.6, max: 0.5 });
+        fx.anim("dust", e.x, e.y, { size: e.r * 2, max: 0.5, tint: "#b7c48a", layer: "ground" });
+        fx.burst(e.x, e.y, 10, { color: "#7f9a52", speed: 2.2, size: 0.07, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
+        if (e.root) {
+          fx.ring(e.x, e.y, 0.2, e.r * 1.1, 0.35, "#a8d36b", 0.05);
+          fx.float(e.x, e.y - 0.5, "SEIZED", "#c6e48b", 0.26, 0.7);
+        }
+        snd("slam", 0.35);
+        break;
+      }
       fx.anim("fireball", e.x, e.y, { size: e.r * 1.4, max: 0.5 });
       fx.anim("flash", e.x, e.y, { size: e.r * 1.8, max: 0.15, tint: "#ffb347" });
       snd("pop", 0.3);
+      break;
+    case "hook": {
+      const a = Math.atan2(e.ty - e.y, e.tx - e.x);
+      fx.anim("streak", e.x, e.y, { size: 0.3, max: 0.22, a, tint: "#d7dde6", z: 0.3, alpha: 0.8 });
+      snd("throw", 0.5);
+      break;
+    }
+    case "reel":
+      fx.anim("impact", e.x, e.y, { size: 0.9, max: 0.28, tint: STEEL, z: 0.25, a: frand(0, 6.28) });
+      fx.burst(e.x, e.y, 6, { color: "#e8eef5", speed: 2.2, size: 0.04, max: 0.25, kind: "spark", gravity: 0 });
+      fx.float(e.x, e.y - 0.5, "HOOKED", "#e8eef5", 0.24, 0.6);
+      snd("clank", 0.7);
+      break;
+    case "ward": {
+      const from = env.find(e.from);
+      if (from) fx.beam(from.x, from.y, e.x, e.y, "rgba(255,210,120,0.8)", 0.05, 0.25);
+      fx.anim("glint", e.x, e.y, { size: 0.6, max: 0.35, tint: GOLD, z: 0.5 });
+      fx.ring(e.x, e.y, 0.15, 0.55, 0.3, "#ffd27a", 0.04);
+      snd("upgrade", 0.25);
+      break;
+    }
+    case "wardbreak":
+      fx.anim("flash", e.x, e.y, { size: e.burst ? 1.6 : 0.8, max: 0.2, tint: "#ffe2a0", z: 0.3 });
+      fx.burst(e.x, e.y, e.burst ? 14 : 6, { color: "#ffe2a0", speed: e.burst ? 3.5 : 1.6, size: 0.05, max: 0.35, kind: "spark", gravity: 0 });
+      if (e.burst) {
+        fx.ring(e.x, e.y, 0.2, 1.3, 0.35, "#fff2b8", 0.06);
+        fx.float(e.x, e.y - 0.55, "BEACON", "#fff2b8", 0.26, 0.7);
+        snd("pop", 0.6);
+      } else snd("clank", 0.3);
       break;
     case "revive":
       fx.anim("pillar", e.x, e.y, { size: 2.0, max: 0.9, tint: GOLD });

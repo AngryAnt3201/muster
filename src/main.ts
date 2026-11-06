@@ -167,7 +167,7 @@ function campaign(focusAct?: number) {
         stars(best),
       ]);
       if (l.boss) n.append(el("span", { class: "node-boss" }, ["Boss"]));
-      if (l.unlock && lopen) n.append(unitIcon(l.unlock, 24));
+      if (l.unlock && lopen) for (const k of l.unlocks ?? [l.unlock]) n.append(unitIcon(k, 24));
       if (current) n.append(el("span", { class: "node-name" }, [l.name]));
       n.addEventListener("click", () => {
         if (swiped) return;
@@ -217,7 +217,7 @@ function levelSheet(l: LevelDef) {
     el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
   ]);
-  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${k === l.unlock ? "new" : ""}`).frame));
+  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${(l.unlocks ?? [l.unlock]).includes(k) ? "new" : ""}`).frame));
   sheet(el("div", {}, [
     el("div", { class: "sheet-kicker" }, [`Act ${l.act} · Level ${l.id}`]),
     el("h2", {}, [l.name]),

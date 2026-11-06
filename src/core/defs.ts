@@ -13,7 +13,8 @@ export type UnitKind =
   | "mine" | "blades" | "ranger" | "bulwark" | "medic" | "grenadier"
   | "shade" | "lancer" | "ballista" | "hive" | "storm" | "golem"
   | "sapper" | "harrier" | "banner" | "rime" | "ravager" | "grave"
-  | "bombard" | "tinker" | "duelist" | "pikeman" | "keg" | "trickster";
+  | "bombard" | "tinker" | "duelist" | "pikeman" | "keg" | "trickster"
+  | "hook" | "thorn" | "outrider" | "lamp";
 /** Bodies that exist only in battle. */
 export type SpawnKind = "mite" | "golemling" | "thrall" | "turret" | "decoy" | "queen";
 export type BodyKind = UnitKind | SpawnKind;
@@ -62,6 +63,10 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   pikeman: { kind: "pikeman", name: "Pikeman", short: "Long reach. Braces and stops a charge cold.", role: "tank", cost: 3, hp: 210, dmg: 20, range: 1.0, speed: 1.25, radius: 0.28, cooldown: 1.25, threat: 2 },
   keg: { kind: "keg", name: "Kegrunner", short: "Sprints into the thickest crowd and blows.", role: "siege", cost: 3, hp: 110, dmg: 140, range: 1.35, speed: 3.8, radius: 0.24, cooldown: 0, threat: 1 },
   trickster: { kind: "trickster", name: "Trickster", short: "Throws out decoys that soak up attacks.", role: "assassin", cost: 4, hp: 120, dmg: 25, range: 0.45, speed: 2.2, radius: 0.25, cooldown: 0.8, threat: 3 },
+  hook: { kind: "hook", name: "Hookwarden", short: "Chains a back-liner and drags it into the line.", role: "tank", cost: 4, hp: 300, dmg: 24, range: 0.5, speed: 1.25, radius: 0.3, cooldown: 1.1, threat: 3 },
+  thorn: { kind: "thorn", name: "Thornweaver", short: "Sows brambles where the enemy is heading.", role: "caster", cost: 4, hp: 120, dmg: 22, range: 4.2, speed: 1.35, radius: 0.26, cooldown: 3.0, threat: 3 },
+  outrider: { kind: "outrider", name: "Outrider", short: "Mounted bow. Rides rings round its prey.", role: "ranged", cost: 4, hp: 165, dmg: 19, range: 3.4, speed: 3.0, radius: 0.34, cooldown: 1.0, threat: 3 },
+  lamp: { kind: "lamp", name: "Lamplighter", short: "Lantern wards soak the next blows.", role: "support", cost: 3, hp: 130, dmg: 10, range: 2.6, speed: 1.5, radius: 0.25, cooldown: 5.0, threat: 1 },
 };
 
 export interface BodyDef { name: string; hp: number; dmg: number; range: number; speed: number; radius: number; cooldown: number; threat: number; }
@@ -104,6 +109,10 @@ export const ABILITIES: Record<UnitKind, { name: string; text: string }> = {
   pikeman: { name: "Hedgehog", text: "Holds its pikes up against any melee and throws back 30% of the harm." },
   keg: { name: "Chain Keg", text: "Drops a second keg that blows a second later." },
   trickster: { name: "Mirror Hall", text: "Four decoys, and they explode when struck." },
+  hook: { name: "Iron Tether", text: "Hooks two foes at once and holds each catch stunned for a second." },
+  thorn: { name: "Bramble Crown", text: "Patches grow wider, last longer and seize whatever they sprout under." },
+  outrider: { name: "Running Fire", text: "Looses two arrows a shot, at two different foes when it can." },
+  lamp: { name: "Beacon", text: "Wards four allies, and a ward that breaks bursts and dazzles foes nearby." },
 };
 
 export const UNIT_KINDS = Object.keys(UNITS) as UnitKind[];

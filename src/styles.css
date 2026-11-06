@@ -472,6 +472,9 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 .map .node-id { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,0.35); }
 .map .node .stars { margin-top: -9px; padding: 1px 4px; border-radius: 9px; background: rgba(15,20,30,0.78); font-size: 11px; line-height: 13px; }
 .map .node .unit-icon { position: absolute; top: -8px; right: -12px; border-radius: 8px; background: rgba(15,20,30,0.8); box-shadow: 0 0 0 2px #ffd166; }
+/* A level that brings two units shows the second badge on the other shoulder. */
+.node .unit-icon ~ .unit-icon { right: auto; left: -9px; }
+.map .node .unit-icon ~ .unit-icon { right: auto; left: -12px; }
 .map .node.done .node-face { background: radial-gradient(circle at 50% 35%, #ffe08a, #e1a22c 70%); box-shadow: inset 0 0 0 3px #6b4405, inset 0 4px 0 rgba(255,255,255,0.45), 0 4px 0 #5a3803, 0 7px 8px rgba(0,0,0,0.35); }
 .map .node.boss { width: 72px; height: 72px; margin: -36px 0 0 -36px; }
 .map .node.boss .node-face { width: 66px; height: 66px; background: radial-gradient(circle at 50% 35%, #ff9b7c, #c8371f 70%); box-shadow: inset 0 0 0 3px #5a140a, inset 0 4px 0 rgba(255,255,255,0.35), 0 5px 0 #4a0f07, 0 8px 10px rgba(0,0,0,0.4); }

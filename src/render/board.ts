@@ -699,6 +699,7 @@ export class BoardView {
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
       const left = Math.min(1, (z.until - b.time) / 0.6);
+      if (z.kind === "thorn") { this.drawBrambles(z, left); continue; }
       const fl = 0.75 + 0.25 * Math.sin(this.time * 17 + z.id);
       this.ground(z.x, z.y, (g) => {
         const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
@@ -907,7 +908,69 @@ export class BoardView {
       ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
       ctx.beginPath(); ctx.arc(at.x + at.r * 0.8, at.y - at.r * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
     }
+    if (bd.alive && (bd.ward ?? 0) > 0) {
+      // Lantern ward: a warm bubble that thins as it soaks up blows.
+      const fade = Math.min(1, (bd.wardT ?? 1) / 0.5);
+      const pulse = 0.85 + 0.15 * Math.sin(this.time * 6 + bd.id);
+      ctx.save();
+      ctx.globalAlpha = 0.75 * fade;
+      ctx.strokeStyle = bd.wardBurst ? "#fff2b8" : "#ffd27a"; ctx.lineWidth = 2;
+      ctx.fillStyle = "rgba(255,214,120,0.14)";
+      ctx.beginPath(); ctx.ellipse(at.x, at.y - at.r * 0.35, at.r * 1.3 * pulse, at.r * 1.45 * pulse, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    if (bd.alive && bd.kind === "hook" && (bd.state === "cast" || bd.state === "reel")) {
+      // The Hookwarden's chain, taut from its fist to each catch.
+      for (const id of bd.hits ?? []) {
+        const v = b.bodies.find((o) => o.id === id);
+        if (!v || !v.alive) continue;
+        const vx = v.x, vy = v.y;
+        let tx = vx, ty = vy;
+        if (bd.state === "cast") {
+          // In flight: the hook runs out from the fist toward the target.
+          const k = Math.max(0, Math.min(1, 1 - (bd.budget - b.time) / Math.max(0.05, Math.hypot(vx - x, vy - y) / 12)));
+          tx = x + (vx - x) * k; ty = y + (vy - y) * k;
+        }
+        const p0 = this.cam.project(x, y, 0.35), p1 = this.cam.project(tx, ty, 0.3);
+        ctx.save();
+        ctx.strokeStyle = "#3b3f48"; ctx.lineWidth = Math.max(2, p0.s * 0.07); ctx.setLineDash([p0.s * 0.09, p0.s * 0.05]);
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+        ctx.strokeStyle = bd.rank >= 4 ? "#fff2b8" : "#b9c2cf"; ctx.lineWidth = Math.max(1, p0.s * 0.035);
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+        ctx.restore();
+      }
+    }
     if (bd.alive && bd.stun > 0.05) this.drawStun(at.x, at.y - at.r * 1.1, at.r, tex);
+  }
+
+  /** A Thornweaver's bramble patch: a mossy ground stain with thorned runners curling across it. */
+  private drawBrambles(z: { id: number; x: number; y: number; r: number; until: number }, left: number) {
+    this.ground(z.x, z.y, (g) => {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
+      gr.addColorStop(0, `rgba(96,122,58,${0.5 * left})`);
+      gr.addColorStop(0.7, `rgba(74,96,44,${0.35 * left})`);
+      gr.addColorStop(1, "rgba(60,80,40,0)");
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(0, 0, z.r, 0, TAU); g.fill();
+      const n = Math.max(5, Math.round(z.r * 7));
+      g.lineCap = "round";
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * TAU + z.id * 1.3, rr = z.r * (0.55 + 0.35 * ((i * 7 + z.id) % 3) / 2);
+        const sway = Math.sin(this.time * 2 + i) * 0.04;
+        const mx = Math.cos(a0 + 0.5 + sway) * rr * 0.6, my = Math.sin(a0 + 0.5 + sway) * rr * 0.6;
+        const ex = Math.cos(a0) * rr, ey = Math.sin(a0) * rr;
+        g.strokeStyle = `rgba(58,44,30,${0.95 * left})`; g.lineWidth = 0.07;
+        g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+        g.strokeStyle = `rgba(122,150,72,${0.9 * left})`; g.lineWidth = 0.035;
+        g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+        // thorns along the runner
+        g.fillStyle = `rgba(236,224,196,${0.9 * left})`;
+        for (const t of [0.45, 0.75]) {
+          const px = 2 * (1 - t) * t * mx + t * t * ex, py = 2 * (1 - t) * t * my + t * t * ey;
+          g.beginPath(); g.moveTo(px - 0.025, py); g.lineTo(px + Math.cos(a0 + 1.6) * 0.07, py + Math.sin(a0 + 1.6) * 0.07); g.lineTo(px + 0.025, py); g.fill();
+        }
+      }
+    });
   }
 
   private drawFuse(x: number, y: number, keg: boolean, urgent = false) {

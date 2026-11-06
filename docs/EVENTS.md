@@ -35,7 +35,11 @@ New in v2:
 - `light {id, x, y}`: a keg's fuse is lit (it starts its run).
 - `kegdrop {x, y, at, side}`: Chain Keg left a second keg at (x, y) that blows at battle time `at` (also in `battle.fuses`).
 - `bomblets {x, y, pts, at, side}`: Cluster (3) or Shrapnel (4) bomblets thrown from (x, y) to `pts`, bursting at time `at` (also in `battle.fuses`).
-- `zone {id, x, y, r, until, side}`: Firebomb burning ground until battle time `until` (also in `battle.zones`).
+- `zone {id, x, y, r, until, side, kind, root}`: ground that hurts the other side until battle time `until` (also in `battle.zones`). `kind` `fire` (Firebomb) or `thorn` (Thornweaver brambles, which also snare); `root` = Bramble Crown seized everything under it on sprouting.
+- `hook {id, target, x, y, tx, ty, side}`: Hookwarden `id` threw its chain from (x, y) at `target` standing at (tx, ty). Iron Tether throws two.
+- `reel {id, target, x, y}`: the chain caught `target` at (x, y); it is dragged to the Hookwarden.
+- `ward {id, from, x, y, amt}`: Lamplighter `from` put a ward of `amt` on `id`.
+- `wardbreak {id, x, y, side, burst}`: `id`'s ward was used up. `burst` = a Beacon ward that went off, knocking foes back.
 - `revive {id, from, x, y}`: Ascended medic `from` brought `id` back at half health (no `death` was sent).
 - `volley {id, x, y, a}`: an Ascended ranger loosed three arrows fanned around angle a.
 - `twin {id, x, y, a}`: an Ascended ballista fired two bolts.
@@ -51,15 +55,17 @@ New in v2:
 - `braced`: pikeman has its pikes set.
 - `buff`: > 0 while inside a Standard Bearer aura (attacks 25% faster). `rally`: > 0 while inside an Ascended (Rally) aura (+20% damage).
 - `parryCd`: duelist parry ready when <= 0 (a glint).
+- `ward`: Lamplighter ward left to soak (draw a warm bubble while > 0); `wardT` seconds left on it; `wardBurst` = a Beacon ward.
+- `snare`: seconds left tangled in brambles (moves at 45% speed).
 - `dmg` / `baseDmg`: current damage (Rally adds 20%) and the base.
 - `hand`: +1/-1, the way it circles (internal).
-- `state` by kind: mine `armed`/`fuse`/`spent`; lancer `aim`/`charge`/`wheel`; shade `flank`/`fight`; sapper `burrow`/`fight`; harrier `circle`/`dive`/`climb`; tinker `idle`/`build` (building at `ax, ay` for 1.2 s); keg `run`/`reel` (knocked back by pikes)/`spent`.
+- `state` by kind: mine `armed`/`fuse`/`spent`; lancer `aim`/`charge`/`wheel`; shade `flank`/`fight`; sapper `burrow`/`fight`; harrier `circle`/`dive`/`climb`; tinker `idle`/`build` (building at `ax, ay` for 1.2 s); keg `run`/`reel` (knocked back by pikes)/`spent`; hook `cast` (chain in flight, lands at battle time `budget`)/`reel` (dragging the bodies in `hits`), else fighting.
 - Ravager fury needs no field: it is `1 - hp/maxHp` (attacks up to 3x faster near death).
 - Decoys are illusions of their trickster: draw them as the trickster (same team, same rank). They don't count as survivors.
 - Turrets are structures built in battle; they don't count as survivors (a side left with only turrets has lost).
 
 ## Battle fields
-- `zones: Zone[]`: burning ground now on the field: `{id, x, y, r, side, until, dps}`. Removed when `time >= until`.
+- `zones: Zone[]`: burning ground or brambles now on the field: `{id, kind, x, y, r, side, until, dps}`. Removed when `time >= until`.
 - `fuses: Fuse[]`: blasts still to go off: `{x, y, at, r, kind, side}` (bomblets, shrapnel, chain keg). Draw a sputtering bomb until `at`.
 
 ## Projectiles (`battle.projs`)

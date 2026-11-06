@@ -67,6 +67,14 @@ export interface Body {
   once: boolean;
   /** Which way it circles (+1/-1), mirrored between the sides so neither has the better hand. */
   hand: number;
+  /** Lamplighter ward: damage it still soaks up before health (0 = none). */
+  ward: number;
+  /** Seconds left on the ward. */
+  wardT: number;
+  /** The ward was cast by an Ascended Lamplighter (Beacon): it bursts when broken. */
+  wardBurst: boolean;
+  /** Seconds left caught in brambles (moves at 45% speed). */
+  snare: number;
   /** Render-only: last swing time and angle. */
   swing: number;
   swingA: number;
@@ -94,8 +102,9 @@ export interface Proj {
 }
 
 export type BoomKind = "mine" | "grenade" | "slam" | "quake" | "erupt" | "shell" | "shrapnel" | "bomblet" | "keg" | "pop" | "talon" | "mirror";
-/** Burning ground left by a Firebomb: hurts the other side's ground bodies inside it. */
-export interface Zone { id: number; x: number; y: number; r: number; side: Side; until: number; dps: number; tick: number; }
+/** Ground that hurts the other side's ground bodies inside it: a Firebomb's flames, or a Thornweaver's brambles (which also snare). */
+export type ZoneKind = "fire" | "thorn";
+export interface Zone { id: number; kind: ZoneKind; x: number; y: number; r: number; side: Side; until: number; dps: number; tick: number; }
 /** A blast waiting to go off (Cluster bomblets, Shrapnel, Chain Keg). */
 export interface Fuse { x: number; y: number; at: number; r: number; dmg: number; side: Side; kind: BoomKind; knock: number; stun: number; }
 
@@ -129,7 +138,11 @@ export type BattleEvent =
   | { t: "light"; id: number; x: number; y: number }
   | { t: "kegdrop"; x: number; y: number; at: number; side: Side }
   | { t: "bomblets"; x: number; y: number; pts: [number, number][]; at: number; side: Side }
-  | { t: "zone"; id: number; x: number; y: number; r: number; until: number; side: Side }
+  | { t: "zone"; id: number; x: number; y: number; r: number; until: number; side: Side; kind?: ZoneKind; root?: boolean }
+  | { t: "hook"; id: number; target: number; x: number; y: number; tx: number; ty: number; side: Side }
+  | { t: "reel"; id: number; target: number; x: number; y: number }
+  | { t: "ward"; id: number; from: number; x: number; y: number; amt: number }
+  | { t: "wardbreak"; id: number; x: number; y: number; side: Side; burst: boolean }
   | { t: "revive"; id: number; from: number; x: number; y: number }
   | { t: "volley"; id: number; x: number; y: number; a: number }
   | { t: "twin"; id: number; x: number; y: number; a: number }
@@ -171,9 +184,9 @@ const turnToward = (a: number, b: number, max: number) => {
 const fwd = (side: Side) => (side === 0 ? -1 : 1);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-const ROLE_BACKLINE = new Set<BodyKind>(["ranger", "medic", "grenadier", "storm", "ballista", "hive", "rime", "bombard", "banner", "tinker", "grave", "turret"]);
+const ROLE_BACKLINE = new Set<BodyKind>(["ranger", "medic", "grenadier", "storm", "ballista", "hive", "rime", "bombard", "banner", "tinker", "grave", "turret", "thorn", "lamp"]);
 /** Bodies whose attacks can reach a flyer. */
-export const AIR_HITTERS = new Set<BodyKind>(["ranger", "ballista", "storm", "rime", "turret", "harrier"]);
+export const AIR_HITTERS = new Set<BodyKind>(["ranger", "ballista", "storm", "rime", "turret", "harrier", "outrider"]);
 export const canHitAir = (k: BodyKind) => AIR_HITTERS.has(k);
 const MELEE_ROLES = new Set<Role>(["melee", "tank", "cavalry", "siege", "assassin"]);
 /** Fights hand to hand (what a Duelist hunts and a Hedgehog throws damage back at). */
@@ -186,6 +199,13 @@ const RAISE_R = 3; // Gravecaller reach
 const REVIVE_R = 3;
 const BOMBARD_MIN = 2.5;
 const THRALL_CAP = 4;
+const HOOK_R = 4.0; // Hookwarden chain reach
+const HOOK_CD = 5.5;
+const HOOK_SPEED = 12; // chain flight, units per second
+const REEL_SPEED = 8;
+const WARD_HP = 55; // Lamplighter ward at rank 1 (scaled like damage by rank)
+const WARD_TIME = 6;
+const SNARE = 0.45; // speed kept inside brambles
 
 export class Battle {
   bodies: Body[] = [];
@@ -285,6 +305,7 @@ export class Battle {
       flying: kind === "harrier",
       z: kind === "harrier" ? 1.2 : 0,
       slow: 0, frozen: 0, braced: false, buff: 0, rally: 0, parryCd: 0, strikes: 0, aux: 0, once: false,
+      ward: 0, wardT: 0, wardBurst: false, snare: 0,
       hand: (x <= W / 2 ? 1 : -1) * -fwd(side),
       swing: -9, swingA: 0,
     };
@@ -389,6 +410,19 @@ export class Battle {
         if (hyp(dx, dy) <= 1.5 + target.radius && dx * Math.cos(w.face) + dy * Math.sin(w.face) < 0) { amount *= 0.7; shielded = true; break; }
       }
     }
+    if (target.ward > 0) {
+      // A lantern ward soaks the blow first.
+      const soak = Math.min(target.ward, amount);
+      target.ward -= soak;
+      amount -= soak;
+      if (target.ward <= 0.01) this.breakWard(target);
+      if (amount <= 0) {
+        target.flash = 0.06;
+        this.emit({ t: "hit", id: target.id, x: target.x, y: target.y, dmg: Math.round(soak), side, shielded: true, big });
+        return 0;
+      }
+      shielded = true;
+    }
     target.hp -= amount;
     target.flash = 0.12;
     if (target.kind === "shade" && target.cloak > 0) { target.cloak = 0; target.hidden = false; }
@@ -405,6 +439,18 @@ export class Battle {
       }
     }
     return amount;
+  }
+  /** A ward used up: gone, and an Ascended one (Beacon) bursts, knocking back and dazzling foes close by. */
+  private breakWard(b: Body) {
+    const burst = b.wardBurst;
+    b.ward = 0; b.wardT = 0; b.wardBurst = false;
+    this.emit({ t: "wardbreak", id: b.id, x: b.x, y: b.y, side: b.side, burst });
+    if (!burst) return;
+    for (const e of this.enemiesNear(b.side, b.x, b.y, 1.1)) {
+      const d = hyp(e.x - b.x, e.y - b.y) || 0.001;
+      this.damage(e, 60, b, b.side);
+      this.push(e, (e.x - b.x) / d, (e.y - b.y) / d, 2.0, 0.6);
+    }
   }
   private kill(b: Body) {
     if (!b.alive) return;
@@ -611,6 +657,8 @@ export class Battle {
       if (b.slow > 0) b.slow -= dt;
       if (b.buff > 0) b.buff -= dt;
       if (b.rally > 0) b.rally -= dt;
+      if (b.snare > 0) b.snare -= dt;
+      if (b.wardT > 0) { b.wardT -= dt; if (b.wardT <= 0) b.ward = 0; }
       b.dmg = b.rally > 0 ? b.baseDmg * 1.2 : b.baseDmg;
       let want: [number, number] = [0, 0];
       if (b.frozen > 0) b.frozen -= dt;
@@ -618,6 +666,7 @@ export class Battle {
       else want = this.act(b, dt);
       if (b.structure) { b.vx = 0; b.vy = 0; continue; }
       if (b.slow > 0) want = [want[0] * 0.5, want[1] * 0.5];
+      if (b.snare > 0 && !b.flying) want = [want[0] * SNARE, want[1] * SNARE];
       if (!b.flying && !b.burrowed) want = this.avoid(b, want);
       const accel = b.kind === "lancer" ? 10 : b.kind === "golem" || b.kind === "golemling" ? 3.5 : 9;
       const dvx = want[0] - b.vx, dvy = want[1] - b.vy, dv = hyp(dvx, dvy), lim = accel * b.speed * dt + 0.02;
@@ -705,7 +754,10 @@ export class Battle {
       z.tick -= dt;
       if (z.tick > 0) continue;
       z.tick += 0.25;
-      for (const e of this.enemiesNear(z.side, z.x, z.y, z.r)) this.damage(e, z.dps * 0.25, null, z.side);
+      for (const e of this.enemiesNear(z.side, z.x, z.y, z.r)) {
+        if (z.kind === "thorn") e.snare = Math.max(e.snare, 0.35);
+        this.damage(e, z.dps * 0.25, null, z.side);
+      }
     }
   }
 
@@ -775,6 +827,10 @@ export class Battle {
       case "keg": return this.actKeg(b);
       case "trickster": return this.actTrickster(b);
       case "decoy": return this.actDecoy(b);
+      case "hook": return this.actHook(b, dt);
+      case "thorn": return this.actThorn(b);
+      case "outrider": return this.actOutrider(b);
+      case "lamp": return this.actLamp(b);
     }
   }
 
@@ -1603,6 +1659,184 @@ export class Battle {
     return this.seek(b, t.x + Math.cos(a) * r, t.y + Math.sin(a) * r, 1, 0.3);
   }
 
+  /**
+   * Holds the line hand to hand; every few seconds throws a chain at the softest back-liner
+   * in reach and reels it in to the front (Iron Tether: two at once, each held stunned on arrival).
+   * State: "" fighting, "cast" chain in flight (lands at `budget`), "reel" dragging the `hits`.
+   */
+  private actHook(b: Body, dt: number): [number, number] {
+    if (b.state === "cast") {
+      if (this.time < b.budget) return [0, 0];
+      const caught: number[] = [];
+      for (const id of b.hits) {
+        const v = this.byId(id);
+        if (!v || !this.targetable(b, v) || v.structure || v.flying || this.dist(b, v) > HOOK_R * 1.25) continue;
+        caught.push(id);
+        this.damage(v, b.dmg, b, b.side, false, b);
+        if (v.alive) this.emit({ t: "reel", id: b.id, target: v.id, x: v.x, y: v.y });
+      }
+      b.hits = caught;
+      b.state = caught.length ? "reel" : "";
+      b.t = 0;
+      return [0, 0];
+    }
+    if (b.state === "reel") {
+      let pulling = false;
+      for (const id of b.hits) {
+        const v = this.byId(id);
+        if (!v || !v.alive || v.burrowed || v.flying) continue;
+        const dx = b.x - v.x, dy = b.y - v.y, d = hyp(dx, dy) || 0.001;
+        const stop = b.radius + v.radius + 0.12;
+        if (d <= stop) continue;
+        pulling = true;
+        const step = Math.min(REEL_SPEED * dt, d - stop);
+        v.x = clamp(v.x + (dx / d) * step, v.radius, W - v.radius);
+        v.y = clamp(v.y + (dy / d) * step, v.radius, H - v.radius);
+        v.vx = 0; v.vy = 0;
+        v.stun = Math.max(v.stun, 0.05);
+      }
+      if (pulling && b.t < 1.4) return [0, 0];
+      if (b.rank >= 4) for (const id of b.hits) { const v = this.byId(id); if (v && v.alive) v.stun = Math.max(v.stun, 1.0); }
+      b.hits = [];
+      b.state = "";
+    }
+    const near = this.nearestEnemy(b);
+    if (!near) return [0, 0];
+    if (b.aux <= 0) {
+      // Who is worth the chain: soft, behind the line, not already in our face.
+      const n = b.rank >= 4 ? 2 : 1;
+      const picks: { e: Body; s: number }[] = [];
+      for (const e of this.bodies) {
+        if (!this.targetable(b, e) || e.structure || e.flying || e.kind === "mine" || e.kind === "decoy") continue;
+        const d = this.dist(b, e);
+        if (d > HOOK_R || this.gap(b, e) < 1.0) continue;
+        const s = (ROLE_BACKLINE.has(e.kind) ? 3 : 0) + (1 - e.hp / e.maxHp) - d * 0.25 - (isSpawn(e.kind) ? 2 : 0);
+        picks.push({ e, s });
+      }
+      picks.sort((p, q) => q.s - p.s || p.e.id - q.e.id);
+      const chosen = picks.slice(0, n).map((p) => p.e);
+      if (chosen.length) {
+        b.aux = HOOK_CD;
+        b.state = "cast";
+        b.hits = chosen.map((e) => e.id);
+        const far = Math.max(...chosen.map((e) => this.dist(b, e)));
+        b.budget = this.time + far / HOOK_SPEED;
+        b.face = Math.atan2(chosen[0].y - b.y, chosen[0].x - b.x);
+        b.swing = this.time; b.swingA = b.face;
+        for (const e of chosen) this.emit({ t: "hook", id: b.id, target: e.id, x: b.x, y: b.y, tx: e.x, ty: e.y, side: b.side });
+        return [0, 0];
+      }
+      b.aux = 0.4; // look again shortly
+    }
+    const gap = this.gap(b, near);
+    if (gap <= b.range && b.cd <= 0) { b.cd = b.cooldown; this.melee(b, near, b.dmg, 1.2); }
+    if (gap < b.range * 0.6) return [0, 0];
+    return this.seek(b, near.x, near.y, 1, 0.4);
+  }
+
+  /** Sows bramble patches where the enemy is about to walk; keeps well back (Bramble Crown: wider, longer, and seizes on sprouting). */
+  private actThorn(b: Body): [number, number] {
+    const near = this.nearestEnemy(b, { taunt: false });
+    if (!near) return [0, 0];
+    const asc = b.rank >= 4;
+    const r = asc ? 1.25 : 0.95;
+    if (b.cd <= 0) {
+      const lead = 1.1;
+      let best: { x: number; y: number } | undefined, score = 0;
+      for (const e of this.bodies) {
+        if (!this.targetable(b, e) || e.flying || e.structure) continue;
+        const d = this.dist(b, e);
+        if (d > b.range) continue;
+        const px = clamp(e.x + e.vx * lead, 0.3, W - 0.3), py = clamp(e.y + e.vy * lead, 0.3, H - 0.3);
+        let s = 0;
+        for (const o of this.bodies) {
+          if (!this.targetable(b, o) || o.flying || o.structure) continue;
+          if (hyp(o.x - px, o.y - py) < r + o.radius) s += isSpawn(o.kind) ? 0.5 : 1;
+        }
+        if (s > score) { score = s; best = { x: px, y: py }; }
+      }
+      if (best) {
+        b.cd = b.cooldown;
+        b.face = Math.atan2(best.y - b.y, best.x - b.x);
+        b.swing = this.time; b.swingA = b.face;
+        const z: Zone = { id: this.nextId++, kind: "thorn", x: best.x, y: best.y, r, side: b.side, until: this.time + (asc ? 5 : 3.5), dps: b.dmg, tick: 0.25 };
+        this.zones.push(z);
+        this.emit({ t: "zone", id: z.id, x: z.x, y: z.y, r: z.r, until: z.until, side: z.side, kind: "thorn", root: asc });
+        if (asc) for (const e of this.enemiesNear(b.side, z.x, z.y, z.r)) if (!e.structure) e.stun = Math.max(e.stun, 0.8);
+      }
+    }
+    const dn = this.gap(b, near);
+    if (dn < 1.6) return this.flee(b, near, 0.9);
+    if (dn > b.range - 0.5) return this.seek(b, near.x, near.y, 0.9, 0.4);
+    return [0, 0];
+  }
+
+  /** Mounted archer: rides a ring round its mark at range, shooting on the move (Running Fire: two arrows, two foes). */
+  private actOutrider(b: Body): [number, number] {
+    const near = this.nearestEnemy(b, { taunt: false });
+    if (!near) return [0, 0];
+    let t = this.byId(b.target);
+    if (!t || !this.targetable(b, t) || this.dist(b, t) > b.range * 1.3) { t = near; b.target = near.id; }
+    const d = this.dist(b, t);
+    if (d <= b.range && b.cd <= 0) {
+      b.cd = b.cooldown;
+      b.swing = this.time; b.swingA = Math.atan2(t.y - b.y, t.x - b.x);
+      this.shoot(b, "arrow", t, 11);
+      if (b.rank >= 4) {
+        const t2 = this.nearestEnemy(b, { max: b.range, taunt: false, filter: (e) => e !== t }) ?? t;
+        this.shoot(b, "arrow", t2, 11);
+      }
+    }
+    // Melee on its heels: break away at full gallop.
+    const chaser = this.nearestEnemy(b, { max: 1.3 + b.radius, taunt: false, filter: (e) => isMeleeKind(e.kind) });
+    if (chaser) return this.flee(b, chaser, 1);
+    if (d > b.range * 0.95) return this.seek(b, t.x, t.y, 1, 0.3);
+    // Circle: aim for a point a little way round the ring; flip direction off a wall.
+    const ring = b.range * 0.8;
+    const a = Math.atan2(b.y - t.y, b.x - t.x) + b.hand * 0.8;
+    const px = t.x + Math.cos(a) * ring, py = t.y + Math.sin(a) * ring;
+    const m = 0.6;
+    if ((px < m || px > W - m || py < m || py > H - m) && b.aux <= 0) { b.hand = -b.hand; b.aux = 1.2; }
+    return this.seek(b, clamp(px, m, W - m), clamp(py, m, H - m), 0.85, 0.3);
+  }
+
+  /** Lantern wards on the allies under the most pressure; plinks with sparks between casts (Beacon: four wards that burst when broken). */
+  private actLamp(b: Body): [number, number] {
+    const threat = this.nearestEnemy(b, { taunt: false });
+    if (b.cd <= 0 && threat) {
+      const n = b.rank >= 4 ? 4 : 2;
+      const picks: { a: Body; s: number }[] = [];
+      const pool = this.allies(b).filter((a) => !a.structure && !a.burrowed && a.ward <= 0);
+      if (!pool.length && b.ward <= 0) pool.push(b);
+      for (const a of pool) {
+        const d = this.dist(b, a);
+        if (d > b.range + 1.2) continue;
+        let danger = 0;
+        for (const e of this.bodies) if (this.targetable(b, e)) { const de = this.dist(a, e); if (de < 3.5) danger += 1 / (de + 0.5); }
+        if (danger < 0.2) continue;
+        picks.push({ a, s: danger + (1 - a.hp / a.maxHp) - (isSpawn(a.kind) ? 0.6 : 0) });
+      }
+      picks.sort((p, q) => q.s - p.s || p.a.id - q.a.id);
+      const chosen = picks.slice(0, n);
+      if (chosen.length) {
+        b.cd = b.cooldown;
+        b.swing = this.time; b.swingA = Math.atan2(chosen[0].a.y - b.y, chosen[0].a.x - b.x);
+        const amt = WARD_HP * rankDmg(b.rank) * b.healMul;
+        for (const { a } of chosen) {
+          a.ward = amt; a.wardT = WARD_TIME; a.wardBurst = b.rank >= 4;
+          this.emit({ t: "ward", id: a.id, from: b.id, x: a.x, y: a.y, amt: Math.round(amt) });
+        }
+      } else b.cd = 0.3;
+    }
+    if (threat && b.aux <= 0 && this.dist(b, threat) <= b.range) {
+      b.aux = 1.3;
+      b.face = Math.atan2(threat.y - b.y, threat.x - b.x);
+      this.shoot(b, "pellet", threat, 9);
+    }
+    if (threat && this.gap(b, threat) < 1.5) return this.flee(b, threat, 1);
+    return this.hangBack(b, undefined, 1.4, threat);
+  }
+
   // ------------------------------------------------------------ projectiles
   private newProj(kind: ProjKind, b: Body, vx: number, vy: number): Proj {
     const p: Proj = {
@@ -1635,9 +1869,9 @@ export class Battle {
     }
     this.explode(p.tx, p.ty, 0.95, p.dmg, p.side, "grenade", 1.6, 0.2);
     if (p.fx === "fire") {
-      const z: Zone = { id: this.nextId++, x: p.tx, y: p.ty, r: 0.95, side: p.side, until: this.time + 3, dps: p.dmg * 0.18, tick: 0.25 };
+      const z: Zone = { id: this.nextId++, kind: "fire", x: p.tx, y: p.ty, r: 0.95, side: p.side, until: this.time + 3, dps: p.dmg * 0.18, tick: 0.25 };
       this.zones.push(z);
-      this.emit({ t: "zone", id: z.id, x: z.x, y: z.y, r: z.r, until: z.until, side: z.side });
+      this.emit({ t: "zone", id: z.id, x: z.x, y: z.y, r: z.r, until: z.until, side: z.side, kind: "fire" });
     }
   }
   private stepProjectiles(dt: number) {

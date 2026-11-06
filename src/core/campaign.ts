@@ -12,6 +12,8 @@ const UNLOCKS: [number, UnitKind][] = [
   [11, "ballista"], [14, "shade"], [16, "hive"], [19, "storm"], [22, "golem"],
   [31, "sapper"], [32, "harrier"], [33, "banner"], [34, "rime"], [35, "ravager"], [36, "grave"],
   [37, "bombard"], [38, "tinker"], [39, "duelist"], [40, "pikeman"], [41, "keg"], [42, "trickster"],
+  // 1.1: four more join late in Act 7, alongside that level's first unlock.
+  [39, "lamp"], [40, "thorn"], [41, "hook"], [42, "outrider"],
 ];
 export const rosterAt = (id: number): UnitKind[] => UNLOCKS.filter(([at]) => at <= id).map(([, k]) => k);
 
@@ -167,11 +169,13 @@ const DRAFTS: Draft[] = [
 export function buildLevel(index: number, power?: number): LevelDef {
   const { foeHp, hp: hpPair, power: tuned = 1, mods, ...d } = DRAFTS[index];
   const id = index + 1;
-  const unlock = UNLOCKS.find(([at]) => at === id)?.[1];
+  const fresh = UNLOCKS.filter(([at]) => at === id).map(([, k]) => k);
+  const unlock = fresh[0];
   const p = power ?? tuned;
   const foeMods = mods?.[1] ?? {};
   const scaled = p === 1 ? mods?.[1] : { ...foeMods, hpMul: +((foeMods.hpMul ?? 1) * p).toFixed(3), dmgMul: +((foeMods.dmgMul ?? 1) * p).toFixed(3) };
   const out: LevelDef = { id, act: Math.floor(index / 6) + 1, roster: rosterAt(id), unlock, hp: hpPair ?? [400, foeHp], ...d };
+  if (fresh.length > 1) out.unlocks = fresh;
   if (mods?.[0] || scaled) out.mods = [mods?.[0], scaled];
   return out;
 }
