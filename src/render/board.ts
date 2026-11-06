@@ -26,6 +26,8 @@ export type Scene = DeployScene | BattleScene;
 
 export interface Rect { x: number; y: number; w: number; h: number; }
 
+/** Seconds the leftovers (mid-death bodies, illusions) take to clear once the assault begins. */
+const VANISH = 0.4;
 const TAU = Math.PI * 2;
 const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
 const ICE = "#bfe9ff";
@@ -616,14 +618,18 @@ export class BoardView {
       ctx.restore();
     }
     const wy = (bd: Body) => as?.pose(bd.id)?.y ?? bd.y;
-    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || wy(p) - wy(q));
+    // Once the assault starts the battle clock has stopped: bodies caught mid-death and the trickster's
+    // illusions fade out on the assault's clock instead of hanging on the field.
+    const vanish = as ? Math.max(0, 1 - as.t / VANISH) : 1;
+    const fading = (bd: Body) => !!as && (!bd.alive || bd.kind === "decoy");
+    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45) && !(fading(bd) && vanish <= 0)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || wy(p) - wy(q));
     const keeps = this.keepQueue(live.filter((bd) => bd.alive && !bd.flying).map((bd) => ({ x: as?.pose(bd.id)?.x ?? bd.x, y: wy(bd), kind: bd.kind })));
     for (const bd of live) {
       if (bd.flying) keeps.done(); else keeps.flush(wy(bd));
       const st = as?.pose(bd.id);
       if (st) { this.drawStriker(bd, st); continue; }
       const [x, y] = lerp(bd);
-      const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
+      const fade = (bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45) * (fading(bd) ? vanish : 1);
       if (bd.burrowed) {
         // Underground: a moving mound of earth, no body.
         ctx.save();
@@ -689,9 +695,11 @@ export class BoardView {
     }
     keeps.done();
     if (as) this.drawShots(as);
-    // Projectiles.
+    // Projectiles (the battle's own fade out with the leftovers once the assault starts: they stopped mid-air).
+    ctx.save();
+    ctx.globalAlpha = vanish;
     for (const p of b.projs) {
-      if (!p.alive) continue;
+      if (!p.alive || vanish <= 0) continue;
       const x = this.sx(p.px + (p.x - p.px) * a), y = this.sy(p.py + (p.y - p.py) * a);
       if (p.kind === "grenade" || p.kind === "shell") {
         const shell = p.kind === "shell";
@@ -726,6 +734,7 @@ export class BoardView {
         ctx.restore();
       }
     }
+    ctx.restore();
     // Health bars on top (not for illusions or bodies underground).
     for (const bd of live) {
       if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed || as?.pose(bd.id)) continue;
@@ -852,6 +861,12 @@ export class BoardView {
   /** Starts the round-end assault from where the battle left off. */
   startAssault(battle: Battle, damage: [number, number], linger?: number): Assault {
     this.assault = new Assault(battle.bodies, { damage, obstacles: this.obstacles, linger });
+    // The illusions break as the round ends.
+    for (const bd of battle.bodies) {
+      if (!bd.alive || bd.kind !== "decoy") continue;
+      this.fx.burst(bd.x, bd.y, 10, { color: "rgba(200,170,255,0.7)", speed: 1.4, size: 0.12, max: 0.45, kind: "smoke", gravity: 0, drag: 2 });
+      this.fx.ring(bd.x, bd.y, 0.1, 0.45, 0.25, VIOLET, 0.04);
+    }
     return this.assault;
   }
 
