@@ -44,9 +44,13 @@ export function legacyProgress(s: EntitlementSave): boolean {
   return camp || puz;
 }
 
-/** Players who already got past Act 2 keep everything. Returns true when it changed the save. */
+/**
+ * Players who already got past Act 2 before the unlock existed keep everything. Only a save with no store record
+ * counts: once the store has written one (a buy, or a refund taking it back), progress made while owning the
+ * Full Army is not legacy progress. Returns true when it changed the save.
+ */
 export function migrateLegacy(s: EntitlementSave, now = Date.now()): boolean {
-  if (hasFullArmy(s) || !legacyProgress(s)) return false;
+  if (s.store || !legacyProgress(s)) return false;
   s.store = { fullArmy: true, source: "legacy", at: now };
   return true;
 }

@@ -76,6 +76,10 @@ describe("entitlement rules", () => {
     expect(hasFullArmy(vet)).toBe(true);
 
     expect(syncOwned(blank(), [])).toBe(false);
+
+    const refunded: EntitlementSave = { campaign: { 13: 3 }, puzzles: {}, store: { fullArmy: false } };
+    expect(migrateLegacy(refunded)).toBe(false);
+    expect(hasFullArmy(refunded)).toBe(false);
   });
 });
 
@@ -155,6 +159,22 @@ describe("store controller", () => {
     await expect(c.product()).rejects.toThrow();
     await expect(c.restore()).rejects.toThrow();
     expect(c.owns()).toBe(true);
+  });
+
+  it("keeps a refund on the next launch: progress made while owning it is not legacy progress", async () => {
+    const storage = kv();
+    const m = new MockStore({ storage });
+    const save = io();
+    const c = new StoreController(m, save);
+    await c.start();
+    expect((await c.buy()).status).toBe("purchased");
+    save.save((s) => { s.campaign[13] = 3; s.campaign[20] = 2; s.puzzles[7] = 1; });
+    m.revoke(FULL_ARMY);
+    expect(c.owns()).toBe(false);
+    c.dispose();
+    const again = new StoreController(new MockStore({ storage }), save);
+    await again.start();
+    expect(again.owns()).toBe(false);
   });
 
   it("grandfathers legacy saves on start even when the store has nothing", async () => {
