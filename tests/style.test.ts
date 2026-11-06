@@ -102,3 +102,37 @@ describe("art contract", () => {
     expect(b.units + b.arenas + b.vfx + b.ui + b.code_and_fonts).toBeLessThanOrEqual(b.app);
   });
 });
+
+describe("style in the app", () => {
+  it("loads the active direction and every choice", async () => {
+    const { STYLE, STYLE_IDS, styleById } = await import("../src/render/style");
+    expect(STYLE.id).toBe(active.direction);
+    expect([...STYLE_IDS].sort()).toEqual([...ids].sort());
+    for (const id of ids) expect(styleById(id)).toEqual(styles[id]);
+    expect(() => styleById("nope")).toThrow();
+  });
+
+  it("drives the game's team and effect colours from the active direction", async () => {
+    const { TEAM, GOLD, HEAL, ZAP, VIOLET } = await import("../src/render/palette");
+    const st = styles[active.direction];
+    for (const [i, t] of (["tide", "ember"] as const).entries()) {
+      expect(TEAM[i].main).toBe(st.team[t].main);
+      expect(TEAM[i].dark).toBe(st.team[t].dark);
+      expect(TEAM[i].light).toBe(st.team[t].light);
+      expect(TEAM[i].glow + "1)").toMatch(/^rgba\(\d+,\d+,\d+,1\)$/);
+    }
+    expect([GOLD, HEAL, ZAP, VIOLET]).toEqual([st.vfx.gold, st.vfx.heal, st.vfx.zap, st.vfx.arcane]);
+  });
+
+  it("maps a direction to the stylesheet's colour variables", async () => {
+    const { styleVars, rgba } = await import("../src/render/style");
+    for (const id of ids) {
+      const v = styleVars(styles[id]);
+      expect(v["--tide"]).toBe(styles[id].team.tide.main);
+      expect(v["--ember-d"]).toBe(styles[id].team.ember.dark);
+      expect(v["--ui-panel-dk"]).toBe(styles[id].ui.panel_dk);
+      expect(v["--ink"]).toBeUndefined(); // the page background stays the v2 ink until the UI kit lands
+    }
+    expect(rgba("#3fd0c9", 0.07)).toBe("rgba(63,208,201,0.07)");
+  });
+});

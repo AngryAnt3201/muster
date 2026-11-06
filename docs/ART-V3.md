@@ -65,6 +65,27 @@ The v2 character pipeline already takes it: `MUSTER_STYLE=dusk npm run art` (or
 `blender -b -P art/render_all.py -- --style dusk`, `--style active` for the picked one) renders every unit with that direction, and `art/post.py --style` uses its ink and team
 colours. Without the flag the shipped v2 look is kept, so today's sprites only change when someone asks.
 
+### Using a direction in the app
+
+`src/render/style.ts` imports the same files: `STYLE` is the active direction, `styleById(id)` any of the
+three, `CONTRACT` the contract. Already wired:
+
+- `src/render/palette.ts` takes the team colours (`TEAM`, glow and zone tints) and the effect tints `GOLD`,
+  `HEAL`, `ZAP`, `VIOLET` from `team.*` and `vfx.*`, so the canvas renderers (`board.ts`, `units.ts`, `fx.ts`)
+  follow the direction.
+- `src/main.ts` calls `applyStyleVars` at boot: the stylesheet's `--tide`, `--tide-d`, `--ember`,
+  `--ember-d` and `--gold` come from the direction, every `ui.*` slot is exposed as `--ui-<slot>` and the
+  outline colour as `--style-ink` for the UI kit. `<html data-style="meadow">` names the active one.
+
+Meadow's team and effect colours equal the v2 constants, so today's game looks the same until the pick.
+The page background (`--ink`) and board chrome (`INK`, `BOARD`) stay v2 until the UI kit and arena items
+replace them.
+
+### Recording the pick
+
+`npm run style:pick -- dusk` writes `art/style/active.json` (no argument prints the current one). The game
+and every Blender renderer then use it; re-render with `npm run art -- --style active`.
+
 ## Contract
 
 ### World and camera
