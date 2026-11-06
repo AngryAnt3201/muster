@@ -37,7 +37,7 @@ from another game.
 - On today's flat board the backdrop is drawn into the world rectangle (so it is stretched by `1 / sin(elev)`
   vertically): the ground lines up exactly with the sim and upright things lean up the screen. A camera tilted to the
   same `elev` draws it unstretched (pass `stretch = 1` to `propRect`).
-- Keep pads: the ground leaves a paved plaza clear at (4.5, -1.7) and (4.5, 15.7) for the commanders' keeps.
+- Keep pads: the ground leaves a plaza of radius 1.45 clear under each commander keep, at `keepAnchor` (4.5, 1.55) and (4.5, 13.4); the keeps draw on it in the same depth order as the obstacle props.
 
 ## Obstacle props
 

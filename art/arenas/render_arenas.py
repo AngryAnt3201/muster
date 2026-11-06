@@ -140,7 +140,6 @@ def wiggle(x0, amp, freq, phase, ya=Y0, yb=Y1, n=90, xs=None):
     return [(x0 + amp * math.sin(y * freq + phase) + (0 if xs is None else xs(y)), y) for y in ys]
 
 
-# Keep pads: the commanders' keeps stand on these, just off each back edge.
 # Keep pads: the commanders' keeps stand on the board at these points (src/render/keeps.ts keepAnchor), so each gets
 # a paved plaza of PAD_R under it.
 PADS = [(4.5, 1.55), (4.5, H - 0.6)]
