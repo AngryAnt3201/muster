@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "art": "${BLENDER:-blender} -b --factory-startup -P art/render_all.py",
+    "vfx": "/usr/local/bin/python3 art/vfx/make_vfx.py --contact",
     "dev": "vite --host 0.0.0.0 --port 5180",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",

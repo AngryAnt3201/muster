@@ -1,10 +1,11 @@
 // The board view: draws the deploy scene and the battle, turns battle events into effects.
 import type { Battle, BattleEvent, Body } from "../core/battle";
 import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
-import { Fx, frand } from "./fx";
-import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
+import { Fx, animAlpha, animFrame, frand, type Anim } from "./fx";
+import { BOARD, GOLD, INK, TEAM, team } from "./palette";
 import { sprite, whiteOf } from "./sprites";
 import { drawRank, drawShadow, drawUnit, type DrawOpts } from "./units";
+import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 
 export interface DeployScene {
   mode: "deploy";
@@ -27,7 +28,6 @@ export interface Rect { x: number; y: number; w: number; h: number; }
 const TAU = Math.PI * 2;
 const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
 const ICE = "#bfe9ff";
-const DIRT = "rgba(120,92,60,0.9)";
 
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
@@ -43,11 +43,20 @@ export class BoardView {
   onSound?: (name: string, gain?: number) => void;
   private bg?: HTMLCanvasElement;
   private reveal = new Map<number, number>(); // piece id -> time revealed
+  private drop = new Map<number, number>(); // piece id -> time it started falling
+  private frozenAt = new Map<number, number>(); // body id -> board time it froze (ice grows in, shatters on thaw)
+  private fuseSeen = new WeakMap<object, number>(); // fuse -> board time first drawn
+  /** Vertical squash for things lying on the ground (1 = straight down; the camera can flatten it). */
+  groundSquash = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    void loadVfx();
   }
+
+  /** Screen lift in px for a world altitude z. */
+  lift(z: number) { return z * this.s * 0.55; }
 
   layout(cssW: number, cssH: number, area: Rect) {
     this.dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -199,201 +208,78 @@ export class BoardView {
   }
 
   private onEvent(e: BattleEvent, battle: Battle) {
-    const fx = this.fx;
-    const snd = (n: string, g = 0.5) => this.onSound?.(n, g);
-    switch (e.t) {
-      case "slash":
-        if (e.spin) { fx.ring(e.x, e.y, e.r * 0.4, e.r, 0.22, e.side === 0 ? "#e9fffd" : "#fff0ea", 0.1); snd("slash", 0.6); }
-        else fx.arc(e.x, e.y, e.a, e.r, e.side === 0 ? "#e9fffd" : "#fff0ea", 2.0, 0.16);
-        snd("slash", 0.35);
-        break;
-      case "shot":
-        snd(e.kind === "grenade" || e.kind === "shell" ? "throw" : e.kind === "bolt" ? "bolt" : e.kind === "shard" ? "zap" : "arrow", e.kind === "shard" ? 0.2 : 0.4);
-        break;
-      case "hit": {
-        const col = e.shielded ? "#cfd8e3" : team((1 - e.side) as Side).light;
-        fx.burst(e.x, e.y, e.big ? 7 : 3, { color: col, speed: 2.2, size: 0.05, max: 0.3, gravity: 0, kind: "spark" });
-        if (e.dmg >= 18 || e.big) fx.float(e.x, e.y - 0.45, String(e.dmg), e.big ? GOLD : e.shielded ? "#9fb0c0" : "#ffffff", e.big ? 0.38 : 0.28);
-        snd(e.shielded ? "clank" : "hit", e.big ? 0.6 : 0.25);
-        break;
-      }
-      case "boom": this.boom(e.x, e.y, e.r, e.kind, e.side); break;
-      case "zap":
-        fx.bolt(e.pts, ZAP, 0.26);
-        for (const [x, y] of e.pts.slice(1)) fx.burst(x, y, 4, { color: "#dff1ff", speed: 2.4, size: 0.04, max: 0.25, kind: "spark", gravity: 0 });
-        fx.flash = Math.max(fx.flash, 0.08); fx.flashColor = "#cfe8ff";
-        snd("zap", 0.6);
-        break;
-      case "heal": {
-        const from = battle.bodies.find((b) => b.id === e.from);
-        if (from && e.from !== e.to) fx.beam(from.x, from.y, e.x, e.y, HEAL, 0.06, 0.28);
-        fx.burst(e.x, e.y, e.from === e.to ? 2 : 4, { color: e.from === e.to ? "#ff8a8a" : HEAL, speed: 0.6, size: 0.1, max: 0.7, kind: "plus", gravity: -1.2, drag: 3, z: 0.2 });
-        snd("heal", 0.2);
-        break;
-      }
-      case "spawn":
-        fx.ring(e.x, e.y, 0.05, 0.35, 0.25, team(e.side).light, 0.04);
-        break;
-      case "death": {
-        const col = team(e.side).main;
-        const r = RADIUS(e.kind);
-        fx.ring(e.x, e.y, r * 0.6, r * 1.8, 0.35, col, 0.05);
-        fx.burst(e.x, e.y, e.kind === "mite" ? 4 : 12, { color: col, speed: 2.2, size: 0.07, max: 0.6, kind: "chunk", vz: 3, spin: 8 });
-        if (e.kind === "golem") { fx.shake = Math.min(1, fx.shake + 0.5); snd("crumble", 0.9); }
-        else if (e.kind === "keg") { fx.burst(e.x, e.y, 10, { color: "rgba(80,80,80,0.7)", speed: 1, size: 0.2, max: 0.9, kind: "smoke", gravity: 0 }); snd("squish", 0.5); }
-        else snd(e.kind === "mite" ? "squish" : "down", 0.4);
-        break;
-      }
-      case "blink":
-        fx.burst(e.x0, e.y0, 10, { color: VIOLET, speed: 1.2, size: 0.18, max: 0.5, kind: "smoke", gravity: 0, drag: 2 });
-        fx.burst(e.x, e.y, 12, { color: VIOLET, speed: 1.6, size: 0.16, max: 0.5, kind: "smoke", gravity: 0, drag: 2 });
-        fx.beam(e.x0, e.y0, e.x, e.y, "rgba(180,140,255,0.5)", 0.05, 0.18);
-        snd("blink", 0.5);
-        break;
-      case "charge":
-        fx.burst(e.x, e.y, 8, { color: "rgba(180,160,130,0.6)", speed: 1.5, size: 0.14, max: 0.5, kind: "smoke", gravity: 0, dir: e.a + Math.PI, spread: 1.4 });
-        snd("charge", 0.6);
-        break;
-      case "fuse":
-        fx.ring(e.x, e.y, 0.2, 1.0, 0.32, "#ff4d4d", 0.04);
-        snd("fuse", 0.6);
-        break;
-      // ---- v2
-      case "burrow":
-        fx.burst(e.x, e.y, 14, { color: DIRT, speed: 1.8, size: 0.08, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
-        snd("slam", 0.3);
-        break;
-      case "dig":
-        fx.burst(e.x, e.y, 2, { color: DIRT, speed: 0.6, size: 0.07, max: 0.9, kind: "chunk", vz: 1.5, drag: 4 });
-        if (Math.random() < 0.5) fx.burst(e.x, e.y, 1, { color: "rgba(110,85,55,0.5)", speed: 0.2, size: 0.18, max: 1.2, kind: "smoke", gravity: 0 });
-        break;
-      case "emerge":
-        fx.ring(e.x, e.y, 0.2, e.r, 0.4, "#c9a26b", e.big ? 0.12 : 0.08, "rgba(150,110,60,0.25)");
-        fx.burst(e.x, e.y, e.big ? 30 : 18, { color: DIRT, speed: e.big ? 4.5 : 3, size: 0.09, max: 0.7, kind: "chunk", vz: 4, spin: 8 });
-        fx.burst(e.x, e.y, 8, { color: "rgba(110,85,55,0.6)", speed: 1.4, size: 0.25, max: 1, kind: "smoke", gravity: 0 });
-        fx.shake = Math.min(1, fx.shake + (e.big ? 0.6 : 0.35));
-        snd("slam", e.big ? 0.9 : 0.6);
-        break;
-      case "dive":
-        fx.burst(e.x, e.y, 5, { color: "rgba(255,255,255,0.6)", speed: 1.2, size: 0.05, max: 0.3, kind: "spark", gravity: 0 });
-        snd("blink", 0.35);
-        break;
-      case "chill":
-        fx.burst(e.x, e.y, 6, { color: ICE, speed: 1.4, size: 0.05, max: 0.45, kind: "spark", gravity: 0 });
-        break;
-      case "freeze":
-        fx.ring(e.x, e.y, 0.1, 0.7, 0.35, ICE, 0.08, "rgba(190,235,255,0.25)");
-        fx.burst(e.x, e.y, 14, { color: "#e9f9ff", speed: 2.2, size: 0.06, max: 0.5, kind: "chunk", vz: 2, spin: 6 });
-        snd("clank", 0.6);
-        break;
-      case "aura":
-        fx.ring(e.x, e.y, 0.3, e.r, 0.6, e.rally ? "rgba(255,209,102,0.55)" : team(e.side).glow + "0.4)", 0.03);
-        break;
-      case "parry":
-        fx.burst(e.x, e.y, 10, { color: "#fff6d6", speed: 3, size: 0.04, max: 0.25, kind: "spark", gravity: 0 });
-        fx.float(e.x, e.y - 0.5, e.riposte ? "RIPOSTE" : "PARRY", "#fff2b8", 0.24, 0.6);
-        snd("clank", 0.8);
-        break;
-      case "brace":
-        fx.burst(e.x, e.y, 4, { color: "#e8eef5", speed: 1, size: 0.04, max: 0.25, kind: "spark", gravity: 0, dir: e.a, spread: 0.8 });
-        snd("clank", 0.3);
-        break;
-      case "impale":
-        fx.burst(e.x, e.y, 18, { color: "#ffe2a0", speed: 3.5, size: 0.06, max: 0.4, kind: "spark", gravity: 1 });
-        fx.float(e.x, e.y - 0.55, "IMPALED", GOLD, 0.3, 0.8);
-        fx.shake = Math.min(1, fx.shake + 0.4);
-        snd("clank", 1); snd("hit", 1);
-        break;
-      case "raise":
-        fx.ring(e.x, e.y, 0.1, 0.6, 0.45, "rgba(170,255,190,0.7)", 0.05, "rgba(120,255,170,0.15)");
-        fx.burst(e.x, e.y, 10, { color: "rgba(150,255,190,0.55)", speed: 0.6, size: 0.14, max: 0.9, kind: "smoke", gravity: -0.6, drag: 1.5 });
-        snd("blink", 0.4);
-        break;
-      case "build":
-        fx.ring(e.x, e.y, 0.1, 0.45, 0.3, "#ffd166", 0.04);
-        snd("clank", 0.35);
-        break;
-      case "repair": {
-        const from = battle.bodies.find((b) => b.id === e.from);
-        if (from) fx.beam(from.x, from.y, e.x, e.y, "rgba(255,200,90,0.8)", 0.05, 0.25);
-        fx.burst(e.x, e.y, 5, { color: "#ffd166", speed: 1.2, size: 0.04, max: 0.35, kind: "spark", gravity: 0 });
-        snd("clank", 0.25);
-        break;
-      }
-      case "decoy":
-        fx.burst(e.x, e.y, 10, { color: "rgba(200,170,255,0.6)", speed: 1.2, size: 0.16, max: 0.5, kind: "smoke", gravity: 0, drag: 2 });
-        snd("blink", 0.4);
-        break;
-      case "pop":
-        fx.burst(e.x, e.y, 12, { color: "rgba(200,170,255,0.7)", speed: 1.8, size: 0.12, max: 0.45, kind: "smoke", gravity: 0, drag: 2 });
-        fx.ring(e.x, e.y, 0.1, 0.5, 0.25, VIOLET, 0.04);
-        snd("squish", 0.5);
-        break;
-      case "light":
-        fx.burst(e.x, e.y, 6, { color: "#ffd166", speed: 1.5, size: 0.04, max: 0.3, kind: "spark", gravity: 0 });
-        snd("fuse", 0.5);
-        break;
-      case "kegdrop": case "bomblets":
-        snd("throw", 0.4);
-        break;
-      case "zone":
-        snd("pop", 0.3);
-        break;
-      case "revive":
-        fx.ring(e.x, e.y, 0.1, 1.0, 0.6, "#fff2b8", 0.08, "rgba(255,230,150,0.25)");
-        fx.burst(e.x, e.y, 18, { color: "#fff2b8", speed: 1, size: 0.08, max: 1, kind: "plus", gravity: -1.5, drag: 2 });
-        fx.float(e.x, e.y - 0.6, "REVIVED", "#fff2b8", 0.3, 1);
-        snd("upgrade", 0.6);
-        break;
-      case "volley":
-        snd("arrow", 0.7);
-        break;
-      case "twin":
-        snd("bolt", 0.7);
-        break;
-      case "reset":
-        fx.burst(e.x, e.y, 8, { color: VIOLET, speed: 1.5, size: 0.05, max: 0.4, kind: "spark", gravity: 0 });
-        break;
-      default:
-        break;
+    playEvent(this.fx, e, {
+      find: (id) => battle.bodies.find((b) => b.id === id),
+      bodies: battle.bodies,
+      time: battle.time,
+      textured: vfxReady(),
+      sound: (n, g) => this.onSound?.(n, g),
+      kick: (k) => this.onShake?.(k),
+    });
+  }
+
+  /** Deploy drop-in: pieces (by piece id) fall onto the board and land in a puff of dust. */
+  dropIn(pieces: { id: number; x: number; y: number; radius: number; side: Side }[]) {
+    for (const p of pieces) {
+      this.reveal.set(p.id, this.time);
+      this.drop.set(p.id, this.time);
+      playDrop(this.fx, p.x, p.y, p.radius, p.side);
     }
   }
 
-  private boom(x: number, y: number, r: number, kind: string, side: Side) {
-    const fx = this.fx, snd = (n: string, g = 0.5) => this.onSound?.(n, g);
-    const fiery = ["mine", "grenade", "shell", "keg", "bomblet", "shrapnel"].includes(kind);
-    const big = kind === "mine" || kind === "keg" || kind === "shell" || kind === "quake";
-    if (kind === "quake" || kind === "slam" || kind === "talon" || kind === "erupt") {
-      const q = kind === "quake";
-      fx.ring(x, y, 0.1, r, q ? 0.55 : 0.32, q ? "#e8d3a8" : "#c9b79c", q ? 0.14 : 0.07, q ? "rgba(200,170,120,0.22)" : undefined);
-      if (q) fx.ring(x, y, 0.1, r * 0.6, 0.4, "#fff2d6", 0.06);
-      fx.burst(x, y, q ? 26 : 14, { color: "rgba(180,160,130,0.7)", speed: q ? 3.5 : 2.2, size: 0.16, max: 0.7, kind: "smoke", gravity: 0, drag: 2 });
-      fx.burst(x, y, q ? 14 : 6, { color: "#6f7782", speed: 2.6, size: 0.06, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
-      fx.shake = Math.min(1, fx.shake + (q ? 0.9 : 0.25));
-      if (q) this.onShake?.(2);
-      snd(q ? "boom" : "slam", q ? 0.9 : 0.6);
-      return;
+  /** Drop-in state for a piece id: px to lift it by while it falls, and a landing squash scale. */
+  private dropping(id: number): { lift: number; scale: number } {
+    const t0 = this.drop.get(id);
+    if (t0 === undefined) return { lift: 0, scale: 1 };
+    const u = (this.time - t0) / DROP_TIME;
+    if (u < 1) return { lift: this.lift(DROP_HEIGHT * (1 - u * u)), scale: 1 };
+    if (u < 2.2) return { lift: 0, scale: 1 + 0.16 * Math.sin(((u - 1) / 1.2) * Math.PI) * (2.2 - u) };
+    this.drop.delete(id);
+    return { lift: 0, scale: 1 };
+  }
+
+  // ------------------------------------------------------------ sprite sheets
+  /** Draws frame f of a VFX sheet at screen (x, y), h px tall (w px wide, default by aspect). False if not loaded. */
+  private sheet(name: string, f: number, x: number, y: number, h: number,
+    o: { a?: number; alpha?: number; tint?: string; w?: number; squash?: number; blend?: "add" | "normal" } = {}): boolean {
+    const src = vfxFrame(name, f, o.tint);
+    if (!src) return false;
+    const { sh } = src;
+    const w = o.w ?? (h * sh.w) / sh.h;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    if (o.squash !== undefined && o.squash !== 1) ctx.scale(1, o.squash);
+    if (o.a) ctx.rotate(o.a);
+    ctx.globalAlpha *= o.alpha ?? 1;
+    if ((o.blend ?? sh.blend) === "add") ctx.globalCompositeOperation = "lighter";
+    ctx.drawImage(src.img, src.sx, src.sy, sh.w, sh.h, -w * sh.anchor[0], -h * sh.anchor[1], w, h);
+    ctx.restore();
+    return true;
+  }
+
+  /** The frame of a looping sheet now, at fps, offset by a seed so neighbours don't flicker in step. */
+  private loopFrame(name: string, fps: number, seed = 0) {
+    const n = vfxSheet(name)?.frames ?? 1;
+    return Math.floor(this.time * fps + seed * 1.37) % n;
+  }
+
+  /** Every playing sheet on one layer: "ground" under the bodies, "air" over them. */
+  private drawAnims(layer: Anim["layer"]) {
+    if (!vfxReady()) return;
+    const s = this.s;
+    for (const an of this.fx.anims) {
+      if (an.delay > 0 || an.layer !== layer) continue;
+      const sh = vfxSheet(an.sheet);
+      if (!sh) continue;
+      const u = 1 - an.life / an.max;
+      const k = an.grow ? an.grow[0] + (an.grow[1] - an.grow[0]) * easeOut(u) : 1;
+      this.sheet(an.sheet, animFrame(an, sh.frames), this.sx(an.x), this.sy(an.y) - this.lift(an.z), an.size * s * k, {
+        a: an.a, alpha: animAlpha(an), tint: an.tint, blend: an.blend,
+        w: an.w !== undefined ? an.w * s * k : undefined,
+        squash: layer === "ground" ? an.squash * this.groundSquash : an.squash,
+      });
     }
-    if (kind === "pop" || kind === "mirror") {
-      const col = kind === "pop" ? "rgba(170,255,140,0.8)" : VIOLET;
-      fx.ring(x, y, 0.05, r, 0.3, col, 0.05);
-      fx.burst(x, y, 12, { color: col, speed: 2.4, size: 0.06, max: 0.4, kind: "spark", gravity: 0 });
-      snd("pop", 0.35);
-      return;
-    }
-    if (fiery) {
-      fx.ring(x, y, 0.1, r, big ? 0.45 : 0.3, big ? "#ffd27a" : "#ffb347", big ? 0.12 : 0.06, big ? "rgba(255,180,80,0.35)" : undefined);
-      fx.burst(x, y, big ? 34 : kind === "bomblet" || kind === "shrapnel" ? 10 : 20, { color: "#ffcf6b", speed: big ? 5 : 3.5, size: 0.07, max: 0.5, kind: "spark", gravity: 2 });
-      fx.burst(x, y, big ? 16 : 7, { color: "rgba(60,55,60,0.8)", speed: 1.4, size: 0.28, max: 1.0, kind: "smoke", gravity: 0, drag: 1.5 });
-      fx.burst(x, y, big ? 10 : 4, { color: "#3a3a3a", speed: 3, size: 0.07, max: 0.9, kind: "chunk", vz: 4, spin: 9 });
-      fx.flash = Math.max(fx.flash, big ? 0.35 : 0.12); fx.flashColor = "#ffd9a0";
-      fx.shake = Math.min(1, fx.shake + (big ? 0.8 : 0.25));
-      this.onShake?.(big ? 2 : 1);
-      snd(big ? "boom" : "pop", big ? 1 : 0.5);
-      return;
-    }
-    fx.ring(x, y, 0.1, r, 0.3, team(side).light, 0.05);
-    snd("pop", 0.4);
   }
 
   // ------------------------------------------------------------ frame
@@ -415,6 +301,7 @@ export class BoardView {
     ctx.save();
     roundRectPath(ctx, this.rect.x, this.rect.y, this.rect.w, this.rect.h, 11);
     ctx.clip();
+    this.drawAnims("ground");
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
     this.drawFx();
@@ -498,16 +385,18 @@ export class BoardView {
       const sel = sc.selected === p.id;
       if (sel) this.drawSelection(p);
       const revealT = this.reveal.get(p.id);
-      let pop = revealT !== undefined ? Math.min(1, (this.time - revealT) / 0.25) : 1;
+      const fall = this.dropping(p.id);
+      let pop = this.drop.has(p.id) ? fall.scale : revealT !== undefined ? Math.min(1, (this.time - revealT) / 0.25) : 1;
       const evo = this.evolveAt.get(p.id);
       if (evo !== undefined && this.time - evo < 0.45) pop *= 1 + 0.45 * Math.sin(((this.time - evo) / 0.45) * Math.PI);
+      const fy = y - fall.lift;
       if (p.kind === "blades") {
         for (let i = 0; i < 3; i++) {
           const a = -Math.PI / 2 * (p.side === 0 ? -1 : 1) + (i * TAU) / 3;
-          this.token("blades", p.side, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank });
+          this.token("blades", p.side, x + Math.cos(a) * 0.32 * s, fy + Math.sin(a) * 0.32 * s, r * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank });
         }
       } else {
-        this.token(p.kind, p.side, x, y, r * pop, face, { t: this.time, id: p.id, hidden: p.kind === "mine", own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
+        this.token(p.kind, p.side, x, fy, r * pop, face, { t: this.time, id: p.id, hidden: p.kind === "mine", own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
       }
       drawRank(ctx, x, y, Math.max(r, 0.3 * s), p.rank);
     }
@@ -560,11 +449,25 @@ export class BoardView {
   private drawBattle(sc: BattleScene) {
     const ctx = this.ctx, s = this.s, b = sc.battle, a = sc.alpha;
     const lerp = (bd: Body) => [this.sx(bd.px + (bd.x - bd.px) * a), this.sy(bd.py + (bd.y - bd.py) * a)] as const;
-    // Burning ground.
+    const tex = vfxReady();
+    const sq = this.groundSquash;
+    // Burning ground: a scorch decal, a glow and a ring of licking flames.
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
       const x = this.sx(z.x), y = this.sy(z.y), r = z.r * s;
       const left = Math.min(1, (z.until - b.time) / 0.6);
+      if (tex) {
+        this.sheet("scorch", 0, x, y, r * 2.1, { alpha: 0.85 * left, squash: sq, a: z.id });
+        const n = Math.max(4, Math.round(z.r * 7));
+        const flames: [number, number, number][] = [];
+        for (let i = 0; i < n; i++) {
+          const ang = (i / n) * TAU + z.id * 0.7, d = (i % 2 ? 0.35 : 0.68) * r;
+          flames.push([x + Math.cos(ang) * d, y + Math.sin(ang) * d * sq, i]);
+        }
+        flames.push([x, y, n]);
+        flames.sort((p, q) => p[1] - q[1]);
+        for (const [fx, fy, i] of flames) this.sheet("flame", this.loopFrame("flame", 14, i + z.id), fx, fy, s * (0.42 + 0.12 * (i % 3)) * (0.4 + 0.6 * left), { alpha: left });
+      }
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
       const fl = 0.75 + 0.25 * Math.sin(this.time * 17 + z.id);
       g.addColorStop(0, `rgba(255,170,60,${0.45 * fl * left})`);
@@ -582,7 +485,18 @@ export class BoardView {
     }
     for (const f of b.fuses ?? []) {
       if (b.time >= f.at) continue;
+      // Thrown bomblets and dropped kegs are still in the air (an anim) for their first moments.
+      let seen = this.fuseSeen.get(f);
+      if (seen === undefined) this.fuseSeen.set(f, (seen = this.time));
+      if (tex && this.time - seen < BOMBLET_FLIGHT) continue;
       const x = this.sx(f.x), y = this.sy(f.y), r = 0.11 * s;
+      if (tex) {
+        const keg = f.kind === "keg";
+        this.sheet("shadow", 0, x, y, (keg ? 0.42 : 0.3) * s, { alpha: 0.6, squash: sq });
+        const urgent = f.at - b.time < 0.4;
+        this.sheet(keg ? "keg" : "bomb", this.loopFrame(keg ? "keg" : "bomb", urgent ? 28 : 14, f.x * 7), x, y - 0.04 * s, (keg ? 0.42 : 0.3) * s * (urgent ? 1 + 0.08 * Math.sin(this.time * 40) : 1));
+        continue;
+      }
       drawShadow(ctx, x, y, r, 0.4);
       ctx.fillStyle = f.kind === "keg" ? "#7a4a24" : "#2b2f36"; ctx.strokeStyle = INK; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(x, y, f.kind === "keg" ? r * 1.6 : r, 0, TAU); ctx.fill(); ctx.stroke();
@@ -604,6 +518,7 @@ export class BoardView {
       const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
       if (bd.burrowed) {
         // Underground: a moving mound of earth, no body.
+        if (tex) { this.sheet("mound", 0, x, y, 0.62 * s, { a: Math.atan2(bd.vy, bd.vx), squash: sq }); continue; }
         ctx.save();
         ctx.fillStyle = "rgba(95,72,48,0.9)"; ctx.strokeStyle = "rgba(40,28,18,0.9)"; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.ellipse(x, y, 0.26 * s, 0.18 * s, Math.atan2(bd.vy, bd.vx), 0, TAU); ctx.fill(); ctx.stroke();
@@ -621,7 +536,12 @@ export class BoardView {
       if (bd.kind === "keg" && bd.state === "run" && Math.random() < 0.6)
         this.fx.burst(bd.x, bd.y, 1, { color: "#ffd166", speed: 0.8, size: 0.035, max: 0.3, kind: "spark", gravity: 0 });
       // Auras under the unit.
-      if (bd.alive && ((bd.buff ?? 0) > 0 || (bd.rally ?? 0) > 0)) {
+      const auraOn = bd.alive && ((bd.buff ?? 0) > 0 || (bd.rally ?? 0) > 0);
+      if (auraOn && tex) {
+        const rally = (bd.rally ?? 0) > 0;
+        this.sheet("aura", 0, x, y, bd.radius * s * 3.3, { a: this.time * 0.8 + bd.id, tint: rally ? GOLD : TEAM[bd.side].main, alpha: 0.6, squash: sq });
+        if (rally) this.sheet("rally", this.loopFrame("rally", 12, bd.id), x, y, bd.radius * s * 2.4, { tint: GOLD, alpha: 0.55 });
+      } else if (auraOn) {
         ctx.save();
         ctx.strokeStyle = (bd.rally ?? 0) > 0 ? "rgba(255,209,102,0.55)" : team(bd.side).glow + "0.45)";
         ctx.lineWidth = 1.5;
@@ -629,14 +549,20 @@ export class BoardView {
         ctx.beginPath(); ctx.arc(x, y, bd.radius * s * 1.5, 0, TAU); ctx.stroke();
         ctx.restore();
       }
+      // Ravager fury: a red heat haze that thickens as it nears death.
+      const fury = bd.kind === "ravager" && bd.alive ? 1 - bd.hp / bd.maxHp : 0;
+      if (tex && fury > 0.25) this.sheet("rage", this.loopFrame("rage", 10 + fury * 14, bd.id), x, y, bd.radius * s * (2.4 + fury), { tint: "#ff3b3b", alpha: Math.min(0.85, fury) });
       let dy = 0, scale = 1;
       if (bd.flying) {
         // Altitude: the body rides above its shadow.
         const z = bd.z ?? 1.2;
-        drawShadow(ctx, x, y, bd.radius * s * (1.1 - z * 0.2), 0.32 - z * 0.12);
-        dy = -z * s * 0.55;
+        if (!tex || !this.sheet("shadow", 0, x, y, bd.radius * s * 2.2 * (1.1 - z * 0.2), { alpha: 0.8 - z * 0.3, squash: sq }))
+          drawShadow(ctx, x, y, bd.radius * s * (1.1 - z * 0.2), 0.32 - z * 0.12);
+        dy = -this.lift(z);
         scale = 1 + z * 0.12;
       }
+      const fall = bd.owner === -1 ? this.dropping(bd.pieceId) : { lift: 0, scale: 1 };
+      dy -= fall.lift; scale *= fall.scale;
       const decoy = bd.kind === "decoy";
       const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
       const kind = decoy ? "trickster" : bd.kind;
@@ -644,7 +570,20 @@ export class BoardView {
         t: this.time, alpha: fade * (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1), flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
         state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
       });
-      if (bd.alive && (bd.frozen ?? 0) > 0) this.drawIce(x, y + dy, bd.radius * s * 1.25);
+      const frozen = bd.alive && (bd.frozen ?? 0) > 0;
+      if (frozen && !this.frozenAt.has(bd.id)) this.frozenAt.set(bd.id, this.time);
+      else if (!frozen && this.frozenAt.has(bd.id)) {
+        this.frozenAt.delete(bd.id);
+        if (tex) this.fx.anim("icebreak", bd.x, bd.y, { size: Math.max(0.8, bd.radius * 3.4), max: 0.4, z: bd.flying ? bd.z ?? 0 : 0 });
+        this.onSound?.("clank", 0.3);
+      }
+      if (tex && frozen) {
+        const n = vfxSheet("ice")?.frames ?? 1;
+        const f = Math.min(n - 1, Math.floor((this.time - this.frozenAt.get(bd.id)!) * 24));
+        this.sheet("ice", f, x, y + dy, Math.max(0.8, bd.radius * 3.3) * s);
+      } else if (tex && bd.alive && (bd.slow ?? 0) > 0) {
+        this.sheet("chill", this.loopFrame("chill", 12, bd.id), x, y + dy, bd.radius * s * 3, { tint: ICE, alpha: Math.min(1, (bd.slow ?? 0) * 2) * 0.8 });
+      } else if (frozen) this.drawIce(x, y + dy, bd.radius * s * 1.25);
       else if (bd.alive && (bd.slow ?? 0) > 0) {
         ctx.save();
         ctx.globalAlpha = 0.5;
@@ -652,23 +591,46 @@ export class BoardView {
         ctx.beginPath(); ctx.arc(x, y + dy, bd.radius * s * 1.15, 0, TAU); ctx.stroke();
         ctx.restore();
       }
-      if (bd.alive && bd.kind === "duelist" && (bd.parryCd ?? 1) <= 0) {
+      if (tex && bd.alive && bd.kind === "duelist" && (bd.parryCd ?? 1) <= 0) {
+        this.sheet("glint", this.loopFrame("glint", 9, bd.id), x + bd.radius * s * 0.8, y + dy - bd.radius * s * 0.8, 0.42 * s, { tint: "#fff6d6" });
+      } else if (bd.alive && bd.kind === "duelist" && (bd.parryCd ?? 1) <= 0) {
         const gl = 0.5 + 0.5 * Math.sin(this.time * 10);
         ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
         ctx.beginPath(); ctx.arc(x + bd.radius * s * 0.8, y - bd.radius * s * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
       }
-      if (bd.alive && bd.kind === "pikeman" && bd.braced) {
+      if (tex && bd.alive && bd.kind === "pikeman" && bd.braced) {
+        for (const [i, da] of [[0, -0.35], [1, 0.35]] as const)
+          this.sheet("glint", this.loopFrame("glint", 7, bd.id + i * 3), x + Math.cos(bd.face + da) * bd.radius * s * 1.7, y + dy + Math.sin(bd.face + da) * bd.radius * s * 1.7, 0.34 * s, { tint: "#e8eef5", alpha: 0.85 });
+      } else if (bd.alive && bd.kind === "pikeman" && bd.braced) {
         ctx.save();
         ctx.strokeStyle = "rgba(232,238,245,0.7)"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(x, y, bd.radius * s * 1.6, bd.face - 0.6, bd.face + 0.6); ctx.stroke();
         ctx.restore();
       }
-      if (bd.alive && bd.stun > 0.05) this.drawStun(x, y + dy - bd.radius * s * 1.1, bd.radius * s);
+      if (bd.alive && bd.stun > 0.05) this.drawStun(x, y + dy - bd.radius * s * 1.1, bd.radius * s, tex);
     }
     // Projectiles.
     for (const p of b.projs) {
       if (!p.alive) continue;
       const x = this.sx(p.px + (p.x - p.px) * a), y = this.sy(p.py + (p.y - p.py) * a);
+      const pv = PROJ_VFX[p.kind];
+      if (tex && pv) {
+        const lobbed = p.kind === "grenade" || p.kind === "shell";
+        const pfx = p.fx ?? "";
+        if (lobbed) {
+          this.sheet("shadow", 0, x, y, pv.size * s * 1.1, { alpha: 0.65, squash: sq });
+          const zy = y - this.lift(p.z);
+          if (pfx === "fire" && Math.random() < 0.7) this.fx.burst(p.x, p.y - p.z * 0.55, 1, { color: "#ff9a3d", speed: 0.3, size: 0.05, max: 0.3, kind: "spark", gravity: 0 });
+          if (Math.random() < 0.35) this.fx.anim("smoke", p.x, p.y, { size: 0.28, max: 0.45, z: p.z, tint: pfx === "fire" ? "#4a3a34" : "#c9c2b8", alpha: 0.6 });
+          this.sheet(pv.sheet, this.loopFrame(pv.sheet, 16, p.id), x, zy, pv.size * s, { a: lobbed && p.kind === "grenade" ? this.time * 9 : Math.atan2(p.vy, p.vx) });
+        } else {
+          const ang = Math.atan2(p.vy, p.vx);
+          const tint = p.kind === "shard" || pfx === "freeze" ? ICE : p.kind === "pellet" ? GOLD : p.kind === "bolt" ? "#ffe6be" : "#ffffff";
+          if (pv.trail) this.sheet("streak", 0, x - Math.cos(ang) * pv.size * s * 2, y - Math.sin(ang) * pv.size * s * 2, pv.size * s * 0.9, { a: ang, w: pv.size * s * 4.4, tint, alpha: 0.75 });
+          this.sheet(pv.sheet, 0, x, y, pv.size * s, { a: ang });
+        }
+        continue;
+      }
       if (p.kind === "grenade" || p.kind === "shell") {
         const shell = p.kind === "shell";
         drawShadow(ctx, x, y, (shell ? 0.14 : 0.1) * s, 0.4);
@@ -736,8 +698,15 @@ export class BoardView {
     ctx.restore();
   }
 
-  private drawStun(x: number, y: number, r: number) {
+  private drawStun(x: number, y: number, r: number, tex = false) {
     const ctx = this.ctx;
+    if (tex) {
+      for (let i = 0; i < 3; i++) {
+        const a = this.time * 8 + (i * TAU) / 3;
+        this.sheet("glint", this.loopFrame("glint", 12, i), x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.25, Math.max(8, r * 0.7), { tint: "#ffe08a" });
+      }
+      return;
+    }
     ctx.save();
     ctx.fillStyle = "#ffe08a";
     for (let i = 0; i < 3; i++) {
@@ -749,6 +718,7 @@ export class BoardView {
 
   private drawFx() {
     const ctx = this.ctx, s = this.s, fx = this.fx;
+    this.drawAnims("air");
     for (const r of fx.rings) {
       const u = 1 - r.life / r.max;
       const rad = (r.r0 + (r.r1 - r.r0) * easeOut(u)) * s;
@@ -844,6 +814,8 @@ export class BoardView {
 }
 
 const easeOut = (x: number) => 1 - (1 - x) ** 3;
+/** How high (world units) a deployed piece falls from. */
+const DROP_HEIGHT = 3;
 
 export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
