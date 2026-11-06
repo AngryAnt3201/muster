@@ -53,9 +53,9 @@ ACTS = {
     4: dict(name="Iron Pass", g=dict(grass="#a2bd72", grass_dk="#88a35d", grass_lt="#bcd38e", path="#ddd2b8", path_dk="#b8aa8c",
                                      strip="#cfc6b2", strip_dk="#aea38c", foliage="#4f9a5e", foliage_dk="#2f6f45", rock="#b4b0a8", rock_dk="#7d7972"),
             border="rocks", trees=("pine", "pine", "crag"), scatter="pebbles", obstacle="crag"),
-    5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#d8574b", path_dk="#a83c33",
-                                     strip="#d9cdb6", strip_dk="#b7a991", court="#e3d8c4", court_dk="#bdb09a"),
-            court=True, border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar"),
+    5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#cf5446", path_dk="#9c3a30",
+                                     strip="#86c25a", strip_dk="#6aa947", court="#dcc6a0", court_dk="#a88d68"),
+            court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar"),
     6: dict(name="Frozen Reach", g=dict(grass="#eef5fb", grass_dk="#d3e2ef", grass_lt="#ffffff", path="#c5d7e8", path_dk="#9fb7cf",
                                         strip="#dbe7f2", strip_dk="#b9cde0", foliage="#3f8f6a", foliage_dk="#2b6b52", rock="#a9b4c2", rock_dk="#76828f",
                                         moss="#f4f9ff", edge="#8aa2bb"),
@@ -236,7 +236,7 @@ def main():
         if court:
             wk.box((W + 1.2, H + 1.2, 0.05), S.ground_mat(st, "court", "court_dk", "tiles", scale=1.2), loc=B(W / 2, H / 2, -0.004), outline=0)
             wk.box((W + 1.5, H + 1.5, 0.12), toon("court_dk"), loc=B(W / 2, H / 2, -0.07), bevel=0.03)
-        strip_pat = "tiles" if court else "patches"
+        strip_pat = th.get("strip_pat") or ("tiles" if court else "patches")
         wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", strip_pat, scale=1.3), loc=B(W / 2, H / 2, 0.012), outline=0)
         for yy in (ZD, H - ZD):
             wk.box((W, 0.09, 0.05), toon("edge"), loc=B(W / 2, yy, 0.03), bevel=0.015, outline=0)

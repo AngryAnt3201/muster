@@ -21,8 +21,8 @@ export interface DrawOpts {
   noShadow?: boolean; // the caller draws the contact shadow (the diorama board does)
 }
 
-/** Atlas sprites draw this much larger than true scale so they read on a phone (collision is unchanged). */
-export const SPRITE_VIS = 1.25;
+/** Atlas sprites draw this much larger than true scale so they read on a phone like the Meadow style frame (collision is unchanged). */
+export const SPRITE_VIS = 1.5;
 
 /** Which animation a body plays and where in it (phase 0..1, see sprites.frame). */
 export function animFor(o: DrawOpts): { anim: Anim; phase: number } {

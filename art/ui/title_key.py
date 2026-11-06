@@ -1,5 +1,6 @@
 """Muster title key art: two armies clash in a meadow between their keeps. Original scene, built from the
-same unit builders and toon kit as the sprites, so the title matches the game.
+same unit builders and toon kit as the sprites, so the title matches the game. Tiers 2-3 up front: their team
+colours read on the title better than the Ascended white and gold.
 
     blender -b --factory-startup -P art/ui/title_key.py -- [--res 1206x2622] [--samples 32] [--out path.png]
     npm run art:title        (renders, then writes public/ui/title-key.webp with cwebp)
@@ -187,11 +188,11 @@ def main():
     # world coordinates: a hero duel up front, the big hitters behind it, the lines marching from the keeps
     tide = [
         ("bulwark", 3, "idle", -0.65, 7.6, -14, 1.15),
-        ("banner", 4, "idle", -1.7, 7.0, -24, 1.25),
+        ("banner", 3, "idle", -1.7, 7.0, -24, 1.25),
         ("ranger", 3, "attack", -2.15, 5.3, -26, 1.25),
         ("pikeman", 3, "attack", -0.95, 5.7, -12, 1.25),
-        ("golem", 4, "attack", -1.8, 3.7, -26, 1.1),
-        ("blades", 4, "attack", -0.5, 1.0, -30, 1.5),
+        ("golem", 3, "attack", -1.8, 3.7, -26, 1.1),
+        ("blades", 2, "attack", -0.5, 1.0, -30, 1.5),
     ]
     for kind, tier, pose, x, y, yaw, s in tide:
         with kt.at((x, y, 0), rot=(0, 0, yaw), scale=s):
@@ -206,16 +207,16 @@ def main():
     ember = [
         ("shade", 3, "idle", 0.6, 7.7, 194, 1.2),
         ("bulwark", 3, "idle", 1.6, 7.0, 200, 1.15),
-        ("storm", 4, "attack", 2.25, 5.3, 206, 1.25),
+        ("storm", 3, "attack", 2.25, 5.3, 206, 1.25),
         ("grenadier", 3, "attack", 1.0, 5.7, 200, 1.25),
-        ("ravager", 4, "attack", 1.85, 3.5, 205, 1.25),
-        ("duelist", 4, "attack", 0.5, 1.0, 210, 1.5),
+        ("ravager", 3, "attack", 1.85, 3.5, 205, 1.25),
+        ("duelist", 2, "attack", 0.5, 1.0, 210, 1.5),
     ]
     for kind, tier, pose, x, y, yaw, s in ember:
         with ke.at((x, y, 0), rot=(0, 0, yaw), scale=s):
             REG[kind]["build"](ke, P, tier, pose)
     with ke.at((2.0, 6.6, 2.7), rot=(0, 0, 200), scale=1.0):
-        REG["harrier"]["build"](ke, P, 4, "attack")
+        REG["harrier"]["build"](ke, P, 3, "attack")
 
     # ---- the world (team-free materials, so it can share the ember pass)
     k = K.Kit(outline=0.03)
