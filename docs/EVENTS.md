@@ -1,0 +1,68 @@
+# Battle events and state the renderer reads
+
+Source of truth: `src/core/battle.ts` (`BattleEvent`, `Body`, `Proj`, `Zone`, `Fuse`). Events go in `battle.events` only when the
+Battle was made with `events: true`; everything else is plain state to read each frame. Positions are world units (board 9 x 14).
+Items marked **v2** are new.
+
+## Events
+Existing:
+- `slash {id, x, y, a, r, side, spin?}`: a melee arc of radius r facing angle a. **v2** `spin: true` = Whirlwind, a full 360° spin.
+- `shot {id, kind, x, y}`: a projectile left body `id`. Kinds: `arrow`, `bolt`, `grenade`, **v2** `shard` (Rimecaller frost), `shell` (Bombard), `pellet` (turret).
+- `hit {id, x, y, dmg, side, shielded?, big?}`: damage landed on `id`. `shielded` is also set when a Bastion cut it.
+- `boom {x, y, r, kind, side}`: a blast. Kinds: `mine`, `grenade`, `slam` and, **v2**: `quake` (Colossus Ascended, r 2), `erupt` (sapper surfacing), `shell` (Bombard), `shrapnel` (its 4 sub-blasts), `bomblet` (Cluster mine sub-blasts), `keg` (Kegrunner and Chain Keg), `pop` (Ascended-hive mite bursting on death), `talon` (Talon Dive), `mirror` (Mirror Hall decoy exploding).
+- `zap {pts, side}`: chain lightning through `pts` (up to 8 jumps when Overcharged).
+- `heal {from, to, x, y, amt}`: medic heal; **v2** also Rally pulses (from the banner) and Bloodlust (from = to = the ravager).
+- `spawn {id, x, y, side, kind, from}`: a new body appeared. **v2** adds `kind` and `from` (maker id): mite, queen, golemling (Shardling), thrall, turret, decoy.
+- `death {id, x, y, kind, side}`: a body died. Not sent for mines or kegs that blew themselves up (their `boom` is the end), or for decoys (see `pop`). A keg `death` means it was shot down and fizzled.
+- `blink {id, x0, y0, x, y, side}`, `charge {id, x, y, a}`, `fuse {id, x, y}`, `end {winner}`: unchanged.
+
+New in v2:
+- `burrow {id, x, y, side}`: a sapper went under at battle start (sent from the constructor).
+- `dig {id, x, y}`: a sapper's tunnel puff, about every 0.12 s while burrowed. Drop a dirt mound or trail mark here.
+- `emerge {id, x, y, r, side, big}`: the sapper surfaced; everything within r is stunned. `big` = Cave-in (r 2, also damages).
+- `dive {id, x, y, target, tx, ty, side}`: a harrier starts a dive from (x, y) at body `target` (last seen at tx, ty).
+- `chill {id, x, y, dur}`: body `id` is slowed for `dur` s (frost shard).
+- `freeze {id, x, y, dur}`: body `id` is frozen solid for `dur` s (Deep Freeze).
+- `aura {id, x, y, r, side, rally}`: Standard Bearer aura pulse (once a second). `rally` = the Ascended version.
+- `parry {id, x, y, by, riposte}`: the duelist `id` blocked a blow from `by` (-1 if not a melee striker). `riposte` = it struck back.
+- `brace {id, x, y, a}`: a pikeman set its pikes facing angle a.
+- `impale {id, target, x, y}`: pikeman `id` stopped the charging `target` (lancer or keg) at (x, y).
+- `raise {id, from, x, y, side}`: Gravecaller `from` raised thrall `id` at (x, y). A `spawn` follows.
+- `build {id, x, y, dur}`: tinker `id` started building a turret at (x, y); done in `dur` s (a `spawn` of kind turret then).
+- `repair {from, to, x, y, amt}`: tinker `from` repaired structure `to`.
+- `decoy {id, from, x, y, side}`: trickster `from` threw out decoy `id`. A `spawn` follows.
+- `pop {id, x, y, side}`: decoy `id` vanished (struck down, or its trickster died). Mirror Hall decoys also `boom` (kind `mirror`).
+- `light {id, x, y}`: a keg's fuse is lit (it starts its run).
+- `kegdrop {x, y, at, side}`: Chain Keg left a second keg at (x, y) that blows at battle time `at` (also in `battle.fuses`).
+- `bomblets {x, y, pts, at, side}`: Cluster (3) or Shrapnel (4) bomblets thrown from (x, y) to `pts`, bursting at time `at` (also in `battle.fuses`).
+- `zone {id, x, y, r, until, side}`: Firebomb burning ground until battle time `until` (also in `battle.zones`).
+- `revive {id, from, x, y}`: Ascended medic `from` brought `id` back at half health (no `death` was sent).
+- `volley {id, x, y, a}`: an Ascended ranger loosed three arrows fanned around angle a.
+- `twin {id, x, y, a}`: an Ascended ballista fired two bolts.
+- `reset {id, x, y}`: Shadow Step: a kill readied the shade's blink.
+
+## Body fields (persistent, read every frame)
+- `kind`: also the spawned kinds `mite`, `queen` (Brood Queen), `golemling` (display "Shardling"), `thrall`, `turret`, `decoy`. Get any kind's base stats with `bodyDef(kind)` from defs (use it for radius: `UNITS[kind]` is undefined for spawned kinds).
+- `rank`: 1 to 4; 4 is Ascended. Spawned bodies share their maker's rank.
+- `owner`: the body that made this one (hive for mites/queen, grave for thralls, tinker for turrets, trickster for decoys), else -1.
+- `burrowed`: sapper underground. Draw only the trail (or a moving mound), no body, no health bar.
+- `flying`: harrier. Skip ground shadows under it at altitude. `z`: altitude, 1.2 cruising, down to about 0.15 at the bottom of a dive.
+- `slow`: seconds of frost slow left (half speed, attacks 25% slower). `frozen`: seconds frozen solid left (draw ice).
+- `braced`: pikeman has its pikes set.
+- `buff`: > 0 while inside a Standard Bearer aura (attacks 25% faster). `rally`: > 0 while inside an Ascended (Rally) aura (+20% damage).
+- `parryCd`: duelist parry ready when <= 0 (a glint).
+- `dmg` / `baseDmg`: current damage (Rally adds 20%) and the base.
+- `hand`: +1/-1, the way it circles (internal).
+- `state` by kind: mine `armed`/`fuse`/`spent`; lancer `aim`/`charge`/`wheel`; shade `flank`/`fight`; sapper `burrow`/`fight`; harrier `circle`/`dive`/`climb`; tinker `idle`/`build` (building at `ax, ay` for 1.2 s); keg `run`/`reel` (knocked back by pikes)/`spent`.
+- Ravager fury needs no field: it is `1 - hp/maxHp` (attacks up to 3x faster near death).
+- Decoys are illusions of their trickster: draw them as the trickster (same team, same rank). They don't count as survivors.
+- Turrets are structures built in battle; they don't count as survivors (a side left with only turrets has lost).
+
+## Battle fields
+- `zones: Zone[]`: burning ground now on the field: `{id, x, y, r, side, until, dps}`. Removed when `time >= until`.
+- `fuses: Fuse[]`: blasts still to go off: `{x, y, at, r, kind, side}` (bomblets, shrapnel, chain keg). Draw a sputtering bomb until `at`.
+
+## Projectiles (`battle.projs`)
+- `kind`: `shard` homes like an arrow (icy); `pellet` homes, small and fast (turret); `shell` arcs very high (`z` peaks about 3.2, flight 1.6 s, vs about 1.4 for a grenade).
+- `fx`: `fire` (Firebomb grenade), `shrapnel` (shell), `freeze` (Deep Freeze shard) or `""`.
+- A volley side arrow with `target: -1` flies straight and stops in the first enemy it touches.

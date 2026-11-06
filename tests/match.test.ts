@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyPlan, DEFAULT_AI, planTurn, type AIProfile } from "../src/core/ai";
-import { UNITS, ZONE_DEPTH, incomeFor, inZone, roundBase, supplyFor, toLocal } from "../src/core/defs";
+import { ASCEND_ROUND, UNITS, ZONE_DEPTH, incomeFor, inZone, rankDmg, rankHp, roundBase, supplyFor, toLocal, upgradeCost } from "../src/core/defs";
 import { Match, interestFor } from "../src/core/match";
 
 describe("match", () => {
@@ -40,26 +40,53 @@ describe("match", () => {
     m.upgrade(0, p.id);
     m.upgrade(0, p.id);
     expect(p.rank).toBe(3);
-    expect(m.canUpgrade(0, p.id)).toBe("Max rank");
+    expect(m.canUpgrade(0, p.id)).toBe("Ascend from round 5");
     const g = m.sides[0].gold;
     m.sell(0, p.id);
     expect(m.sides[0].gold).toBe(Math.min(30, g + Math.floor(p.spent / 2)));
     expect(m.sides[0].pieces).toHaveLength(0);
   });
 
+  it("Ascends to rank 4 only from round 5, for three times the cost, at rank 3 stats x1.15", () => {
+    expect(rankHp(4)).toBeCloseTo(rankHp(3) * 1.15);
+    expect(rankDmg(4)).toBeCloseTo(rankDmg(3) * 1.15);
+    expect(upgradeCost("ranger", 1)).toBe(3);
+    expect(upgradeCost("ranger", 2)).toBe(6);
+    expect(upgradeCost("ranger", 3)).toBe(9);
+    expect(upgradeCost("ranger", 4)).toBe(Infinity);
+    const m = new Match({ seed: 3, start: [[{ kind: "ranger", lx: 4.5, depth: 2, rank: 3 }], [{ kind: "ranger", lx: 4.5, depth: 1 }]], startGold: [30, 0] });
+    const p = m.sides[0].pieces[0];
+    while (m.round < ASCEND_ROUND) {
+      expect(m.canUpgrade(0, p.id)).toBe("Ascend from round 5");
+      expect(() => m.upgrade(0, p.id)).toThrow();
+      m.fight();
+      m.next();
+    }
+    m.sides[0].gold = 30;
+    expect(m.canUpgrade(0, p.id)).toBeNull();
+    m.upgrade(0, p.id);
+    expect(p.rank).toBe(4);
+    expect(m.sides[0].gold).toBe(30 - 9);
+    expect(m.canUpgrade(0, p.id)).toBe("Max rank");
+    const b = m.makeBattle(false);
+    const body = b.bodies.find((x) => x.pieceId === p.id)!;
+    expect(body.maxHp).toBe(Math.round(UNITS.ranger.hp * rankHp(4)));
+  });
+
   it("the loser takes the base plus twice the winners' threat; pieces persist", () => {
-    const m = new Match({ seed: 4, start: [[{ kind: "golem", lx: 4.5, depth: 3 }], [{ kind: "ranger", lx: 4.5, depth: 1 }]] });
+    // A medic can't fight back, so the bulwark always takes the round.
+    const m = new Match({ seed: 4, start: [[{ kind: "bulwark", lx: 4.5, depth: 3 }], [{ kind: "medic", lx: 4.5, depth: 1 }]] });
     const rep = m.fight();
     expect(rep.winner).toBe(0);
     expect(rep.damage[1]).toBe(roundBase(1) + 2 * rep.result.threat[0]);
     expect(m.sides[1].hp).toBe(400 - rep.damage[1]);
     m.next();
-    expect(m.sides[1].pieces).toHaveLength(1); // the ranger comes back next round
+    expect(m.sides[1].pieces).toHaveLength(1); // the medic comes back next round
     expect(m.round).toBe(2);
   });
 
   it("ends when a commander falls", () => {
-    const m = new Match({ seed: 5, hp: [400, 30], start: [[{ kind: "golem", lx: 4.5, depth: 3, rank: 3 }], [{ kind: "ranger", lx: 4.5, depth: 1 }]] });
+    const m = new Match({ seed: 5, hp: [400, 20], start: [[{ kind: "bulwark", lx: 4.5, depth: 3, rank: 3 }], [{ kind: "medic", lx: 4.5, depth: 1 }]] });
     m.fight();
     expect(m.phase).toBe("over");
     expect(m.winner).toBe(0);
@@ -79,6 +106,22 @@ describe("ai", () => {
       m.fight();
       m.next();
     }
+  });
+
+  it("ascends only late: never before round 5, and sometimes once it is rich and full", () => {
+    let early = 0, late = 0;
+    for (let seed = 1; seed <= 4; seed++) {
+      const m = new Match({ seed, income: [0, 6] });
+      for (let r = 0; r < 14 && m.phase !== "over"; r++) {
+        applyPlan(m, 1, planTurn(m, 1, { ...DEFAULT_AI, difficulty: 0.9, economy: 0.8 }));
+        for (const p of m.sides[1].pieces) if (p.rank === 4) { if (m.round < 5) early++; else late++; }
+        applyPlan(m, 0, planTurn(m, 0, { ...DEFAULT_AI, difficulty: 0.3 }));
+        m.fight();
+        m.next();
+      }
+    }
+    expect(early).toBe(0);
+    expect(late).toBeGreaterThan(0);
   });
 
   it("tactics change what it drafts", () => {

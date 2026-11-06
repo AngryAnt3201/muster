@@ -1,8 +1,8 @@
 // The opponent. It drafts from its own shop, lays out a formation and, the harder it is, tests candidate plans by
 // simulating the coming battle against what it can see of your board (plus a guess at what you'll add).
-import { Battle } from "./battle";
+import { Battle, canHitAir } from "./battle";
 import {
-  UNITS, UNIT_KINDS, W, ZONE_DEPTH, clampToZone, toWorld, upgradeCost,
+  ASCEND_ROUND, MAX_RANK, UNITS, UNIT_KINDS, W, ZONE_DEPTH, clampToZone, toWorld, upgradeCost,
   type Piece, type Role, type Side, type UnitKind,
 } from "./defs";
 import { Match } from "./match";
@@ -30,12 +30,12 @@ export const DEFAULT_AI: AIProfile = { difficulty: 0.6, aggression: 0.5, tactic:
 
 export const TACTIC_WEIGHTS: Record<Tactic, Partial<Record<UnitKind, number>>> = {
   balanced: {},
-  swarm: { blades: 1.9, hive: 1.9, medic: 1.2, ranger: 0.8, golem: 0.6, ballista: 0.6 },
-  fortress: { bulwark: 1.9, ballista: 1.9, medic: 1.4, mine: 1.4, lancer: 0.6, shade: 0.5 },
-  artillery: { ranger: 1.6, grenadier: 1.9, storm: 1.7, ballista: 1.4, bulwark: 1.3, blades: 0.7, lancer: 0.7 },
-  ambush: { mine: 2.4, shade: 1.9, lancer: 1.3, ballista: 0.8, golem: 0.7 },
-  blitz: { lancer: 2.0, shade: 1.6, blades: 1.5, ballista: 0.4, mine: 0.5, hive: 0.6 },
-  siege: { golem: 2.2, hive: 1.4, bulwark: 1.3, storm: 1.2, mine: 0.6 },
+  swarm: { blades: 1.9, hive: 1.9, medic: 1.2, ranger: 0.8, golem: 0.6, ballista: 0.6, grave: 1.8, banner: 1.6, trickster: 1.3, bombard: 0.6 },
+  fortress: { bulwark: 1.9, ballista: 1.9, medic: 1.4, mine: 1.4, lancer: 0.6, shade: 0.5, pikeman: 1.7, tinker: 1.8, bombard: 1.5, keg: 0.6, sapper: 0.6, ravager: 0.7 },
+  artillery: { ranger: 1.6, grenadier: 1.9, storm: 1.7, ballista: 1.4, bulwark: 1.3, blades: 0.7, lancer: 0.7, bombard: 1.9, rime: 1.6, pikeman: 1.2, tinker: 1.2, ravager: 0.7 },
+  ambush: { mine: 2.4, shade: 1.9, lancer: 1.3, ballista: 0.8, golem: 0.7, sapper: 2.0, trickster: 1.8, keg: 1.4, harrier: 1.3, bombard: 0.7 },
+  blitz: { lancer: 2.0, shade: 1.6, blades: 1.5, ballista: 0.4, mine: 0.5, hive: 0.6, ravager: 1.8, harrier: 1.7, keg: 1.5, duelist: 1.3, banner: 1.2, bombard: 0.4, tinker: 0.5 },
+  siege: { golem: 2.2, hive: 1.4, bulwark: 1.3, storm: 1.2, mine: 0.6, bombard: 1.8, keg: 1.6, sapper: 1.4, grave: 1.3, harrier: 0.8 },
 };
 
 const FRONT: Role[] = ["tank", "melee", "siege", "cavalry"];
@@ -43,10 +43,14 @@ const BACK: Role[] = ["ranged", "artillery", "caster", "structure", "spawner"];
 const role = (k: UnitKind) => UNITS[k].role;
 
 /** Rough strength of a piece, close to its cost by design. */
-const POWER: Record<UnitKind, number> = {
+export const POWER: Record<UnitKind, number> = {
   mine: 2.1, blades: 3.2, ranger: 3.0, bulwark: 4.0, medic: 2.8, grenadier: 4.0,
   shade: 4.0, lancer: 4.1, ballista: 3.0, hive: 4.0, storm: 5.1, golem: 5.2,
+  sapper: 4.0, harrier: 4.0, banner: 2.8, rime: 4.0, ravager: 4.0, grave: 3.8,
+  bombard: 3.8, tinker: 2.9, duelist: 3.0, pikeman: 3.0, keg: 2.8, trickster: 3.9,
 };
+/** Shoots or casts at flyers itself, or builds something that does. */
+const antiAir = (k: UnitKind) => canHitAir(k) || k === "tinker";
 
 export interface PlanOption { type: "buy" | "upgrade"; slot?: number; kind: UnitKind; pieceId?: number; cost: number; }
 export interface Plan {
@@ -61,11 +65,15 @@ export interface Plan {
   goldLeft: number;
 }
 
-interface Draft { gold: number; pieces: Piece[]; shop: (UnitKind | null)[]; supply: number; shopFixed?: boolean; }
+interface Draft { gold: number; pieces: Piece[]; shop: (UnitKind | null)[]; supply: number; shopFixed?: boolean; round: number; }
 
 // ---------------------------------------------------------------- valuation
 function composition(pieces: Piece[]) {
-  const c = { front: 0, back: 0, support: 0, swarm: 0, tanks: 0, cavalry: 0, mines: 0, kinds: {} as Partial<Record<UnitKind, number>> };
+  const c = {
+    front: 0, back: 0, support: 0, swarm: 0, tanks: 0, cavalry: 0, mines: 0,
+    air: 0, sneaks: 0, chargers: 0, melee: 0, shooters: 0, structures: 0,
+    kinds: {} as Partial<Record<UnitKind, number>>,
+  };
   for (const p of pieces) {
     const r = role(p.kind);
     c.kinds[p.kind] = (c.kinds[p.kind] ?? 0) + 1;
@@ -73,9 +81,16 @@ function composition(pieces: Piece[]) {
     if (BACK.includes(r)) c.back += p.rank;
     if (r === "support") c.support++;
     if (p.kind === "blades" || p.kind === "hive") c.swarm += 1 + (p.kind === "hive" ? 1 : 0);
+    if (p.kind === "grave" || p.kind === "trickster") c.swarm += 1;
     if (p.kind === "bulwark" || p.kind === "golem") c.tanks++;
     if (p.kind === "lancer" || p.kind === "golem") c.cavalry++;
     if (p.kind === "mine") c.mines++;
+    if (r === "air") c.air++;
+    if (p.kind === "sapper" || p.kind === "shade" || p.kind === "trickster") c.sneaks++;
+    if (p.kind === "lancer" || p.kind === "keg") c.chargers++;
+    if (FRONT.includes(r) || r === "assassin") c.melee++;
+    if (r === "ranged" || r === "caster" || p.kind === "ballista" || p.kind === "tinker") c.shooters++;
+    if (UNITS[p.kind].structure) c.structures++;
   }
   return c;
 }
@@ -91,6 +106,10 @@ export function valueOf(kind: UnitKind, mine: Piece[], theirs: Piece[], ai: AIPr
   if (kind === "mine" && own.mines >= 3) v *= 0.4;
   if (kind === "hive" && (own.kinds.hive ?? 0) >= 2) v *= 0.5;
   if (kind === "medic" && own.front + own.back === 0) v *= 0.2;
+  if (kind === "banner" && mine.length < 3) v *= 0.5; // a flag needs someone to rally
+  if (kind === "grave" && (own.kinds.grave ?? 0) >= 1) v *= 0.5;
+  if (kind === "keg" && (own.kinds.keg ?? 0) >= 3) v *= 0.6;
+  if (kind === "tinker") v *= own.structures >= 2 ? 1.25 : own.structures === 0 ? 0.9 : 1;
   // Counters to what it can see, scaled by how sharp it is.
   const sharp = 0.25 + 0.75 * ai.difficulty;
   let counter = 1;
@@ -102,9 +121,24 @@ export function valueOf(kind: UnitKind, mine: Piece[], theirs: Piece[], ai: AIPr
   if (opp.mines >= 2 && kind === "hive") counter *= 1.4;
   if (opp.mines >= 2 && (kind === "lancer" || kind === "blades")) counter *= 0.75;
   if ((opp.kinds.grenadier ?? 0) + (opp.kinds.storm ?? 0) >= 2 && (kind === "blades" || kind === "hive")) counter *= 0.7;
+  // Flyers: only shots and spells reach them.
+  if (opp.air >= 1) counter *= antiAir(kind) ? 1 + 0.25 * Math.min(3, opp.air) : FRONT.includes(r) ? 0.9 : 1;
+  // Diggers and assassins: guards for the back line.
+  if (opp.sneaks >= 1 && (kind === "bulwark" || kind === "duelist" || kind === "pikeman")) counter *= 1.25;
+  // Cavalry and kegs: pikes.
+  if (opp.chargers >= 1 && kind === "pikeman") counter *= 1.5;
+  // Crowds: kegs and mortars.
+  if (opp.swarm >= 2 && (kind === "keg" || kind === "bombard")) counter *= 1.5;
+  // A wall of fighters: something they can't reach, or that out-duels them.
+  if (opp.melee >= 4 && (kind === "harrier" || kind === "duelist")) counter *= 1.3;
+  if (opp.structures >= 2 && (kind === "sapper" || kind === "harrier")) counter *= 1.3;
+  if (opp.back >= 3 && (kind === "sapper" || kind === "harrier" || kind === "trickster")) counter *= 1.4;
+  if (opp.tanks >= 2 && kind === "ravager") counter *= 1.3;
+  // Kegs get shot before they arrive.
+  if (opp.shooters >= 3 && kind === "keg") counter *= 0.75;
   v *= 1 + (counter - 1) * sharp;
   // Temperament.
-  const dmg = r === "melee" || r === "cavalry" || r === "assassin" || r === "siege" || r === "caster";
+  const dmg = r === "melee" || r === "cavalry" || r === "assassin" || r === "siege" || r === "caster" || r === "air";
   const def = r === "tank" || r === "structure" || r === "trap" || r === "support";
   if (dmg) v *= 0.8 + 0.4 * ai.aggression;
   if (def) v *= 1.2 - 0.4 * ai.aggression;
@@ -122,17 +156,23 @@ function draftOptions(d: Draft, theirs: Piece[], ai: AIProfile): { opt: PlanOpti
   // A green commander forgets upgrades until the board is full.
   const upgrades = ai.difficulty >= 0.3 || full;
   for (const p of upgrades ? d.pieces : []) {
+    if (p.rank >= MAX_RANK || (p.rank === 3 && d.round < ASCEND_ROUND)) continue;
     const cost = upgradeCost(p.kind, p.rank);
     if (cost > d.gold) continue;
-    const v = POWER[p.kind] * (TACTIC_WEIGHTS[ai.tactic][p.kind] ?? 1) * 0.62 * p.rank * (0.75 + 0.6 * ai.economy) * (full ? 1.6 : 1);
+    let v = POWER[p.kind] * (TACTIC_WEIGHTS[ai.tactic][p.kind] ?? 1) * 0.62 * p.rank * (0.75 + 0.6 * ai.economy) * (full ? 1.6 : 1);
+    // Ascending buys less raw stat than the earlier ranks; it pays off late, once the board is full and gold piles up.
+    if (p.rank === 3) v *= ascendWorth(d.round);
     out.push({ opt: { type: "upgrade", pieceId: p.id, kind: p.kind, cost }, score: v / cost });
   }
   return out;
 }
 
+/** How much an Ascend is worth next to a plain rank-up, by round (nothing before ASCEND_ROUND). */
+export const ascendWorth = (round: number) => (round < ASCEND_ROUND ? 0 : Math.min(1.05, 0.55 + 0.08 * (round - ASCEND_ROUND)));
+
 /** Spends a side's gold on a draft: greedy for the first candidate, sampled for the rest. */
 function draft(base: Draft, theirs: Piece[], ai: AIProfile, rng: Rng, temperature: number, round: number): { options: PlanOption[]; pieces: Piece[]; gold: number } {
-  const d: Draft = { gold: base.gold, pieces: base.pieces.map((p) => ({ ...p })), shop: [...base.shop], supply: base.supply, shopFixed: base.shopFixed };
+  const d: Draft = { gold: base.gold, pieces: base.pieces.map((p) => ({ ...p })), shop: [...base.shop], supply: base.supply, shopFixed: base.shopFixed, round: base.round };
   const options: PlanOption[] = [];
   // Bank toward interest early on, the more it cares about economy.
   const reserve = round < 9 ? Math.min(d.gold, Math.round(ai.economy * 6)) : 0;
@@ -161,7 +201,7 @@ function draft(base: Draft, theirs: Piece[], ai: AIProfile, rng: Rng, temperatur
 // ---------------------------------------------------------------- formation
 const BAND: Record<Role, number> = {
   tank: -0.15, siege: -0.35, melee: -0.6, cavalry: -1.7, assassin: -1.1, trap: 0.4,
-  support: -1.9, ranged: -2.4, caster: -2.2, artillery: -3.0, structure: -3.6, spawner: -3.4,
+  support: -1.9, ranged: -2.4, caster: -2.2, artillery: -3.0, structure: -3.6, spawner: -3.4, air: -1.3,
 };
 
 /** Lays the whole army out in side-local terms, then converts to the board. */
@@ -294,7 +334,7 @@ export function* planSteps(match: Match, side: Side, ai: AIProfile, opts: PlanOp
     ? guessAdditions(opp, visible, other.gold, match.supplyCap(opp), other.roster, rng.fork(3))
     : visible.map((p) => ({ ...p }));
   const n = opts.candidates ?? Math.max(1, Math.round(1 + ai.difficulty * 15));
-  const base: Draft = { gold: st.gold, pieces: st.pieces.map((p) => ({ ...p })), shop: [...st.shop], supply: match.supplyCap(side), shopFixed: !!match.cfg.fixedShop?.[side] };
+  const base: Draft = { gold: st.gold, pieces: st.pieces.map((p) => ({ ...p })), shop: [...st.shop], supply: match.supplyCap(side), shopFixed: !!match.cfg.fixedShop?.[side], round: match.round };
   const candidates: Plan[] = [];
   for (let c = 0; c < n; c++) {
     const crng = rng.fork(100 + c);

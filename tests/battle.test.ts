@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Battle, simulate, type BattleEvent } from "../src/core/battle";
-import { UNITS, type Piece, type Side, type UnitKind } from "../src/core/defs";
+import { H, UNITS, UNIT_KINDS, type Piece, type Side, type UnitKind } from "../src/core/defs";
 
 let nid = 1;
 const P = (kind: UnitKind, side: Side, x: number, y: number, rank = 1): Piece => ({ id: nid++, kind, side, x, y, rank, spent: UNITS[kind].cost });
@@ -14,6 +14,44 @@ describe("battle", () => {
     const b = new Battle(board(), { seed: 7 }); b.run();
     expect(a.result()).toEqual(b.result());
     expect(a.bodies.map((x) => [x.x, x.y, x.hp])).toEqual(b.bodies.map((x) => [x.x, x.y, x.hp]));
+  });
+
+  it("is deterministic with all 24 kinds at every rank, and the seed matters", () => {
+    const board = () => UNIT_KINDS.flatMap((k, i) => [
+      P(k, 0, 0.8 + (i % 6) * 1.5, 12.8 - Math.floor(i / 6) * 1.3, 1 + (i % 4)),
+      P(k, 1, 0.8 + ((i + 3) % 6) * 1.5, 1.2 + Math.floor(i / 6) * 1.3, 1 + ((i + 2) % 4)),
+    ]);
+    const go = (seed: number) => {
+      const b = new Battle(board(), { seed, events: true });
+      b.run();
+      return { r: b.result(), bodies: b.bodies.map((x) => [x.kind, x.x, x.y, x.hp, x.alive]), events: b.events.length };
+    };
+    const a = go(7), b = go(7), c = go(8);
+    expect(a).toEqual(b);
+    expect(c.bodies).not.toEqual(a.bodies);
+  });
+
+  it("neither seat has an edge: mirrored armies split their wins", () => {
+    const mirror = (army: [UnitKind, number, number][]): Piece[] => [
+      ...army.map(([k, x, y]) => P(k, 0, x, y)),
+      ...army.map(([k, x, y]) => P(k, 1, x, H - y)),
+    ];
+    const share = (army: [UnitKind, number, number][], n: number) => {
+      let s0 = 0;
+      for (let s = 1; s <= n; s++) { const w = simulate(mirror(army), { seed: s }).winner; s0 += w === 0 ? 1 : w === -1 ? 0.5 : 0; }
+      return s0 / n;
+    };
+    const blades: [UnitKind, number, number][] = [["blades", 3, 10], ["blades", 6, 10]];
+    const rangers: [UnitKind, number, number][] = [["ranger", 2.5, 11], ["ranger", 4.5, 11.5], ["ranger", 6.5, 11]];
+    const mixed: [UnitKind, number, number][] = [
+      ["bulwark", 4.5, 9.5], ["blades", 3, 10], ["ranger", 6, 11.5], ["medic", 4.5, 12], ["lancer", 1.5, 10.5],
+      ["pikeman", 6.5, 9.8], ["rime", 2.5, 12], ["harrier", 7.5, 11], ["sapper", 1, 12.5],
+    ];
+    for (const [army, n] of [[blades, 300], [rangers, 300], [mixed, 160]] as const) {
+      const s = share(army, n);
+      expect(s).toBeGreaterThan(0.45);
+      expect(s).toBeLessThan(0.55);
+    }
   });
 
   it("mine stays hidden, then blows up in a 1-unit radius", () => {
@@ -138,16 +176,16 @@ describe("battle", () => {
     expect(new Set(hits.map((h) => h.id)).size).toBeGreaterThanOrEqual(2);
   });
 
-  it("a mixed 12 v 12 battle finishes quickly", () => {
-    const kinds = Object.keys(UNITS) as UnitKind[];
+  it("a battle with all 24 kinds on each side finishes quickly", () => {
     const pieces: Piece[] = [];
-    kinds.forEach((k, i) => {
-      pieces.push(P(k, 0, 0.8 + (i % 6) * 1.5, 12.5 - Math.floor(i / 6) * 1.6));
-      pieces.push(P(k, 1, 0.8 + (i % 6) * 1.5, 1.5 + Math.floor(i / 6) * 1.6));
+    UNIT_KINDS.forEach((k, i) => {
+      pieces.push(P(k, 0, 0.8 + (i % 6) * 1.5, 12.8 - Math.floor(i / 6) * 1.3, 4));
+      pieces.push(P(k, 1, 0.8 + (i % 6) * 1.5, 1.2 + Math.floor(i / 6) * 1.3, 4));
     });
+    simulate(pieces, { seed: 11 }); // warm up the JIT
     const t = performance.now();
     const r = simulate(pieces, { seed: 12 });
-    expect(performance.now() - t).toBeLessThan(400);
+    expect(performance.now() - t).toBeLessThan(600);
     expect(r.time).toBeGreaterThan(1);
   });
 });

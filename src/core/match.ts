@@ -1,7 +1,7 @@
 // A match: rounds of deploy (buy, place, move, upgrade, sell) then a battle. Pieces stay on the board between rounds.
 import { Battle, type BattleResult } from "./battle";
 import {
-  GOLD_CAP, REROLL_COST, SHOP_SIZE, START_HP, UNITS, UNIT_KINDS,
+  ASCEND_ROUND, GOLD_CAP, MAX_RANK, REROLL_COST, SHOP_SIZE, START_HP, UNITS, UNIT_KINDS,
   clampToZone, incomeFor, inZone, roundBase, supplyFor, toWorld, upgradeCost,
   type Mods, type Obstacle, type Piece, type Side, type UnitKind,
 } from "./defs";
@@ -200,7 +200,8 @@ export class Match {
   canUpgrade(s: Side, id: number): string | null {
     const p = this.piece(s, id);
     if (this.phase !== "deploy") return "Not now";
-    if (p.rank >= 3) return "Max rank";
+    if (p.rank >= MAX_RANK) return "Max rank";
+    if (p.rank === 3 && this.round < ASCEND_ROUND) return `Ascend from round ${ASCEND_ROUND}`;
     if (this.sides[s].gold < upgradeCost(p.kind, p.rank)) return "Need gold";
     return null;
   }
