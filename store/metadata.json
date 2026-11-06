@@ -1,0 +1,200 @@
+{
+  "_readme": "App Store Connect listing for Muster. Fields marked in _synced are rewritten from app.config.json by `npm run release:config`, which also regenerates store/LISTING.md and checks every length limit. Edit the copy here, then run that command.",
+  "_synced": [
+    "name",
+    "bundleId",
+    "sku",
+    "version",
+    "copyright",
+    "supportUrl",
+    "privacyPolicyUrl",
+    "marketingUrl",
+    "reviewContact.email"
+  ],
+  "name": "Muster: Tactics",
+  "subtitle": "Auto battler army strategy",
+  "subtitleAlternatives": [
+    "Build. Place. Clash.",
+    "Place your army. Watch it win",
+    "Turn-based army battler"
+  ],
+  "promotionalText": "24 units with minds of their own. Rank them up, Ascend them, and outplan rivals that test their plans against yours. No ads, no purchases, fully offline.",
+  "description": "Muster an army. Place it. Watch it fight.\n\n{{name}} is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.\n\n24 UNITS, EACH WITH A MIND OF ITS OWN\nNo grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.\n\nEVOLVE THEM. ASCEND THEM.\nRank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, 24 in all.\n\nRIVALS THAT THINK\nRivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.\n\nFOUR WAYS TO PLAY\n• Campaign: 30 levels across five acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.\n• Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.\n• Breakpoint: one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.\n• Skirmish: any rival, any settings, any starting health.\n\nPLAYS YOUR WAY\n• Short rounds that fit a spare minute, with 2× and 3× battle speed\n• Fully offline: no account, no sign-in, no internet needed\n• No ads, no in-app purchases, no timers\n• Your progress stays on your device",
+  "keywords": "turn based,wargame,battle,tactical,fantasy,medieval,knights,soldiers,puzzle,offline,commander,war",
+  "whatsNew": null,
+  "primaryLanguage": "English (U.S.)",
+  "bundleId": "co.inflect.muster",
+  "sku": "co.inflect.muster",
+  "version": "1.0.0",
+  "category": {
+    "primary": "Games",
+    "primarySubcategories": [
+      "Strategy",
+      "Casual"
+    ],
+    "secondary": null,
+    "_note": "In App Store Connect: App Information > Category. Primary = Games, then pick the two Games subcategories Strategy and Casual. Leave Secondary empty (or Entertainment)."
+  },
+  "price": "Free (USD 0.00), all countries and regions",
+  "copyright": "2026 Jack Wakem",
+  "contentRights": "No, it does not contain, show, or access third-party content",
+  "supportUrl": "https://muster-tactics.vercel.app/support.html",
+  "privacyPolicyUrl": "https://muster-tactics.vercel.app/privacy.html",
+  "marketingUrl": "https://muster-tactics.vercel.app",
+  "ageRating": {
+    "expected": "9+",
+    "_note": "App Store Connect > App Information > Age Rating > Edit. Answer every question with None / No except the one below. If Apple shows a question not listed here, the answer for this game is None / No.",
+    "answers": [
+      [
+        "Parental controls / age assurance in the app",
+        "No"
+      ],
+      [
+        "Unrestricted web access",
+        "No"
+      ],
+      [
+        "User-generated content",
+        "No"
+      ],
+      [
+        "Messaging and chat",
+        "No"
+      ],
+      [
+        "Advertising",
+        "No"
+      ],
+      [
+        "Profanity or crude humor",
+        "None"
+      ],
+      [
+        "Horror or fear themes",
+        "None"
+      ],
+      [
+        "Alcohol, tobacco, or drug use or references",
+        "None"
+      ],
+      [
+        "Medical or treatment information",
+        "None"
+      ],
+      [
+        "Health or wellness topics",
+        "No"
+      ],
+      [
+        "Mature or suggestive themes",
+        "None"
+      ],
+      [
+        "Sexual content or nudity",
+        "None"
+      ],
+      [
+        "Graphic sexual content and nudity",
+        "None"
+      ],
+      [
+        "Cartoon or fantasy violence",
+        "Infrequent/Mild"
+      ],
+      [
+        "Realistic violence",
+        "None"
+      ],
+      [
+        "Prolonged graphic or sadistic realistic violence",
+        "None"
+      ],
+      [
+        "Simulated gambling",
+        "None"
+      ],
+      [
+        "Gambling (real money)",
+        "No"
+      ],
+      [
+        "Contests",
+        "None"
+      ],
+      [
+        "Loot boxes",
+        "No"
+      ]
+    ],
+    "_why": "Battles are top-down fantasy units (swords, bows, bombs, lightning) knocking each other out: no blood, no gore, no realistic people. Infrequent/Mild cartoon or fantasy violence maps to 9+."
+  },
+  "appPrivacy": {
+    "label": "Data Not Collected",
+    "answer": "App Privacy > Get Started > 'Do you or your third-party partners collect data from this app?' = No, we do not collect data from this app. Then Publish.",
+    "tracking": "No tracking. No third-party SDKs that collect data. No analytics, ads or crash reporting."
+  },
+  "exportCompliance": "Handled in the binary: ITSAppUsesNonExemptEncryption = NO in Info.plist, so App Store Connect does not ask.",
+  "signInRequired": false,
+  "reviewNotes": "{{name}} is a single-player strategy game. There is no account or sign-in, it never uses the network, and it has no purchases or ads.\nHow to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.\nGauntlet, Breakpoint and Skirmish (AI lab) are open from the title screen.",
+  "reviewContact": {
+    "firstName": "Jack",
+    "lastName": "Wakem",
+    "email": "jackwakem@gmail.com",
+    "phone": "(fill in: your mobile with country code)"
+  },
+  "releaseOption": "Automatically release this version after App Review approval",
+  "screenshots": {
+    "displaySize": "iPhone 6.9\" display (1320 x 2868 portrait). iPhone only, so no iPad screenshots. Apple scales these down for smaller iPhones.",
+    "folder": "store/screenshots",
+    "order": [
+      "01-battle.png",
+      "02-deploy.png",
+      "03-ascended.png",
+      "04-campaign.png",
+      "05-breakpoint.png",
+      "06-ai-lab.png"
+    ]
+  },
+  "nameOptions": {
+    "checkedOn": "2026-11-06",
+    "method": "https://itunes.apple.com/search?term=<name>&entity=software in the US, AU and GB storefronts; 'taken' means a live app with exactly that name (case and punctuation ignored). Names reserved in App Store Connect but not yet live cannot be seen this way; App Store Connect confirms when you create the app record.",
+    "chosen": "Muster: Tactics",
+    "options": [
+      {
+        "name": "Muster: Tactics",
+        "status": "free (no exact match)",
+        "note": "Chosen by Jack. Existing 'Muster' apps are social, lifestyle, education and utility apps, none are games."
+      },
+      {
+        "name": "Muster: Army Battler",
+        "status": "free (no exact match)",
+        "note": "Says the genre in the name; strong for search."
+      },
+      {
+        "name": "Muster & Clash",
+        "status": "free (no exact match)",
+        "note": "Echoes the in-game tagline build, place, clash."
+      },
+      {
+        "name": "Muster: Auto Battler",
+        "status": "free (no exact match)",
+        "note": "Genre term people search for."
+      },
+      {
+        "name": "Musterfield",
+        "status": "free (no exact match)",
+        "note": "One original word, easy to own."
+      },
+      {
+        "name": "Muster Up: Tactics",
+        "status": "free (no exact match)",
+        "note": "Fallback if Muster: Tactics is reserved by someone."
+      },
+      {
+        "name": "Muster",
+        "status": "TAKEN",
+        "note": "Exact matches: Muster (Stalefish Labs, Social Networking) and muster (HATCH COLLECTIBLES, Lifestyle)."
+      }
+    ]
+  }
+}

@@ -8,6 +8,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
+        // Same ink as the launch screen and the web view, so there is never a white frame at launch.
+        window?.backgroundColor = UIColor(red: 11 / 255, green: 15 / 255, blue: 23 / 255, alpha: 1)
         window?.rootViewController = CAPBridgeViewController()
         window?.makeKeyAndVisible()
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Muster: no tracking, no tracking domains, no data collected.
+	     Required-reason APIs: none. The app's own Swift code (AppDelegate, SceneDelegate) and the
+	     Haptics and StatusBar plugins compiled into it call none of them; progress is saved by the
+	     web view's localStorage (WebKit), which is not a required-reason API. Capacitor.framework and
+	     Cordova.framework ship their own PrivacyInfo.xcprivacy (also empty). -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

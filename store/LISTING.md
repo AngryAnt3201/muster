@@ -1,0 +1,153 @@
+# Muster: Tactics: App Store listing
+
+Generated from `store/metadata.json` by `npm run release:config` (name, version and URLs come from `app.config.json`). Edit those, not this file. Copy each block into App Store Connect as is.
+
+## Name
+
+```
+Muster: Tactics
+```
+15/30. Home-screen name under the icon: **Muster** (`displayName` in app.config.json).
+
+Availability, checked 2026-11-06 by searching `https://itunes.apple.com/search?term=<name>&entity=software` (US, AU, GB):
+
+| Name | Status | Note |
+| --- | --- | --- |
+| Muster: Tactics (chosen) | free (no exact match) | Chosen by Jack. Existing 'Muster' apps are social, lifestyle, education and utility apps, none are games. |
+| Muster: Army Battler | free (no exact match) | Says the genre in the name; strong for search. |
+| Muster & Clash | free (no exact match) | Echoes the in-game tagline build, place, clash. |
+| Muster: Auto Battler | free (no exact match) | Genre term people search for. |
+| Musterfield | free (no exact match) | One original word, easy to own. |
+| Muster Up: Tactics | free (no exact match) | Fallback if Muster: Tactics is reserved by someone. |
+| Muster | TAKEN | Exact matches: Muster (Stalefish Labs, Social Networking) and muster (HATCH COLLECTIBLES, Lifestyle). |
+
+A name someone has reserved in App Store Connect but not shipped won't show up in search; App Store Connect tells you when you create the app record. If it says the name is taken, use the next free option above, put it in `app.config.json` as `storeName` and run `npm run release:config`.
+
+## Subtitle
+
+```
+Auto battler army strategy
+```
+26/30. Alternatives: "Build. Place. Clash.", "Place your army. Watch it win", "Turn-based army battler".
+
+## Promotional text
+
+```
+24 units with minds of their own. Rank them up, Ascend them, and outplan rivals that test their plans against yours. No ads, no purchases, fully offline.
+```
+153/170. Can be changed any time without a new build.
+
+## Description
+
+```
+Muster an army. Place it. Watch it fight.
+
+Muster: Tactics is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.
+
+24 UNITS, EACH WITH A MIND OF ITS OWN
+No grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.
+
+EVOLVE THEM. ASCEND THEM.
+Rank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, 24 in all.
+
+RIVALS THAT THINK
+Rivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.
+
+FOUR WAYS TO PLAY
+• Campaign: 30 levels across five acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.
+• Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.
+• Breakpoint: one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.
+• Skirmish: any rival, any settings, any starting health.
+
+PLAYS YOUR WAY
+• Short rounds that fit a spare minute, with 2× and 3× battle speed
+• Fully offline: no account, no sign-in, no internet needed
+• No ads, no in-app purchases, no timers
+• Your progress stays on your device
+```
+2433/4000.
+
+## Keywords
+
+```
+turn based,wargame,battle,tactical,fantasy,medieval,knights,soldiers,puzzle,offline,commander,war
+```
+97/100. Comma separated, no spaces after commas, no competitor names, no words already in the name or subtitle (Apple indexes those anyway).
+
+## App information
+
+| Field | Value |
+| --- | --- |
+| Bundle ID | `co.inflect.muster` |
+| SKU | `co.inflect.muster` |
+| Version | 1.0.0 (build 1) |
+| Primary language | English (U.S.) |
+| Category | Games, subcategories Strategy and Casual; no secondary category |
+| Price | Free (USD 0.00), all countries and regions |
+| Copyright | 2026 Jack Wakem |
+| Content rights | No, it does not contain, show, or access third-party content |
+| Support URL | https://muster-tactics.vercel.app/support.html |
+| Privacy Policy URL | https://muster-tactics.vercel.app/privacy.html |
+| Marketing URL | https://muster-tactics.vercel.app |
+| Export compliance | Handled in the binary: ITSAppUsesNonExemptEncryption = NO in Info.plist, so App Store Connect does not ask. |
+| Release | Automatically release this version after App Review approval |
+
+## Age rating (expected 9+)
+
+App Store Connect > App Information > Age Rating > Edit. Answer every question with None / No except the one below. If Apple shows a question not listed here, the answer for this game is None / No.
+
+| Question | Answer |
+| --- | --- |
+| Parental controls / age assurance in the app | No |
+| Unrestricted web access | No |
+| User-generated content | No |
+| Messaging and chat | No |
+| Advertising | No |
+| Profanity or crude humor | None |
+| Horror or fear themes | None |
+| Alcohol, tobacco, or drug use or references | None |
+| Medical or treatment information | None |
+| Health or wellness topics | No |
+| Mature or suggestive themes | None |
+| Sexual content or nudity | None |
+| Graphic sexual content and nudity | None |
+| Cartoon or fantasy violence | **Infrequent/Mild** |
+| Realistic violence | None |
+| Prolonged graphic or sadistic realistic violence | None |
+| Simulated gambling | None |
+| Gambling (real money) | No |
+| Contests | None |
+| Loot boxes | No |
+
+Battles are top-down fantasy units (swords, bows, bombs, lightning) knocking each other out: no blood, no gore, no realistic people. Infrequent/Mild cartoon or fantasy violence maps to 9+.
+
+## App Privacy
+
+**Data Not Collected.** App Privacy > Get Started > 'Do you or your third-party partners collect data from this app?' = No, we do not collect data from this app. Then Publish. No tracking. No third-party SDKs that collect data. No analytics, ads or crash reporting.
+
+## App Review information
+
+Sign-in required: **No** (untick "Sign-in required").
+
+Contact: Jack Wakem, jackwakem@gmail.com, phone (fill in: your mobile with country code).
+
+Notes:
+
+```
+Muster: Tactics is a single-player strategy game. There is no account or sign-in, it never uses the network, and it has no purchases or ads.
+How to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.
+Gauntlet, Breakpoint and Skirmish (AI lab) are open from the title screen.
+```
+
+## Screenshots
+
+iPhone 6.9" display (1320 x 2868 portrait). iPhone only, so no iPad screenshots. Apple scales these down for smaller iPhones. Upload in this order from `store/screenshots/`:
+
+1. `01-battle.png`
+2. `02-deploy.png`
+3. `03-ascended.png`
+4. `04-campaign.png`
+5. `05-breakpoint.png`
+6. `06-ai-lab.png`
+
+Re-shoot after art changes: `npm run dev` in one terminal, then `npm run store:shots`.

@@ -47,3 +47,16 @@ node tools/e2e.mjs <dir>                  # full AI-vs-AI match in the browser
 ```
 
 Code: `src/core` is pure and deterministic (battle sim, match, AI, content); `src/render` draws it on a canvas; `src/ui` is the HUD and screens.
+
+## Release (App Store)
+
+`app.config.json` is the one place for the store name, home-screen name, version, build, bundle id and team; `npm run release:config` spreads it to Xcode (`ios/app.xcconfig`, `ios/App/ExportOptions.plist`), the listing (`store/`) and the site (`site/`), and checks App Store limits.
+
+```
+npm run ios:release:dry   # Release build for the simulator, unsigned: proves the Release config compiles
+npm run store:shots       # 6.9" App Store screenshots into store/screenshots (uses or starts the dev server)
+npm run ios:release       # Jack only: signed Release archive (talks to Apple for signing)
+npm run ios:export        # Jack only: App Store .ipa from that archive
+```
+
+Step by step: `store/RELEASE-CHECKLIST.md`. Listing copy: `store/LISTING.md`. Privacy and support pages: `site/` (static).
