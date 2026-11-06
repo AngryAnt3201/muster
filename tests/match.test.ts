@@ -110,7 +110,8 @@ describe("ai", () => {
 
   it("ascends only late: never before round 5, and sometimes once it is rich and full", () => {
     let early = 0, late = 0;
-    for (let seed = 1; seed <= 4; seed++) {
+    // Most matches end by round 8, so only a few seeds ever get rich enough: sample 8 of them.
+    for (let seed = 1; seed <= 8; seed++) {
       const m = new Match({ seed, income: [0, 6] });
       for (let r = 0; r < 14 && m.phase !== "over"; r++) {
         applyPlan(m, 1, planTurn(m, 1, { ...DEFAULT_AI, difficulty: 0.9, economy: 0.8 }));
