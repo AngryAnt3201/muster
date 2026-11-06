@@ -136,6 +136,7 @@ function playLevel(l: LevelDef, attempt = 0) {
     foe: l.ai,
     mode: "campaign",
     title: l.name,
+    arena: l.act,
     hint: l.id === 1 && !load().campaign[1],
     onEnd: (m) => {
       const n = starsFor(l, m);

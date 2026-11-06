@@ -1,6 +1,7 @@
 // The board view: draws the deploy scene and the battle, turns battle events into effects.
 import type { Battle, BattleEvent, Body } from "../core/battle";
 import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
+import { arenaFor, flatStretch, propRect, propVariant, type Arena } from "./arena";
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { sprite, whiteOf } from "./sprites";
@@ -42,6 +43,9 @@ export class BoardView {
   onShake?: (amount: number) => void;
   onSound?: (name: string, gain?: number) => void;
   private bg?: HTMLCanvasElement;
+  /** The Blender arena for this match's act (null until loaded, or if the art is missing). */
+  arena: Arena | null = null;
+  private arenaReq = 0;
   private reveal = new Map<number, number>(); // piece id -> time revealed
 
   constructor(canvas: HTMLCanvasElement) {
@@ -68,6 +72,46 @@ export class BoardView {
     this.bg = undefined;
   }
 
+  /** Picks the arena backdrop by campaign act (anything without an arena gets act 1's). */
+  setArena(act: number | undefined): Promise<void> {
+    const req = ++this.arenaReq;
+    return arenaFor(act).then((a) => {
+      if (req !== this.arenaReq) return;
+      this.arena = a;
+      this.bg = undefined;
+    });
+  }
+
+  /** Screen rect of an obstacle's prop sprite (the silhouette covers the collision circle). */
+  private propAt(o: Obstacle) {
+    const a = this.arena!;
+    return propRect(a.m, a.info, this.sx(o.x), this.sy(o.y), o.r, this.s, flatStretch(a.m));
+  }
+
+  /**
+   * Painter's order for props: call with each body's y in draw order; props whose footprint centre is at or above
+   * that y get their upper half redrawn so they stand in front of bodies behind them. Call with Infinity at the end.
+   */
+  private propPainter(): (y: number) => void {
+    const a = this.arena;
+    if (!a || !a.props.length || !this.obstacles.length) return () => {};
+    const list = [...this.obstacles].sort((p, q) => p.y - q.y);
+    let i = 0;
+    return (y: number) => {
+      const ctx = this.ctx;
+      while (i < list.length && list[i].y <= y) {
+        const o = list[i++];
+        const img = a.props[propVariant(o, a.props.length)];
+        const r = this.propAt(o);
+        const cx = this.sx(o.x), cy = this.sy(o.y), hw = o.r * this.s * 1.06;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(cx - hw, r.y, hw * 2, cy - r.y); ctx.clip();
+        ctx.drawImage(img, r.x, r.y, r.w, r.h);
+        ctx.restore();
+      }
+    };
+  }
+
   sx(x: number) { return this.ox + x * this.s; }
   sy(y: number) { return this.oy + y * this.s; }
   toWorld(px: number, py: number) { return { x: (px - this.ox) / this.s, y: (py - this.oy) / this.s }; }
@@ -79,6 +123,7 @@ export class BoardView {
     const g = c.getContext("2d")!;
     g.scale(this.dpr, this.dpr);
     const { x, y, w, h } = this.rect;
+    if (this.arena) { this.paintArena(g); return c; }
     // Outer frame.
     g.fillStyle = "#070a10";
     g.fillRect(0, 0, this.cssW, this.cssH);
@@ -185,6 +230,59 @@ export class BoardView {
     g.fillStyle = vg; g.fillRect(x, y, w, h);
     g.restore();
     return c;
+  }
+
+  /** The Blender backdrop: ground fills the screen, the board's zones on top, then the obstacle props. */
+  private paintArena(g: CanvasRenderingContext2D) {
+    const a = this.arena!, wr = a.m.world;
+    const { x, y, w, h } = this.rect;
+    g.fillStyle = a.info.edge;
+    g.fillRect(0, 0, this.cssW, this.cssH);
+    g.drawImage(a.ground, this.sx(wr.x), this.sy(wr.y), wr.w * this.s, wr.h * this.s);
+    // Outside the board: a little darker so the playing field reads.
+    g.save();
+    g.fillStyle = "rgba(6,10,18,0.28)";
+    g.beginPath();
+    g.rect(0, 0, this.cssW, this.cssH);
+    addRoundRect(g, x, y, w, h, 11);
+    g.fill("evenodd");
+    g.restore();
+    g.save();
+    roundRectPath(g, x, y, w, h, 11);
+    g.clip();
+    for (const s of [0, 1] as Side[]) {
+      const p = toWorld(s, 0, 0), q = toWorld(s, 0, ZONE_DEPTH);
+      const y0 = this.sy(Math.min(p.y, q.y)), y1 = this.sy(Math.max(p.y, q.y));
+      const zg = g.createLinearGradient(0, s === 0 ? y1 : y0, 0, s === 0 ? y0 : y1);
+      zg.addColorStop(0, team(s).glow + "0.12)");
+      zg.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = zg;
+      g.fillRect(x, y0, w, y1 - y0);
+      const ey = this.sy(s === 0 ? H - 0.12 : 0.12);
+      const lg = g.createLinearGradient(x, 0, x + w, 0);
+      lg.addColorStop(0, team(s).glow + "0)"); lg.addColorStop(0.5, team(s).glow + "0.7)"); lg.addColorStop(1, team(s).glow + "0)");
+      g.strokeStyle = lg; g.lineWidth = 3;
+      g.beginPath(); g.moveTo(x, ey); g.lineTo(x + w, ey); g.stroke();
+    }
+    const top = this.sy(toWorld(1, 0, ZONE_DEPTH).y), bot = this.sy(toWorld(0, 0, ZONE_DEPTH).y);
+    g.fillStyle = "rgba(10,14,24,0.12)";
+    g.fillRect(x, top, w, bot - top);
+    g.setLineDash([this.s * 0.25, this.s * 0.2]);
+    g.strokeStyle = "rgba(255,255,255,0.22)"; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(x, (top + bot) / 2); g.lineTo(x + w, (top + bot) / 2); g.stroke();
+    g.setLineDash([]);
+    g.restore();
+    g.save();
+    g.strokeStyle = "rgba(255,255,255,0.18)"; g.lineWidth = 1.5;
+    roundRectPath(g, x, y, w, h, 11); g.stroke();
+    g.restore();
+    // Obstacle props, back to front (their own baked shadows included).
+    if (a.props.length) {
+      for (const o of [...this.obstacles].sort((p, q) => p.y - q.y)) {
+        const r = this.propAt(o);
+        g.drawImage(a.props[propVariant(o, a.props.length)], r.x, r.y, r.w, r.h);
+      }
+    }
   }
 
   // ------------------------------------------------------------ events -> effects
@@ -490,7 +588,9 @@ export class BoardView {
     const ctx = this.ctx, s = this.s;
     if (sc.zone !== undefined && sc.zone !== null) this.drawZone(sc.zone);
     const list = [...sc.pieces].sort((a, b) => (a.kind === "mine" ? -1 : 0) - (b.kind === "mine" ? -1 : 0) || a.y - b.y);
+    const props = this.propPainter();
     for (const p of list) {
+      if (p.kind !== "mine") props(p.y);
       const def = UNITS[p.kind];
       const x = this.sx(p.x), y = this.sy(p.y), r = def.radius * s;
       if (p.kind === "mine" && p.side === 1 && !sc.showEnemyMines) continue;
@@ -511,6 +611,7 @@ export class BoardView {
       }
       drawRank(ctx, x, y, Math.max(r, 0.3 * s), p.rank);
     }
+    props(Infinity);
     if (sc.ghost) {
       const g = sc.ghost, def = UNITS[g.kind];
       const x = this.sx(g.x), y = this.sy(g.y), r = def.radius * s;
@@ -599,7 +700,9 @@ export class BoardView {
       ctx.restore();
     }
     const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => (p.flying ? 1 : 0) - (q.flying ? 1 : 0) || p.y - q.y);
+    const props = this.propPainter();
     for (const bd of live) {
+      props(bd.flying ? Infinity : bd.y);
       const [x, y] = lerp(bd);
       const fade = bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45;
       if (bd.burrowed) {
@@ -665,6 +768,7 @@ export class BoardView {
       }
       if (bd.alive && bd.stun > 0.05) this.drawStun(x, y + dy - bd.radius * s * 1.1, bd.radius * s);
     }
+    props(Infinity);
     // Projectiles.
     for (const p of b.projs) {
       if (!p.alive) continue;
@@ -847,6 +951,9 @@ const easeOut = (x: number) => 1 - (1 - x) ** 3;
 
 export function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
+  addRoundRect(ctx, x, y, w, h, r);
+}
+function addRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
   ctx.arcTo(x + w, y + h, x, y + h, r);
