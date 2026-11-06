@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "art": "${BLENDER:-blender} -b --factory-startup -P art/render_all.py",
+    "art:maps": "${BLENDER:-blender} -b --factory-startup -P art/maps/render_maps.py",
     "art:keeps": "${BLENDER:-blender} -b --factory-startup -P art/keeps/render_keeps.py",
     "art:style": "${BLENDER:-blender} -b --factory-startup -P art/style/frames.py",
     "style:pick": "node tools/style-pick.mjs",
