@@ -42,6 +42,10 @@ const ICE = "#bfe9ff";
 const LIFT = 0.55;
 /** World height of a flyer per unit of the sim's altitude z. */
 const AIR = 0.75;
+/** Air effects at or above this height sort with the flyers (layer 2); lower ones sort with the bodies on foot. */
+export const FLYER_Z = 0.6;
+/** An effect at a body's own row draws just after (over) that body. */
+const AIR_SORT_EPS = 0.02;
 
 type TokenOpts = DrawOpts & { rank?: number; flat?: boolean };
 
@@ -68,6 +72,7 @@ export class BoardView {
   private drop = new Map<number, number>(); // piece id -> time it started falling
   private frozenAt = new Map<number, number>(); // body id -> board time it froze (ice grows in, shatters on thaw)
   private fuseSeen = new WeakMap<object, number>(); // fuse -> board time first drawn
+  private airSorted = false; // this frame's air sheets were drawn in the battle's depth sort
   /** Each commander's shown hp over max hp: drives the keep's damage state (the game keeps it in step with the bar). */
   keepHp: [number, number] = [1, 1];
   /** Draw the commander keeps (off for boards with no commanders to show). */
@@ -356,6 +361,10 @@ export class BoardView {
       textured: vfxReady(),
       sound: (n: string, g?: number) => this.onSound?.(n, g),
       kick: (k: number) => this.onShake?.(k),
+      lift: (id: number) => {
+        const bd = battle?.bodies.find((b) => b.id === id);
+        return bd?.flying ? (bd.z ?? 1.2) * AIR : 0;
+      },
     };
   }
 
@@ -420,21 +429,36 @@ export class BoardView {
     return Math.floor(this.time * fps + seed * 1.37) % n;
   }
 
-  /** Every playing sheet on one layer: "ground" under the bodies, "air" over them; placed through the camera. */
+  /** Every playing sheet on one layer: "ground" under the bodies, "air" over them; placed through the camera.
+   *  In a battle the air sheets are already drawn, depth-sorted with the bodies (pushAirAnims). */
   private drawAnims(layer: Anim["layer"]) {
     if (!vfxReady()) return;
+    if (layer === "air" && this.airSorted) return;
+    for (const an of this.fx.anims) if (an.delay <= 0 && an.layer === layer) this.drawAnim(an);
+  }
+
+  private drawAnim(an: Anim) {
+    const sh = vfxSheet(an.sheet);
+    if (!sh) return;
+    const u = 1 - an.life / an.max;
+    const k = an.grow ? an.grow[0] + (an.grow[1] - an.grow[0]) * easeOut(u) : 1;
+    const p = this.cam.project(an.x, an.y, an.z), s = p.s;
+    this.sheet(an.sheet, animFrame(an, sh.frames), p.x, p.y, an.size * s * k, {
+      a: an.a, alpha: animAlpha(an), tint: an.tint, blend: an.blend,
+      w: an.w !== undefined ? an.w * s * k : undefined,
+      squash: an.layer === "ground" ? an.squash * this.cam.squashAt(an.y) : an.squash,
+    });
+  }
+
+  /** Air sheets join the painter sort, so a hit draws over the body it lands on but under bodies standing in
+   *  front of it, and anything at flyer height (a hit on a flyer, a thrown bomb) draws with the flyers, over every
+   *  body on foot. */
+  private pushAirAnims(list: Drawable[]) {
+    this.airSorted = vfxReady();
+    if (!this.airSorted) return;
     for (const an of this.fx.anims) {
-      if (an.delay > 0 || an.layer !== layer) continue;
-      const sh = vfxSheet(an.sheet);
-      if (!sh) continue;
-      const u = 1 - an.life / an.max;
-      const k = an.grow ? an.grow[0] + (an.grow[1] - an.grow[0]) * easeOut(u) : 1;
-      const p = this.cam.project(an.x, an.y, an.z), s = p.s;
-      this.sheet(an.sheet, animFrame(an, sh.frames), p.x, p.y, an.size * s * k, {
-        a: an.a, alpha: animAlpha(an), tint: an.tint, blend: an.blend,
-        w: an.w !== undefined ? an.w * s * k : undefined,
-        squash: layer === "ground" ? an.squash * this.cam.squashAt(an.y) : an.squash,
-      });
+      if (an.delay > 0 || an.layer !== "air") continue;
+      list.push({ y: an.y + AIR_SORT_EPS, layer: an.z >= FLYER_Z ? 2 : 1, draw: () => this.drawAnim(an) });
     }
   }
 
@@ -458,6 +482,7 @@ export class BoardView {
     // Heads and flyers over the far edge may use the whole layout area.
     ctx.beginPath(); ctx.rect(this.area.x, this.area.y, this.area.w, this.area.h); ctx.clip();
     this.drawAnims("ground");
+    this.airSorted = false;
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
     this.drawFx();
@@ -830,6 +855,7 @@ export class BoardView {
       list.push({ y: p.py + (p.y - p.py) * a, layer: lob ? 2 : 1, draw: () => { ctx.save(); ctx.globalAlpha *= vanish; this.drawProj(p, a); ctx.restore(); } });
     }
     if (as) this.pushShots(list, as);
+    this.pushAirAnims(list);
     this.pushKeeps(list, live.filter((bd) => bd.alive && !bd.flying && !as?.pose(bd.id)?.gone).map((bd) => ({ x: pos(bd)[0], y: pos(bd)[1], kind: bd.kind })));
     for (const d of sortDrawables(list)) d.draw();
     // ---- bars and ranks on top (not for illusions, bodies underground or the assault's strikers)
@@ -1382,7 +1408,7 @@ export class BoardView {
     }
     for (const f of fx.floats) {
       const u = 1 - f.life / f.max;
-      const q = cam.project(f.x, f.y, 0.6);
+      const q = cam.project(f.x, f.y, 0.6 + (f.z ?? 0));
       ctx.save();
       ctx.globalAlpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
       // Whole pixels only: the float drifts in depth every frame, and a new font size each frame misses the

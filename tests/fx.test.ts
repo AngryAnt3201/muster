@@ -5,6 +5,7 @@ import { describe, expect, it, beforeAll } from "vitest";
 import type { BattleEvent, BoomKind } from "../src/core/battle";
 import type { BodyKind } from "../src/core/defs";
 import { Fx, animAlpha, animFrame } from "../src/render/fx";
+import { FLYER_Z } from "../src/render/board";
 import { DROP_TIME, FIELD_VFX, PROJ_VFX, playDrop, playEvent, setVfxManifest, type VfxEnv, type VfxManifest } from "../src/render/vfx";
 
 const root = new URL("../", import.meta.url);
@@ -121,6 +122,23 @@ describe("battle events -> sheets", () => {
       }
     });
   }
+
+  it("a hit on a flyer plays at the flyer's height (sparks, debris, the number), ground decals stay down", () => {
+    const e: BattleEvent = { t: "hit", id: 1, x: 4, y: 7, dmg: 30, side: 1, big: true };
+    const ground = new Fx(); playEvent(ground, e, env());
+    const air = new Fx(); playEvent(air, e, { ...env(), lift: (id) => (id === 1 ? 0.9 : 0) });
+    expect(air.anims.length).toBe(ground.anims.length);
+    air.anims.forEach((an, i) => expect(an.z, an.sheet).toBeCloseTo(ground.anims[i].z + (an.layer === "air" ? 0.9 : 0)));
+    expect(air.anims.every((an) => an.layer !== "air" || an.z >= FLYER_Z)).toBe(true);
+    air.parts.forEach((p, i) => expect(p.z).toBeGreaterThan(ground.parts[i].z + 0.8));
+    expect(air.floats[0].z).toBeCloseTo(0.9);
+    // A body on foot is untouched, and so is an event that is not at a body (a blast).
+    const foot = new Fx(); playEvent(foot, e, { ...env(), lift: () => 0 });
+    expect(foot.anims.map((an) => an.z)).toEqual(ground.anims.map((an) => an.z));
+    const boom = new Fx(); playEvent(boom, { t: "boom", x: 4, y: 7, r: 1, kind: "grenade", side: 0 }, { ...env(), lift: () => 0.9 });
+    const boom0 = new Fx(); playEvent(boom0, { t: "boom", x: 4, y: 7, r: 1, kind: "grenade", side: 0 }, env());
+    expect(boom.anims.map((an) => an.z)).toEqual(boom0.anims.map((an) => an.z));
+  });
 
   it("lightning draws one stretched strip per jump when textured, the vector bolt otherwise", () => {
     const e: BattleEvent = { t: "zap", pts: [[1, 1], [4, 1], [4, 5]], side: 0 };
