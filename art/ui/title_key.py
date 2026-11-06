@@ -6,7 +6,7 @@ colours read on the title better than the Ascended white and gold.
     npm run art:title        (renders, then writes public/ui/title-key.webp with cwebp)
 
 Composition is for a portrait phone (19.5:9): sky + keeps behind the logo (top quarter), the clash in the
-band between the logo and the menu (about 27-55% down), meadow under the buttons.
+band between the logo and the menu (about 30-61% down), meadow under the buttons.
 Both team colours appear in one render: the tide army's materials are copied onto a frozen copy of the
 TeamColor group before the ember army is built.
 """
@@ -174,6 +174,9 @@ def main():
     cam.data.sensor_height = 36
     cam.data.clip_end = 400
     cam.location = (0.0, -4.0, 2.1)
+    # Frame raised over the scene (content sits ~5% lower): the keep flags and harriers clear the logo ribbon and
+    # the clash fills the band down to the menu, with open sky behind the logo.
+    cam.data.shift_y = 0.05
     pitch = math.radians(18.0)
     cam.rotation_euler = Vector((0.0, math.cos(pitch), -math.sin(pitch))).to_track_quat("-Z", "Y").to_euler()
     # sun from the upper left, in front of the scene

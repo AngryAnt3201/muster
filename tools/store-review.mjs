@@ -45,7 +45,7 @@ await shots(fresh, null, [
   ["campaign-act3", "?campaign=3"],
   ["puzzles", "?puzzles"],
   ["shop", "?shop"],
-  ["paywall-from-gauntlet", "", [{ click: ".menu .btn:nth-child(2)" }, { wait: 900 }]],
+  ["paywall-from-gauntlet", "", [{ click: ".menu .gauntlet-btn" }, { wait: 900 }]],
 ]);
 await shots(fresh, null, [
   ["shop-bought", "?shop", [{ click: ".shop-buy" }, { wait: 1500 }]],

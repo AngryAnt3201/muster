@@ -8,10 +8,11 @@ import { Camera, DIST, SLAB, TILT, sortDrawables, type Drawable, type Rect, type
 import { Fx, animAlpha, animFrame, frand, type Anim } from "./fx";
 import { BOARD, GOLD, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { frame, hasAtlas, spriteHeight } from "./sprites";
-import { SPRITE_VIS, animFor, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
+import { animFor, spriteVis, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
 import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
 import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playBoom, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
+import { spreadOffsets, type SpreadBody } from "./spread";
 
 export type { Rect } from "./camera";
 
@@ -510,7 +511,7 @@ export class BoardView {
     const h = spriteHeight(kind, rank);
     if (!h) return { x: at.x, y: at.y - at.r * 1.3, r: at.r };
     const feet = this.cam.project(x, y, z);
-    return { x: at.x, y: Math.min(at.y - at.r * 1.3, feet.y - h * feet.s * (radius / RADIUS(kind)) * SPRITE_VIS), r: at.r };
+    return { x: at.x, y: Math.min(at.y - at.r * 1.3, feet.y - h * feet.s * (radius / RADIUS(kind)) * spriteVis(RADIUS(kind))), r: at.r };
   }
 
   /** Draws a body standing at world (x, y), z above the ground. radius in world units. Upright Blender atlas frames
@@ -557,7 +558,7 @@ export class BoardView {
     ctx.globalAlpha *= (o.alpha ?? 1) * Math.min(1, alive * 2.5);
     if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
     // Drawn a bit larger than true scale so they read on a phone (collision is unchanged).
-    drawFrame(ctx, fr, (feet.s * (radius / RADIUS(kind)) * SPRITE_VIS) / fr.ppu, o.flash ?? 0);
+    drawFrame(ctx, fr, (feet.s * (radius / RADIUS(kind)) * spriteVis(RADIUS(kind))) / fr.ppu, o.flash ?? 0);
     ctx.restore();
   }
 
@@ -678,12 +679,15 @@ export class BoardView {
   /** Where the bodies of a piece stand: one, or Blades' trio around the placed point. */
   private footprints(kind: BodyKind, x: number, y: number, facing: number): [number, number][] {
     if (kind !== "blades") return [[x, y]];
-    const out: [number, number][] = [];
+    const pts: SpreadBody[] = [];
+    const r = RADIUS("blades");
     for (let i = 0; i < 3; i++) {
       const a = (Math.PI / 2) * facing + (i * TAU) / 3;
-      out.push([x + Math.cos(a) * 0.32, y + Math.sin(a) * 0.32]);
+      pts.push({ id: i, x: x + Math.cos(a) * 0.32, y: y + Math.sin(a) * 0.32, r, side: 0, vis: spriteVis(r) });
     }
-    return out;
+    // Spaced the way the battle draws the trio (see spreadBattle), so Fight doesn't snap them together.
+    const off = spreadOffsets(pts);
+    return pts.map((p) => { const o = off.get(p.id); return [p.x + (o?.[0] ?? 0), p.y + (o?.[1] ?? 0)]; });
   }
 
   private drawRangeHint(kind: UnitKind, x: number, y: number, ok: boolean) {
@@ -713,10 +717,13 @@ export class BoardView {
 
   private drawBattle(sc: BattleScene) {
     const ctx = this.ctx, b = sc.battle, a = sc.alpha, as = this.assault;
+    const spread = this.spreadBattle(b, a);
     // During the round-end assault the survivors move on the assault's clock, not the battle's.
     const pos = (bd: Body) => {
       const st = as?.pose(bd.id);
-      return st ? [st.x, st.y] as const : [bd.px + (bd.x - bd.px) * a, bd.py + (bd.y - bd.py) * a] as const;
+      if (st) return [st.x, st.y] as const;
+      const o = spread.get(bd.id);
+      return [bd.px + (bd.x - bd.px) * a + (o?.[0] ?? 0), bd.py + (bd.y - bd.py) * a + (o?.[1] ?? 0)] as const;
     };
     const height = (bd: Body) => (bd.flying ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
     const tex = vfxReady();
@@ -877,6 +884,31 @@ export class BoardView {
       const at = this.headAt(bd.kind, bd.rank, x, y, height(bd), bd.radius);
       drawRank(ctx, at.x, at.y + at.r * 1.3 - (bd.hp < bd.maxHp && !st ? 14 : 5), at.r * 1.3, bd.rank);
     }
+  }
+
+  private spreadOf = new Map<number, [number, number]>();
+  private spreadFor?: Battle;
+  private spreadT = 0;
+  /** Render-only crowd spacing for ground bodies (spread.ts), eased per body so figures glide apart rather than jump.
+   *  Bodies seen for the first time start at their target, matching the deploy footprints. */
+  private spreadBattle(b: Battle, a: number): Map<number, [number, number]> {
+    if (this.spreadFor !== b) { this.spreadOf.clear(); this.spreadFor = b; this.spreadT = this.time; }
+    const dt = Math.max(0, Math.min(0.1, this.time - this.spreadT));
+    this.spreadT = this.time;
+    const crowd: SpreadBody[] = [];
+    for (const bd of b.bodies) {
+      if (!bd.alive || bd.flying || bd.burrowed || bd.kind === "mine") continue;
+      const r = RADIUS(bd.kind);
+      crowd.push({ id: bd.id, x: bd.px + (bd.x - bd.px) * a, y: bd.py + (bd.y - bd.py) * a, r: bd.radius, side: bd.side, vis: spriteVis(r) });
+    }
+    const target = spreadOffsets(crowd), k = 1 - Math.exp(-dt * 6);
+    for (const c of crowd) {
+      const t = target.get(c.id) ?? [0, 0], cur = this.spreadOf.get(c.id);
+      if (!cur) { this.spreadOf.set(c.id, [t[0], t[1]]); continue; }
+      cur[0] += (t[0] - cur[0]) * k; cur[1] += (t[1] - cur[1]) * k;
+    }
+    // The dead keep the offset they fell with.
+    return this.spreadOf;
   }
 
   private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number, fade: number) {
