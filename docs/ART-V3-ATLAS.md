@@ -6,6 +6,8 @@ is built procedurally in Blender (`art/muster_art/units.py`) and rendered as upr
     npm run art                                   # render all (6 Blender workers), post, pack, contact sheets
     blender -b --factory-startup -P art/render_all.py -- --only ranger --tiers 1,4
     python3 art/post.py                           # re-ink + re-pack from existing raw renders
+    blender ... -P art/render_all.py -- --resume --no-post   # finish an interrupted render (skips kind/tier with meta.json)
+    python3 art/post.py --resume                  # post only bodies whose raw render is newer than their post
     python3 art/pack_atlas.py --sheets-only       # contact sheets from public/atlas only
 
 `post.py` and `pack_atlas.py` need Pillow and numpy (`/usr/local/bin/python3` has them on Jack's Mac; put it first

@@ -1,7 +1,7 @@
 """Muster unit art: build every unit procedurally in Blender and render the v3 battle frames (+ portraits).
 
     blender -b --factory-startup -P art/render_all.py -- [--only ranger,golem] [--tiers 1,4] [--jobs 6]
-                                                         [--no-post] [--portraits] [--samples 16]
+                                                         [--no-post] [--portraits] [--samples 16] [--resume]
     npm run art
 
 Battle frames (docs/ART-V3-ATLAS.md): the diorama camera from art/muster_art/style.py, 5 rendered facings
@@ -48,6 +48,7 @@ def args():
     ap.add_argument("--no-post", action="store_true")
     ap.add_argument("--portraits", action="store_true", help="render card portraits instead of battle frames")
     ap.add_argument("--samples", type=int, default=16)
+    ap.add_argument("--resume", action="store_true", help="skip kind/tier folders that already have meta.json")
     return ap.parse_args(argv)
 
 
@@ -75,6 +76,8 @@ def jobs_list(a):
     for kind in kinds_list(a):
         for t in tiers_for(REG[kind], a):
             out.append((kind, t))
+    if a.resume:  # meta.json is written last, so its presence means the folder is complete
+        out = [(k, t) for k, t in out if not os.path.exists(os.path.join(RAW3, k, f"t{t}", "meta.json"))]
     out.sort(key=lambda kt: -REG[kt[0]]["radius"] * (1.2 if kt[1] == 4 else 1.0))
     return out
 
@@ -302,6 +305,8 @@ def main():
         if a.portraits:
             extra.append("--portraits")
         extra += ["--samples", str(a.samples)]
+        if a.resume:
+            extra.append("--resume")
         procs = []
         for i in range(a.jobs):
             cmd = [blender, "-b", "--factory-startup", "-P", os.path.abspath(__file__), "--", "--worker", str(i), "--nworkers", str(a.jobs)] + extra

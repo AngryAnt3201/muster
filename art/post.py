@@ -1,6 +1,6 @@
 """Post-process raw Blender renders into battle frames (v3) and card portraits.
 
-    python3 art/post.py [--only kind,kind] [--jobs 8]       battle frames -> art/build/v3post, then art/pack_atlas.py
+    python3 art/post.py [--only kind,kind] [--jobs 8] [--resume] [--no-pack]      battle frames -> art/build/v3post, then art/pack_atlas.py
     python3 art/post.py --portraits [--only kind,kind]      card portraits -> public/portraits + art/contact/portraits.png
 
 Needs Pillow + numpy. Frame contract: docs/ART-V3-ATLAS.md and art/muster_art/style.py.
@@ -176,8 +176,13 @@ def frames_main(a):
             if a.only and kind not in {x.strip() for x in a.only.split(",")}:
                 continue
             for td in sorted(os.listdir(os.path.join(RAW3, kind))):
-                if os.path.exists(os.path.join(RAW3, kind, td, "meta.json")):
-                    jobs.append((kind, int(td[1:])))
+                raw_meta = os.path.join(RAW3, kind, td, "meta.json")
+                if not os.path.exists(raw_meta):
+                    continue
+                done = os.path.join(POST3, kind, td, "meta.json")
+                if a.resume and os.path.exists(done) and os.path.getmtime(done) >= os.path.getmtime(raw_meta):
+                    continue  # already posted from this render
+                jobs.append((kind, int(td[1:])))
     with ProcessPoolExecutor(max_workers=a.jobs) as ex:
         for msg in ex.map(post_unit, jobs):
             print(msg, flush=True)
@@ -273,6 +278,7 @@ def main():
     ap.add_argument("--only", default="")
     ap.add_argument("--portraits", action="store_true")
     ap.add_argument("--no-pack", action="store_true")
+    ap.add_argument("--resume", action="store_true", help="skip bodies already posted from their current render")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 2))
     a = ap.parse_args()
     if a.portraits:
