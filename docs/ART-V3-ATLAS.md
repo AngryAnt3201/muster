@@ -18,6 +18,14 @@ on PATH when running `npm run art`).
 All look and camera numbers live in `art/muster_art/style.py`; swapping to the style direction Jack signs off is an
 edit there plus a re-render. Nothing else keeps its own copy.
 
+The shipped atlases use the built-in look below. Its team colours match the provisional Sunlit Meadow direction. Once
+Jack picks a direction, copy that direction file's numbers (`art/style/<id>.json` on the style-directions branch) into
+`style.py`: `outline.color` -> `INK`, `outline.hull` -> `OUTLINE`, `outline.silhouette_px` -> `INK_PX`,
+`shading.bands` -> `RAMP`, `rim.*` -> `RIM_*`, `team` -> `TEAMS`. Then re-run `npm run art`. Leave the camera and
+frame plan as they are, because `CAMERA_EL`, `DIRS` and `ANIMS` are what `src/render/camera.ts` and
+`tests/atlas.test.ts` check against. That branch also adds its own `art/muster_art/style.py` with a different API
+(`S.load()`), so whichever lands second has to merge the two into one module.
+
 - Camera: orthographic, pitched `CAMERA_EL` = 53.3 degrees below the horizon, which is 90 degrees minus
   `TILT` (0.64 rad) in `src/render/camera.ts`, so a sprite's ground ellipse matches the board's.
 - `PPU` = 128 atlas pixels per world unit, rendered at `SS` = 2x and box-downsampled.
