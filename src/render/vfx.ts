@@ -157,6 +157,8 @@ export interface VfxEnv {
   sound?(name: string, gain?: number): void;
   /** Camera kick for the biggest blasts. */
   kick?(amount: number): void;
+  /** World height of a body above the ground (a flyer's altitude, 0 on foot), so its hits play where it is drawn. */
+  lift?(id: number): number;
 }
 
 const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
@@ -166,8 +168,22 @@ const DUST = "#d6c3a0";
 const STEEL = "#bcd6ff";
 const STRUCT = new Set(["turret", "mine", "decoy"]);
 
-/** Drop a few sheets plus the debris particles for one event. */
+/** Events that play at one body's position (its id): their sparks, flashes and debris rise with a flyer. */
+const AT_BODY = new Set<BattleEvent["t"]>(["hit", "shot", "parry", "freeze"]);
+
+/** Drop a few sheets plus the debris particles for one event. A hit on a flyer plays at the flyer's height, not at
+ *  its feet, so it never sits on the ground under the bodies standing there. */
 export function playEvent(fx: Fx, e: BattleEvent, env: VfxEnv) {
+  const lift = AT_BODY.has(e.t) && "id" in e ? env.lift?.(e.id) ?? 0 : 0;
+  if (lift <= 0) return playAt(fx, e, env);
+  const a0 = fx.anims.length, p0 = fx.parts.length, f0 = fx.floats.length;
+  playAt(fx, e, env);
+  for (let i = a0; i < fx.anims.length; i++) if (fx.anims[i].layer === "air" && !fx.anims[i].path) fx.anims[i].z += lift;
+  for (let i = p0; i < fx.parts.length; i++) fx.parts[i].z += lift;
+  for (let i = f0; i < fx.floats.length; i++) fx.floats[i].z = (fx.floats[i].z ?? 0) + lift;
+}
+
+function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
   const snd = (n: string, g = 0.5) => env.sound?.(n, g);
   switch (e.t) {
     case "slash": {

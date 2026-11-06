@@ -50,7 +50,7 @@ export interface Anim {
 }
 export type AnimOpts = Partial<Omit<Anim, "sheet" | "x" | "y" | "life">> & { size: number; max: number };
 
-export interface Float { x: number; y: number; text: string; life: number; max: number; color: string; size: number; }
+export interface Float { x: number; y: number; text: string; life: number; max: number; color: string; size: number; /** extra height (a flyer's) */ z?: number; }
 
 let seed = 1;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);

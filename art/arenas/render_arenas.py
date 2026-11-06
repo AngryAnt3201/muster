@@ -55,14 +55,17 @@ ACTS = {
             border="rocks", trees=("pine", "pine", "crag"), scatter="pebbles", obstacle="crag"),
     5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#cf5446", path_dk="#9c3a30",
                                      strip="#86c25a", strip_dk="#6aa947", court="#dcc6a0", court_dk="#a88d68"),
-            court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar"),
+            court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar",
+            relief="flagstones", stones=("#dcc6a0", "#e7d6b3", "#ccb38b", "#d5bf98"), trim="#ffcf4d"),
     6: dict(name="Frozen Reach", g=dict(grass="#eef5fb", grass_dk="#d3e2ef", grass_lt="#ffffff", path="#c5d7e8", path_dk="#9fb7cf",
                                         strip="#dbe7f2", strip_dk="#b9cde0", foliage="#3f8f6a", foliage_dk="#2b6b52", rock="#a9b4c2", rock_dk="#76828f",
                                         moss="#f4f9ff", edge="#8aa2bb"),
-            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock"),
+            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock", relief="snow"),
     7: dict(name="Sky Throne", g=dict(grass="#bfe0ff", grass_dk="#a6d0f7", grass_lt="#e6f3ff", path="#6f8fe0", path_dk="#4c69bd",
                                       strip="#efe3c8", strip_dk="#cdbd9a", court="#f5efe3", court_dk="#d9cdb6", rock="#f2ece0", rock_dk="#c9bfae"),
-            court=True, border="rail", trees=("cloud",), scatter="none", obstacle="obelisk"),
+            court=True, border="rail", trees=("cloud",), scatter="none", obstacle="obelisk",
+            relief="flagstones", stones=("#f5efe3", "#fbf8f1", "#ebe1cf", "#e9eef5"), strip_stones=("#efe3c8", "#f7eedb", "#e3d3b2"),
+            inlay="#ffcf4d", trim="#ffcf4d", path_tiles=True),
 }
 
 
@@ -230,22 +233,147 @@ def main():
             elif kind == "ice":
                 wk.crystal(0.08, 0.3, K.toon("#bfe9ff", spec=0.5), loc=B(x, y, 0.0), rot=(8, -6, 20 * i))
 
+        FLAG_H = 0.05
+
+        def flagstones(x0, y0, x1, y1, size, tones, seed, gap=0.05):
+            """Running-bond slabs over [x0, x1] x [y0, y1]: bevelled, a hair of height and tilt jitter, a tone each."""
+            rows = max(1, int(round((y1 - y0) / size)))
+            dy = (y1 - y0) / rows
+            ncol = max(1, int(round((x1 - x0) / size)))
+            dx = (x1 - x0) / ncol
+            mats = [toon(c, spec=0.15) for c in tones]
+            for r in range(rows):
+                off = (0.5 if r % 2 else 0.0) * dx
+                cuts = sorted({x0, x1} | {x0 + off + c * dx for c in range(-1, ncol + 2) if x0 + 0.2 < x0 + off + c * dx < x1 - 0.2})
+                c = 0
+                while c < len(cuts) - 1:
+                    xa, xb = cuts[c], cuts[c + 1]
+                    # Now and then two slabs are one long one.
+                    if c < len(cuts) - 2 and rnd(seed * 31 + r, c * 7) < 0.18:
+                        xb = cuts[c + 2]
+                        c += 1
+                    c += 1
+                    ya, yb = y0 + r * dy, y0 + (r + 1) * dy
+                    h = rnd(seed + r * 13, c * 17)
+                    tone = mats[int(rnd(seed * 7 + c, r * 3 + 5) * len(mats)) % len(mats)]
+                    wk.box((xb - xa - gap, yb - ya - gap, FLAG_H), tone,
+                           loc=B((xa + xb) / 2, (ya + yb) / 2, FLAG_H / 2 - 0.006 + (h - 0.5) * 0.014),
+                           rot=((rnd(r, c + seed) - 0.5) * 1.6, (rnd(c, r + seed) - 0.5) * 1.6, 0), bevel=0.028, outline=0.007)
+
         # ---------------- the ground
         court = th.get("court")
+        relief = th.get("relief")
         wk.box((44, 44, 0.04), S.ground_mat(st, "grass", "grass_dk", "patches", key_c="grass_lt"), loc=B(4.5, 3.0, -0.02), outline=0)
-        if court:
-            wk.box((W + 1.2, H + 1.2, 0.05), S.ground_mat(st, "court", "court_dk", "tiles", scale=1.2), loc=B(W / 2, H / 2, -0.004), outline=0)
+
+        def path_x(y):
+            """Centre of the keep-to-keep path at board row y (the ribbon below)."""
+            return 4.5 + 0.32 * math.sin(((y + 6.0) / 0.6) * 0.55)
+
+        pts = [(path_x(-6.0 + i * 0.6), -6.0 + i * 0.6) for i in range(int((H + 6.5) / 0.6) + 1)]
+        if relief == "flagstones":
+            # Raised, bevelled flagstones in running bond with ink grout and a few tones each, so the courtyard has
+            # real height (bevels catch the key light, outlines read as grout) instead of a flat brick texture.
+            # Kept low (FLAG_H) so units still stand on the board plane.
+            wk.box((W + 1.2, H + 1.2, 0.05), K.flat(g["court_dk"]), loc=B(W / 2, H / 2, -0.004), outline=0)
             wk.box((W + 1.5, H + 1.5, 0.12), toon("court_dk"), loc=B(W / 2, H / 2, -0.07), bevel=0.03)
-        strip_pat = th.get("strip_pat") or ("tiles" if court else "patches")
-        wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", strip_pat, scale=1.3), loc=B(W / 2, H / 2, 0.012), outline=0)
-        for yy in (ZD, H - ZD):
-            wk.box((W, 0.09, 0.05), toon("edge"), loc=B(W / 2, yy, 0.03), bevel=0.015, outline=0)
-        pts = [(4.5 + 0.32 * math.sin(i * 0.55), -6.0 + i * 0.6) for i in range(int((H + 6.5) / 0.6) + 1)]
-        ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.03)
-        ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "tiles" if court else "patches", scale=2.0), 0.034)
-        for kx, ky in KEEPS:
-            wk.cyl(1.5, 0.02, K.flat(g["path_dk"]), loc=B(kx, ky, 0.036), seg=40, outline=0)
-            wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.04), seg=40, outline=0)
+            tones = th["stones"]
+            flagstones(-0.6, -0.6, W + 0.6, ZD - 0.05, 0.82, tones, 1)
+            flagstones(-0.6, H - ZD + 0.05, W + 0.6, H + 0.6, 0.82, tones, 2)
+            if th.get("strip_stones"):
+                flagstones(0.0, ZD + 0.05, W, H - ZD - 0.05, 1.1, th["strip_stones"], 3)
+                wk.box((W, H - 2 * ZD, 0.04), K.flat(g["strip_dk"]), loc=B(W / 2, H / 2, 0.0), outline=0)  # grout, below the slabs
+            else:
+                # A sunken lawn between the zones, with tufts.
+                wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", "patches", scale=1.3), loc=B(W / 2, H / 2, 0.024), outline=0)
+                for n in range(34):
+                    x, y = 0.3 + rnd(n, 41) * (W - 0.6), ZD + 0.25 + rnd(n, 42) * (H - 2 * ZD - 0.5)
+                    if abs(x - path_x(y)) < 0.95:
+                        continue
+                    for j in range(3):
+                        wk.cone(0.035, 0.11, toon("grass_dk" if j % 2 else "grass_lt"), loc=B(x + 0.05 * (j - 1), y + 0.02 * j, 0.05), rot=(12 * (j - 1), 0, 0), seg=5, outline=0.004)
+            if th.get("inlay"):
+                # Gold inlay ring at the centre of the board, under the runner.
+                wk.torus(1.05, 0.035, K.toon(th["inlay"], spec=0.4), loc=B(W / 2, H / 2, 0.035), scale=(1, 1, 0.5), outline=0.004)
+                wk.torus(0.7, 0.025, K.toon(th["inlay"], spec=0.4), loc=B(W / 2, H / 2, 0.035), scale=(1, 1, 0.5), outline=0.004)
+            # Stone kerbs on the zone lines, with a gap where the path passes.
+            kerb = th.get("kerb", "court_dk")
+            for yy in (ZD, H - ZD):
+                px = path_x(yy)
+                for xa, xb in ((-0.05, px - 0.8), (px + 0.8, W + 0.05)):
+                    wk.box((xb - xa, 0.16, 0.1), toon(kerb, spec=0.3), loc=B((xa + xb) / 2, yy, 0.05), bevel=0.03, outline=0.006)
+                for xx in (px - 0.8, px + 0.8):
+                    wk.cyl(0.11, 0.18, toon(kerb, spec=0.3), loc=B(xx, yy, 0.09), seg=12, bevel=0.025, outline=0.006)
+                    wk.sphere(0.07, K.toon(th.get("inlay") or g["court"], spec=0.4), loc=B(xx, yy, 0.21), seg=10, rings=6, outline=0.004)
+            ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.075)
+            ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "tiles" if th.get("path_tiles") else "flat", scale=2.0), 0.079)
+            if th.get("trim"):
+                for side in (-1, 1):
+                    trim = [(x + side * 0.6, y) for x, y in pts]
+                    ribbon(trim, 0.07, K.flat(th["trim"]), 0.083)
+            for kx, ky in KEEPS:
+                # A raised round dais under each keep.
+                wk.cyl(1.52, 0.1, toon("court_dk"), loc=B(kx, ky, 0.05), seg=40, bevel=0.03, outline=0.006)
+                wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.1), seg=40, outline=0)
+        elif relief == "snow":
+            # Frozen Reach: a frozen stream across the neutral strip, packed-snow banks along the zone lines and the
+            # path, wind ripples and a few ice patches in the deploy zones: soft height on an otherwise flat field.
+            wk.box((W + 1.2, H + 1.2, 0.02), S.ground_mat(st, "grass", "grass_dk", "patches", scale=1.6, key_c="grass_lt"), loc=B(W / 2, H / 2, 0.0), outline=0)
+            wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", "patches", scale=2.4), loc=B(W / 2, H / 2, 0.006), outline=0)
+            ice = K.toon("#bfe3f7", spec=0.7)
+            wk.box((W, H - 2 * ZD - 0.5, 0.02), ice, loc=B(W / 2, H / 2, 0.014), outline=0.005)
+            for n in range(9):  # cracks and glints on the ice
+                x, y = 0.4 + rnd(n, 51) * (W - 0.8), ZD + 0.45 + rnd(n, 52) * (H - 2 * ZD - 0.9)
+                a = rnd(n, 53) * 180
+                wk.box((0.5 + rnd(n, 54) * 0.6, 0.025, 0.01), K.flat("#8fb8d6"), loc=B(x, y, 0.026), rot=(0, 0, a), outline=0)
+                wk.box((0.22, 0.05, 0.01), K.flat("#ffffff"), loc=B(x + 0.3, y - 0.2, 0.027), rot=(0, 0, 35), outline=0)
+            for yy in (ZD, H - ZD):  # snow banks on the zone lines (low, so they read as ground, not walls)
+                x = -0.1
+                k = 0
+                while x < W + 0.1:
+                    wk.ball(0.2 + 0.05 * rnd(k, yy), K.toon("#ffffff"), loc=B(x, yy + (rnd(k, 61) - 0.5) * 0.06, 0.0), scale=(1.4, 1.0, 0.42), subdiv=2, outline=0.005)
+                    x += 0.3
+                    k += 1
+            for side in (-1, 1):  # ploughed banks along the path
+                for i in range(int((H + 2.0) / 0.32)):
+                    y = -1.0 + i * 0.32
+                    if abs(y - ZD) < 0.3 or abs(y - (H - ZD)) < 0.3:
+                        continue
+                    wk.ball(0.13, K.toon("#ffffff"), loc=B(path_x(y) + side * (0.72 + 0.04 * rnd(i, side)), y, 0.0), scale=(1.0, 1.5, 0.4), subdiv=2, outline=0.004)
+            for n in range(70):  # wind ripples (sastrugi)
+                x, y = 0.2 + rnd(n, 71) * (W - 0.4), -0.4 + rnd(n, 72) * (H + 0.8)
+                if abs(x - path_x(y)) < 1.0 or ZD - 0.3 < y < H - ZD + 0.3:
+                    continue
+                wk.ball(0.18 + 0.1 * rnd(n, 73), K.toon("#f4f9ff"), loc=B(x, y, -0.005), scale=(2.2, 0.55, 0.22), rot=(0, 0, 18 + 10 * rnd(n, 74)), subdiv=2, outline=0.003)
+            for n in range(7):  # ice patches
+                x, y = 0.6 + rnd(n, 81) * (W - 1.2), 0.6 + rnd(n, 82) * (H - 1.2)
+                if abs(x - path_x(y)) < 1.2 or ZD - 0.5 < y < H - ZD + 0.5:
+                    continue
+                with wk.at(B(x, y, 0.01), rot=(0, 0, rnd(n, 84) * 90), scale=(1.3, 0.9, 1)):
+                    wk.cyl(0.32 + 0.15 * rnd(n, 83), 0.012, ice, seg=18, outline=0.004)
+                wk.box((0.2, 0.04, 0.01), K.flat("#ffffff"), loc=B(x - 0.08, y - 0.06, 0.02), rot=(0, 0, 30), outline=0)
+            for n in range(22):  # boot prints along a trail through your zone
+                y = H - 0.8 - n * 0.24
+                x = 1.6 + 0.5 * math.sin(n * 0.35) + (0.07 if n % 2 else -0.07)
+                with wk.at(B(x, y, 0.012), scale=(0.75, 1.3, 1)):
+                    wk.cyl(0.045, 0.006, K.flat("#b9cde0"), seg=10, outline=0)
+            ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.02)
+            ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "patches", scale=2.0), 0.024)
+            for kx, ky in KEEPS:
+                wk.cyl(1.5, 0.06, K.toon("#ffffff"), loc=B(kx, ky, 0.02), seg=40, bevel=0.025, outline=0.005)
+                wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.05), seg=40, outline=0)
+        else:
+            if court:
+                wk.box((W + 1.2, H + 1.2, 0.05), S.ground_mat(st, "court", "court_dk", "tiles", scale=1.2), loc=B(W / 2, H / 2, -0.004), outline=0)
+                wk.box((W + 1.5, H + 1.5, 0.12), toon("court_dk"), loc=B(W / 2, H / 2, -0.07), bevel=0.03)
+            strip_pat = th.get("strip_pat") or ("tiles" if court else "patches")
+            wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", strip_pat, scale=1.3), loc=B(W / 2, H / 2, 0.012), outline=0)
+            for yy in (ZD, H - ZD):
+                wk.box((W, 0.09, 0.05), toon("edge"), loc=B(W / 2, yy, 0.03), bevel=0.015, outline=0)
+            ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.03)
+            ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "tiles" if court else "patches", scale=2.0), 0.034)
+            for kx, ky in KEEPS:
+                wk.cyl(1.5, 0.02, K.flat(g["path_dk"]), loc=B(kx, ky, 0.036), seg=40, outline=0)
+                wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.04), seg=40, outline=0)
         # ---------------- the border around the board
         i = 0
         yy = -0.3

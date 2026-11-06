@@ -71,10 +71,15 @@ function title() {
     ]),
     el("div", { class: "menu" }, [
       btn(el("span", {}, ["Campaign", el("small", {}, [`${camp}/${LEVELS.length}`])]), "primary big", campaign),
-      btn(el("span", {}, ["Daily", el("small", {}, [dailyTag()])]), "big daily-btn", daily),
-      btn(el("span", {}, ["Gauntlet", gLocked ? el("small", { class: "gated" }, [icon("crown"), "Full Army"]) : el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big", () => (gLocked ? paywall() : gauntlet())),
-      btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big", puzzles),
-      btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big", skirmish),
+      // Secondary modes in pairs, so the menu stays low and the key art's clash shows above it.
+      el("div", { class: "menu-row" }, [
+        btn(el("span", {}, ["Daily", el("small", {}, [dailyTag()])]), "big half daily-btn", daily),
+        btn(el("span", {}, ["Gauntlet", gLocked ? el("small", { class: "gated" }, [icon("crown"), "Full Army"]) : el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big half gauntlet-btn", () => (gLocked ? paywall() : gauntlet())),
+      ]),
+      el("div", { class: "menu-row" }, [
+        btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big half puzzles-btn", puzzles),
+        btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big half skirmish-btn", skirmish),
+      ]),
     ]),
     el("div", { class: "title-foot" }, [
       btn("Barracks", "ghost small", barracks),

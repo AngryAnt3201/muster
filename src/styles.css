@@ -367,7 +367,21 @@ button { font-family: inherit; color: inherit; }
 .logo-word > span { position: relative; background: linear-gradient(#fffbe8 8%, #ffe27a 40%, #ffb627 62%, #f08a12 90%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .logo-sub { align-self: stretch; display: flex; justify-content: center; }
 .logo-sub .ribbon > b { font-size: 17px; letter-spacing: 0.14em; text-transform: uppercase; padding: 4px 18px 6px; }
-.menu { display: flex; flex-direction: column; gap: 11px; width: min(400px, 100%); margin: auto auto 0; padding-top: 16px; }
+.menu { display: flex; flex-direction: column; gap: 10px; width: min(400px, 100%); margin: auto auto 0; padding-top: 16px; }
+.menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.menu .btn.big.half { padding: 9px 10px 10px; font-size: 21px; }
+.menu .btn.big.half > span { flex-direction: column; align-items: center; gap: 4px; }
+.menu .btn.big.half small { font-size: 13px; }
+/* Narrow phones: the tagline fits its ribbon. Short phones: a tighter menu keeps some of the clash in view. */
+@media (max-width: 350px) { .logo-sub .ribbon > b { font-size: 14px; letter-spacing: 0.08em; padding: 4px 12px 6px; } }
+@media (max-height: 640px) {
+  .menu { gap: 8px; }
+  .menu-row { gap: 8px; }
+  .menu .btn.big { padding: 9px 16px 10px; font-size: 20px; }
+  .menu .btn.big.half { padding: 6px 8px 7px; font-size: 18px; }
+  .menu .btn.big.half > span { gap: 2px; }
+  .title-foot { margin-top: 10px; }
+}
 .menu .btn small { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px 4px; border-radius: 9px; background: rgba(0,0,0,0.22); }
 .title-foot { display: flex; justify-content: space-between; gap: 10px; width: min(400px, 100%); margin: 14px auto 0; }
 
