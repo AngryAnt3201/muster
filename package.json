@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "art": "${BLENDER:-blender} -b --factory-startup -P art/render_all.py",
+    "art:maps": "${BLENDER:-blender} -b --factory-startup -P art/maps/render_maps.py",
     "art:keeps": "${BLENDER:-blender} -b --factory-startup -P art/keeps/render_keeps.py",
     "dev": "vite --host 0.0.0.0 --port 5180",
     "build": "tsc --noEmit && vite build",
