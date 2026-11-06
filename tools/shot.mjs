@@ -8,7 +8,7 @@ const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-await page.goto("http://127.0.0.1:5180" + path);
+await page.goto("http://127.0.0.1:" + (process.env.PORT || 5180) + "" + path);
 await page.waitForTimeout(Number(wait));
 for (const a of JSON.parse(actions)) {
   if (a.tap) await page.touchscreen.tap(a.tap[0], a.tap[1]);

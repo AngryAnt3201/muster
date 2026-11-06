@@ -11,17 +11,17 @@ import { initNative, setHaptics } from "./native";
 import { loadSprites } from "./render/sprites";
 import { load, save } from "./save";
 import { el, stars } from "./ui/dom";
-import { GameScreen, TIER_NAMES, abilityOf, paintPortrait, statsLine } from "./ui/game";
+import { GameScreen, TIER_NAMES, abilityOf, framedPortrait, paintPortrait, ribbon, statsLine } from "./ui/game";
+import { ROLE_LABEL, applyUIStyle, coin, icon, roleBadge } from "./ui/kit";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
-let demo: GameScreen | null = null;
 
 function clear() {
   game?.destroy(); game = null;
-  for (const c of [...app.children]) if (!c.classList.contains("game") || !demo || c !== demo.root) c.remove();
+  sheetEl = null;
+  app.replaceChildren();
 }
-function stopDemo() { demo?.destroy(); demo = null; }
 
 function btn(label: string | Node, cls: string, fn: () => void) {
   const b = el("button", { class: `btn ${cls}` }, [label]);
@@ -34,36 +34,27 @@ function screen(cls: string, ...kids: Node[]) {
   return s;
 }
 function header(title: string, back: () => void, right?: Node) {
-  return el("div", { class: "screen-head" }, [btn("‹", "icon-btn back", back), el("h1", {}, [title]), right ?? el("span")]);
+  const b = el("button", { class: "icon-btn back", "aria-label": "Back" }, [icon("back")]);
+  b.addEventListener("click", () => { unlockAudio(); sfx("tap"); back(); });
+  return el("div", { class: "screen-head" }, [b, el("h1", {}, [title]), right ?? el("span")]);
 }
-function icon(kind: keyof typeof UNITS, size = 44) {
+const starTotal = (n: number) => el("span", { class: "star-total" }, [stars(1, 1), String(n)]);
+function unitIcon(kind: keyof typeof UNITS, size = 44) {
   const c = el("canvas", { class: "unit-icon", style: `width:${size}px;height:${size}px` }) as HTMLCanvasElement;
   requestAnimationFrame(() => paintPortrait(c, kind));
   return c;
 }
 
 // ---------------------------------------------------------------- title
-function startDemo() {
-  if (demo) return;
-  const seed = Math.floor(Math.random() * 1e9);
-  const ai = (t: Tactic): AIProfile => ({ ...DEFAULT_AI, difficulty: 0.7, tactic: t, aggression: 0.6 });
-  demo = new GameScreen(app, {
-    cfg: { seed, firstRound: 7, startGold: [14, 14], hp: [9999, 9999] },
-    foe: ai(TACTICS[seed % TACTICS.length]),
-    you: ai(TACTICS[(seed >> 3) % TACTICS.length]),
-    mode: "demo",
-    onEnd: () => {},
-    onQuit: () => {},
-  });
-}
-
 function title() {
   clear();
-  startDemo();
   const s = load();
   const camp = Object.keys(s.campaign).length;
   screen("title",
-    el("div", { class: "logo" }, [el("span", { class: "logo-word" }, ["MUSTER"]), el("span", { class: "logo-sub" }, ["build · place · clash"])]),
+    el("div", { class: "logo" }, [
+      el("span", { class: "logo-word", "data-t": "MUSTER" }, [el("span", {}, ["MUSTER"])]),
+      el("div", { class: "logo-sub" }, [ribbon("build · place · clash", "small")]),
+    ]),
     el("div", { class: "menu" }, [
       btn(el("span", {}, ["Campaign", el("small", {}, [`${camp}/${LEVELS.length}`])]), "primary big", campaign),
       btn(el("span", {}, ["Gauntlet", el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big", gauntlet),
@@ -85,40 +76,38 @@ function campaign() {
   const s = load();
   const total = Object.values(s.campaign).reduce((a, b) => a + b, 0);
   const list = el("div", { class: "acts" });
+  const next = LEVELS.find((l) => unlocked(l.id) && !s.campaign[l.id]);
   ACTS.forEach((name, i) => {
     const act = i + 1;
     const levels = LEVELS.filter((l) => l.act === act);
     if (!levels.length) return;
     const nodes = levels.map((l) => {
       const open = unlocked(l.id);
-      const n = el("button", { class: `node ${open ? "" : "locked"} ${l.boss ? "boss" : ""} ${s.campaign[l.id] ? "done" : ""}` }, [
-        el("span", { class: "node-id" }, [String(l.id)]),
+      const n = el("button", { class: `node ${open ? "" : "locked"} ${l.boss ? "boss" : ""} ${s.campaign[l.id] ? "done" : ""} ${l === next ? "next" : ""}`, "data-level": String(l.id) }, [
+        open ? el("span", { class: "node-id" }, [String(l.id)]) : icon("lock", "lock"),
         stars(s.campaign[l.id] ?? 0),
       ]);
-      if (l.unlock) n.append(icon(l.unlock, 26));
+      if (l.boss) n.append(icon("crown", "boss-crown"));
+      else if (l.unlock) n.append(unitIcon(l.unlock, 28));
       n.addEventListener("click", () => { if (open) { sfx("tap"); levelSheet(l); } else sfx("deny"); });
       return n;
     });
-    list.append(el("section", { class: "act" }, [el("h2", {}, [el("small", {}, [`Act ${act}`]), name]), el("div", { class: "nodes" }, nodes)]));
+    list.append(el("section", { class: "act panel" }, [el("span", { class: "act-kicker" }, [`Act ${act}`]), ribbon(name, act % 2 ? "" : "plain"), el("div", { class: "nodes" }, nodes)]));
   });
-  screen("campaign", header("Campaign", title, el("span", { class: "star-total" }, [`★ ${total}`])), list);
+  screen("campaign", header("Campaign", title, starTotal(total)), list);
   // Scroll to the first unplayed level.
-  const next = LEVELS.find((l) => unlocked(l.id) && !s.campaign[l.id]);
-  if (next) requestAnimationFrame(() => (list.querySelectorAll(".node")[next.id - 1] as HTMLElement)?.scrollIntoView({ block: "center" }));
+  if (next) requestAnimationFrame(() => (list.querySelector(`[data-level="${next.id}"]`) as HTMLElement | null)?.scrollIntoView({ block: "center" }));
 }
 
 function levelSheet(l: LevelDef) {
   const best = load().campaign[l.id] ?? 0;
-  const objs = el("ul", { class: "objectives" }, l.stars.map((o, i) => el("li", { class: i < best ? "met" : "" }, ["★ ", objectiveText(o)])));
+  const objs = el("ul", { class: "objectives" }, l.stars.map((o, i) => el("li", { class: i < best ? "met" : "" }, [stars(i < best ? 1 : 0, 1), objectiveText(o)])));
   const tags = el("div", { class: "tags" }, [
     el("span", { class: "tag" }, [cap(l.ai.tactic)]),
-    el("span", { class: "tag" }, [`Rival health ${l.hp[1]}`]),
-    ...(l.boss ? [el("span", { class: "tag boss" }, ["boss"])] : []),
+    el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
+    ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
   ]);
-  const roster = el("div", { class: "roster" }, l.roster.map((k) => {
-    const w = el("div", { class: `roster-unit ${k === l.unlock ? "new" : ""}` }, [icon(k, 34)]);
-    return w;
-  }));
+  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${k === l.unlock ? "new" : ""}`).frame));
   sheet(el("div", {}, [
     el("div", { class: "sheet-kicker" }, [`Act ${l.act} · Level ${l.id}`]),
     el("h2", {}, [l.name]),
@@ -130,7 +119,7 @@ function levelSheet(l: LevelDef) {
 }
 
 function playLevel(l: LevelDef, attempt = 0) {
-  clear(); stopDemo();
+  clear();
   game = new GameScreen(app, {
     cfg: levelConfig(l, attempt),
     foe: l.ai,
@@ -158,26 +147,30 @@ function playLevel(l: LevelDef, attempt = 0) {
 function results(m: Match, o: { heading: string; stars?: number; lines?: [string, boolean][]; note?: string; primary: [string, () => void]; secondary: [string, () => void] }) {
   const won = m.winner === 0;
   const lost = m.history.filter((r) => r.winner === 1).length;
+  const n = o.stars ?? 0;
   sheet(el("div", { class: `results ${won ? "won" : "lost"}` }, [
-    el("h2", { class: "result-head" }, [o.heading]),
-    ...(o.stars !== undefined ? [stars(o.stars)] : []),
+    ribbon(o.heading),
+    o.stars !== undefined ? stars(o.stars, 3, "result-stars") : el("div", { class: "result-crest" }, [icon(won ? "crown" : "shield")]),
     el("div", { class: "result-stats" }, [
       el("span", {}, [el("b", {}, [String(m.played)]), "rounds"]),
       el("span", {}, [el("b", {}, [String(Math.round(m.sides[0].hp))]), "health left"]),
       el("span", {}, [el("b", {}, [String(lost)]), "rounds lost"]),
     ]),
-    ...(o.lines ? [el("ul", { class: "objectives" }, o.lines.map(([t, ok]) => el("li", { class: ok ? "met" : "" }, [ok ? "★ " : "☆ ", t])))] : []),
+    ...(o.lines ? [el("ul", { class: "objectives" }, o.lines.map(([t, ok]) => el("li", { class: ok ? "met" : "" }, [stars(ok ? 1 : 0, 1), t])))] : []),
     ...(o.note ? [el("p", { class: "flavour" }, [o.note])] : []),
     btn(o.primary[0], "primary big", () => { closeSheet(); o.primary[1](); }),
     btn(o.secondary[0], "ghost", () => { closeSheet(); o.secondary[1](); }),
-  ]), false);
+  ]), false, true);
+  // A chime as each star lands (timed with the CSS: 0.35 s, 0.75 s, 1.15 s).
+  const shown = sheetEl;
+  for (let i = 0; i < n; i++) setTimeout(() => { if (sheetEl === shown) sfx(i === 2 ? "upgrade" : "buy"); }, 350 + 400 * i + 180);
 }
 
 // ---------------------------------------------------------------- sheets
 let sheetEl: HTMLElement | null = null;
-function sheet(content: HTMLElement, dismissable = true) {
+function sheet(content: HTMLElement, dismissable = true, center = false) {
   closeSheet();
-  sheetEl = el("div", { class: "overlay" }, [el("div", { class: "sheet" }, [content])]);
+  sheetEl = el("div", { class: `overlay ${center ? "center" : ""}` }, [el("div", { class: "sheet" }, [content])]);
   if (dismissable) sheetEl.addEventListener("click", (e) => { if (e.target === sheetEl) closeSheet(); });
   app.append(sheetEl);
 }
@@ -195,11 +188,12 @@ function puzzles() {
     b.addEventListener("click", () => { if (open) { sfx("tap"); playPuzzle(p); } else sfx("deny"); });
     return b;
   }));
-  screen("puzzles", header("Breakpoint", title), grid);
+  const ptotal = Object.values(s.puzzles).reduce((a, b) => a + b, 0);
+  screen("puzzles", header("Breakpoint", title, starTotal(ptotal)), grid);
 }
 
 function playPuzzle(p: PuzzleDef) {
-  clear(); stopDemo();
+  clear();
   game = new GameScreen(app, {
     cfg: puzzleConfig(p),
     mode: "puzzle",
@@ -243,7 +237,7 @@ function gauntlet() {
 
 function duel() {
   if (!run) return;
-  clear(); stopDemo();
+  clear();
   const r = run;
   const foe = gauntletFoe(r.stage, boardValue(r.board), r.seed);
   game = new GameScreen(app, {
@@ -272,9 +266,9 @@ function duel() {
 
 function boonPick(r: GauntletRun) {
   const choices = boonChoices(r);
-  sheet(el("div", { class: "boons" }, [
+  sheet(el("div", { class: "boons results" }, [
     el("div", { class: "sheet-kicker" }, [`Rival ${r.stage - 1} beaten · ${Math.round(r.hp)} health left`]),
-    el("h2", {}, ["Choose a boon"]),
+    ribbon("Choose a boon", "gold"),
     el("div", { class: "boon-list" }, choices.map((b) => btn(el("span", {}, [el("b", {}, [b.name]), el("small", {}, [b.text])]), "boon", () => { takeBoon(r, b.id); closeSheet(); duel(); }))),
   ]), false);
 }
@@ -331,7 +325,7 @@ function skirmish() {
 }
 
 function playSkirmish(lab: Lab) {
-  clear(); stopDemo();
+  clear();
   game = new GameScreen(app, {
     cfg: { seed: Math.floor(Math.random() * 1e9), hp: lab.hp, names: [lab.watch ? "Blue AI" : "You", `${cap(lab.foe.tactic)} AI`] },
     foe: { ...lab.foe },
@@ -354,22 +348,22 @@ function barracks() {
   clear();
   const list = el("div", { class: "barracks" }, UNIT_KINDS.map((k: UnitKind) => {
     const d = UNITS[k];
-    const face = el("canvas", { class: "b-portrait" }) as HTMLCanvasElement;
-    let tier = 1;
+    const { frame, canvas: face } = framedPortrait(k, 1, "b-portrait");
     const tiers = el("div", { class: "b-tiers" }, TIER_NAMES.map((n, i) => {
       const b = el("button", { class: `chip ${i === 0 ? "on" : ""}` }, [n]);
       b.addEventListener("click", () => {
-        tier = i + 1; sfx("tap");
+        const tier = i + 1; sfx("tap");
         tiers.querySelectorAll(".chip").forEach((c, j) => c.classList.toggle("on", j === i));
+        frame.classList.remove("t1", "t2", "t3", "t4"); frame.classList.add(`t${tier}`);
         paintPortrait(face, k, tier);
       });
       return b;
     }));
-    requestAnimationFrame(() => paintPortrait(face, k, 1));
     const ab = abilityOf(k);
     return el("div", { class: "b-card" }, [
-      el("div", { class: "b-top" }, [face, el("div", { class: "b-id" }, [
-        el("div", { class: "b-name" }, [el("b", {}, [d.name]), el("span", { class: "b-cost" }, [String(d.cost)])]),
+      el("div", { class: "b-top" }, [frame, el("div", { class: "b-id" }, [
+        el("div", { class: "b-name" }, [el("b", {}, [d.name]), coin(d.cost, "b-cost")]),
+        el("span", { class: "role-line" }, [roleBadge(d.role), ROLE_LABEL[d.role]]),
         el("div", { class: "b-short" }, [d.short]),
         el("div", { class: "b-stats" }, [statsLine(k)]),
       ])]),
@@ -382,7 +376,7 @@ function barracks() {
 
 // ---------------------------------------------------------------- showcase (debug / store shots)
 function showcase(n: number) {
-  clear(); stopDemo();
+  clear();
   const sets: [string, number, number, number][][] = [
     [["pikeman", 3.0, 4.8, 4], ["ravager", 6.0, 4.6, 3], ["rime", 2.2, 2.6, 4], ["tinker", 6.8, 2.2, 3], ["banner", 4.5, 3.2, 4], ["grave", 4.5, 1.2, 3]],
     [["lancer", 2.0, 3.6, 4], ["keg", 4.5, 4.9, 3], ["harrier", 6.5, 3.4, 4], ["sapper", 7.6, 4.2, 3], ["trickster", 3.4, 2.4, 4], ["bombard", 4.5, 0.8, 3]],
@@ -404,11 +398,20 @@ function showcase(n: number) {
 // ---------------------------------------------------------------- boot
 async function boot() {
   const s = load();
+  const q = new URLSearchParams(location.search);
+  // ?style=meadow|dusk|toy picks the kit palette; ?safe=59,34 fakes iPhone safe areas in a desktop browser.
+  applyUIStyle(q.get("style"));
+  if (q.has("safe")) {
+    const [t, b] = (q.get("safe") || "59,34").split(",").map(Number);
+    document.documentElement.style.setProperty("--st", `${t || 0}px`);
+    document.documentElement.style.setProperty("--sb", `${b || 0}px`);
+  }
+  // The display font is bundled; wait briefly so the HUD measures with it (never blocks for long).
+  const font = Promise.race([document.fonts?.load('20px "Lilita One"').catch(() => undefined), new Promise((r) => setTimeout(r, 800))]);
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
-  await Promise.all([initNative(), loadSprites()]);
+  await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
-  const q = new URLSearchParams(location.search);
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?gauntlet, ?watch
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }

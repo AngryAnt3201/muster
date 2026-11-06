@@ -32,6 +32,19 @@ export function paintPortrait(canvas: HTMLCanvasElement, kind: UnitKind, tier = 
 }
 import { load, save } from "../save";
 import { el, fmt } from "./dom";
+import { ROLE_FAMILY, ROLE_LABEL, coin, icon, roleBadge } from "./kit";
+
+/** A tier-framed portrait canvas (metal by tier, window colour by role family). */
+export function framedPortrait(kind: UnitKind, tier: number, cls: string) {
+  const c = el("canvas") as HTMLCanvasElement;
+  const f = el("div", { class: `frame ${cls} t${tier} fam-${ROLE_FAMILY[UNITS[kind].role]}` }, [c]);
+  requestAnimationFrame(() => paintPortrait(c, kind, tier));
+  return { frame: f, canvas: c };
+}
+/** Ribbon banner markup: tails and a band. */
+export function ribbon(text: string, cls = "") {
+  return el("div", { class: `ribbon ${cls}` }, [el("i", { class: "l" }), el("i", { class: "r" }), el("b", {}, [text])]);
+}
 
 export interface GameOpts {
   cfg: MatchConfig;
@@ -70,6 +83,8 @@ export class GameScreen {
   private drag: { type: "card" | "piece"; slot?: number; id?: number; sx: number; sy: number; moved: boolean; pid: number } | null = null;
   private tipTimer = 0;
   private hpShown: [number, number];
+  /** Health the light "damage trail" behind each bar still shows; it drains after the bar. */
+  private trail: [number, number];
   private destroyed = false;
   private paused = false;
   private speed = load().settings.speed || 1;
@@ -85,6 +100,7 @@ export class GameScreen {
     this.o = opts;
     this.match = new Match(opts.cfg);
     this.hpShown = [this.match.sides[0].hp, this.match.sides[1].hp];
+    this.trail = [...this.hpShown];
     this.root = el("div", { class: `game mode-${opts.mode}` });
     this.canvas = el("canvas", { class: "board" }) as HTMLCanvasElement;
     this.root.append(this.canvas);
@@ -123,43 +139,47 @@ export class GameScreen {
   // ------------------------------------------------------------ HUD
   private buildHud() {
     const top = el("div", { class: "hud-top" });
-    const foe = el("div", { class: "cmdr foe" }, [
-      el("div", { class: "cmdr-row" }, [el("span", { class: "cmdr-name" }), el("span", { class: "cmdr-gold" })]),
-      el("div", { class: "hpbar foe" }, [el("i"), el("span")]),
+    const foe = el("div", { class: "cmdr foe plate" }, [
+      el("div", { class: "crest" }, [icon("shield")]),
+      el("div", { class: "cmdr-body" }, [
+        el("div", { class: "cmdr-row" }, [el("span", { class: "cmdr-name" }), el("span", { class: "cmdr-gold" })]),
+        el("div", { class: "hpbar foe" }, [el("b"), el("i"), el("span")]),
+      ]),
     ]);
-    const round = el("div", { class: "round" });
-    const pause = el("button", { class: "icon-btn", "aria-label": "Pause" }, [el("span", { class: "pause-glyph" })]);
+    const round = el("div", { class: "round plate" });
+    const pause = el("button", { class: "icon-btn", "aria-label": "Pause" }, [icon("pause")]);
     pause.addEventListener("click", () => this.openMenu());
     top.append(foe, round, pause);
 
     const bottom = el("div", { class: "hud-bottom" });
     const you = el("div", { class: "cmdr you" }, [
-      el("div", { class: "hpbar you" }, [el("i"), el("span")]),
+      el("div", { class: "crest" }, [icon("shield")]),
+      el("div", { class: "hpbar you" }, [el("b"), el("i"), el("span")]),
       el("div", { class: "pills" }, [el("span", { class: "pill gold" }), el("span", { class: "pill supply" })]),
     ]);
     const shop = el("div", { class: "shop" });
     const reroll = el("button", { class: "btn small reroll" }) as HTMLButtonElement;
     reroll.addEventListener("click", () => this.reroll());
-    const fight = el("button", { class: "btn fight" }, ["FIGHT"]) as HTMLButtonElement;
+    const fight = el("button", { class: "btn fight" }, ["Fight"]) as HTMLButtonElement;
     fight.addEventListener("click", () => void this.fight());
     const speed = el("button", { class: "btn small speed" }) as HTMLButtonElement;
     speed.addEventListener("click", () => this.toggleSpeed());
     const skip = el("button", { class: "btn small skip" }, ["Skip"]) as HTMLButtonElement;
     skip.addEventListener("click", () => this.skipBattle());
-    const status = el("div", { class: "status" });
+    const status = el("div", { class: "status" }, [el("span")]);
     const actions = el("div", { class: "actions" }, [reroll, status, speed, skip, fight]);
     bottom.append(you, shop, actions);
 
     const banner = el("div", { class: "banner" });
     const pop = el("div", { class: "pop hidden" });
     const tip = el("div", { class: "tip hidden" });
-    const menu = el("div", { class: "overlay hidden" });
+    const menu = el("div", { class: "overlay center hidden" });
     const hint = el("div", { class: "hint hidden" });
     this.root.append(top, bottom, banner, pop, tip, menu, hint);
     const q = (s: string, r: HTMLElement = this.root) => r.querySelector(s) as HTMLElement;
     this.h = {
-      foeName: q(".cmdr-name", foe), foeHp: q("i", foe), foeHpText: q(".hpbar span", foe), foeGold: q(".cmdr-gold", foe), round,
-      youHp: q("i", you), youHpText: q(".hpbar span", you), gold: q(".gold", you), supply: q(".supply", you), shop, reroll, fight,
+      foeName: q(".cmdr-name", foe), foeHp: q(".hpbar i", foe), foeHpText: q(".hpbar span", foe), foeGold: q(".cmdr-gold", foe), round,
+      youHp: q(".hpbar i", you), youHpText: q(".hpbar span", you), gold: q(".gold", you), supply: q(".supply", you), shop, reroll, fight,
       banner, pop, tip, speed, skip, bottom, top, status, menu,
     };
     this.h.foeName.textContent = this.match.sides[1].name;
@@ -178,32 +198,38 @@ export class GameScreen {
 
   private refreshHud() {
     const m = this.match, you = m.sides[0], foe = m.sides[1];
-    this.h.round.innerHTML = this.o.mode === "puzzle" ? `<small>BREAKPOINT</small>` : `<small>ROUND</small><b>${m.round}</b>`;
-    this.setHp(this.h.youHp, this.h.youHpText, this.hpShown[0], you.maxHp);
-    this.setHp(this.h.foeHp, this.h.foeHpText, this.hpShown[1], foe.maxHp);
-    this.h.gold.innerHTML = `<b>${you.gold}</b>`;
-    this.h.supply.innerHTML = `<b>${m.supplyUsed(0)}</b>/${m.supplyCap(0)}`;
-    this.h.foeGold.textContent = this.o.mode === "puzzle" ? "" : `${foe.gold}g`;
+    const puzzle = this.o.mode === "puzzle";
+    this.h.round.classList.toggle("puzzle", puzzle);
+    this.h.round.innerHTML = puzzle ? `<small>BREAK</small><b>1</b>` : `<small>ROUND</small><b>${m.round}</b>`;
+    this.setHp(this.h.youHp, this.h.youHpText, this.hpShown[0], you.maxHp, this.trail[0]);
+    this.setHp(this.h.foeHp, this.h.foeHpText, this.hpShown[1], foe.maxHp, this.trail[1]);
+    this.h.gold.replaceChildren(coin("", "icon-only"), el("b", {}, [String(you.gold)]));
+    this.h.supply.replaceChildren(icon("flag"), el("b", {}, [String(m.supplyUsed(0))]), `/${m.supplyCap(0)}`);
+    this.h.foeGold.replaceChildren(...(puzzle ? [] : [coin("", "icon-only"), String(foe.gold)]));
     const deploy = this.phase === "deploy" && !this.watch;
     this.root.classList.toggle("in-battle", this.phase !== "deploy");
-    this.h.reroll.innerHTML = `↻ <b>${m.rerollCost(0)}</b>`;
+    this.h.reroll.replaceChildren(icon("reroll"), coin(m.rerollCost(0)));
     this.h.reroll.disabled = !deploy || !m.canReroll(0);
     this.h.reroll.classList.toggle("gone", !!m.cfg.noReroll || !!m.cfg.fixedShop?.[0]);
     this.h.fight.disabled = !deploy;
-    this.h.fight.textContent = this.planning && deploy ? "…" : "FIGHT";
+    this.h.fight.textContent = this.planning && deploy ? "..." : "Fight";
+    this.h.fight.classList.toggle("ready", deploy && !this.planning && m.sides[0].pieces.length > 0);
     this.h.speed.textContent = `${this.speed}×`;
     const hint = this.root.querySelector(".hint") as HTMLElement;
     if (this.o.hint && this.phase === "deploy" && this.match.round <= 2) {
       const none = this.match.sides[0].pieces.length === 0;
       hint.textContent = none ? "Drag a card onto your half" : this.match.round === 1 ? "Tap Fight when you're ready" : "";
       hint.className = `hint ${hint.textContent ? "" : "hidden"} ${none ? "drag" : "go"}`;
+      // Sit just above the cards (drag) or the Fight button (go), wherever the tray ends up.
+      const anchor = (none ? this.h.shop : this.h.fight).getBoundingClientRect();
+      hint.style.bottom = `${window.innerHeight - anchor.top + (none ? 18 : 14)}px`;
     } else hint.className = "hint hidden";
-    this.h.status.textContent = this.phase === "battle" ? "" : this.watch ? "Watching" : "";
     this.renderShop();
   }
 
-  private setHp(bar: HTMLElement, text: HTMLElement, hp: number, max: number) {
+  private setHp(bar: HTMLElement, text: HTMLElement, hp: number, max: number, trail: number) {
     bar.style.width = `${Math.max(0, (hp / max) * 100)}%`;
+    (bar.previousElementSibling as HTMLElement).style.width = `${Math.max(0, (Math.max(hp, trail) / max) * 100)}%`;
     text.textContent = `${Math.max(0, Math.round(hp))}`;
   }
 
@@ -213,8 +239,8 @@ export class GameScreen {
     const shop = this.h.shop;
     if (shop.childElementCount !== st.shop.length) {
       shop.replaceChildren(...st.shop.map((_, i) => {
-        const card = el("div", { class: "card", "data-slot": String(i) }, [
-          el("canvas", { class: "card-icon" }), el("div", { class: "card-name" }), el("div", { class: "card-cost" }), el("div", { class: "card-new" }, ["NEW"]),
+        const card = el("div", { class: "card t1", "data-slot": String(i) }, [
+          el("canvas", { class: "card-icon" }), el("div", { class: "card-name" }), coin("", "card-cost"), el("span", { class: "card-role" }), el("div", { class: "card-new" }, ["NEW"]),
         ]);
         return card;
       }));
@@ -233,6 +259,9 @@ export class GameScreen {
         nameEl.textContent = UNITS[k].name;
         nameEl.classList.toggle("long", UNITS[k].name.length > 11);
         (card.querySelector(".card-cost") as HTMLElement).textContent = String(UNITS[k].cost);
+        const role = UNITS[k].role;
+        card.className = card.className.replace(/\bfam-\w+/g, "").trim() + ` fam-${ROLE_FAMILY[role]}`;
+        card.querySelector(".card-role")!.replaceWith(roleBadge(role, "card-role"));
         requestAnimationFrame(() => paintPortrait(card.querySelector("canvas") as HTMLCanvasElement, k));
         card.classList.remove("deal"); void card.offsetWidth; card.classList.add("deal");
       }
@@ -242,11 +271,14 @@ export class GameScreen {
   }
 
   private bannerT = 0;
-  private showBanner(html: string, cls = "", ms = 1100) {
+  /** A round banner: a ribbon (or one big word for "fight") and an optional line under it. */
+  private showBanner(head: string, sub: string | (Node | string)[] = "", cls = "", ms = 1100) {
     if (this.o.mode === "demo") return;
     const b = this.h.banner;
     b.className = `banner show ${cls}`;
-    b.innerHTML = html;
+    const top = cls === "fight" ? el("div", { class: "big-word" }, [head]) : ribbon(head);
+    const line = typeof sub === "string" ? (sub ? [sub] : []) : sub;
+    b.replaceChildren(top, ...(line.length ? [el("small", {}, line)] : []));
     clearTimeout(this.bannerT);
     this.bannerT = window.setTimeout(() => { b.className = "banner"; }, ms);
   }
@@ -260,11 +292,11 @@ export class GameScreen {
     this.closePop();
     const m = this.match;
     const inc = m.sides[0].lastIncome;
-    if (this.o.mode === "puzzle") this.showBanner(`<b>${this.o.title ?? "Breakpoint"}</b><small>Win this one battle</small>`, "intro", 1600);
-    else if (first) this.showBanner(`<b>${this.o.title ?? "Muster"}</b><small>vs ${m.sides[1].name}</small>`, "intro", 1600);
+    if (this.o.mode === "puzzle") this.showBanner(this.o.title ?? "Breakpoint", "Win this one battle", "intro", 1600);
+    else if (first) this.showBanner(this.o.title ?? "Muster", `vs ${m.sides[1].name}`, "intro", 1600);
     else {
       const extra = inc.interest ? ` +${inc.interest} interest` : "";
-      this.showBanner(`<b>Round ${m.round}</b><small>+${inc.base + inc.bonus} gold${extra}</small>`, "round", 1200);
+      this.showBanner(`Round ${m.round}`, [coin("", "icon-only"), `+${inc.base + inc.bonus} gold${extra}`], "round", 1200);
       sfx("round");
     }
     // The rival plans now, from what it could see at the start of the round.
@@ -308,7 +340,7 @@ export class GameScreen {
     this.hold = fresh.size && !this.watch ? 0.75 : 0.25;
     sfx("fight");
     buzz("medium");
-    this.showBanner(`<b>Fight</b>`, "fight", 700);
+    this.showBanner("Fight!", "", "fight", 700);
     this.refreshHud();
   }
 
@@ -344,21 +376,30 @@ export class GameScreen {
     const won = rep.winner === 0, lost = rep.winner === 1;
     const dmgFoe = rep.damage[1], dmgYou = rep.damage[0];
     const head = won ? "Round won" : lost ? "Round lost" : "Draw";
-    const detail = [dmgFoe ? `<span class="dmg foe">-${dmgFoe}</span>` : "", dmgYou ? `<span class="dmg you">-${dmgYou}</span>` : ""].join(" ");
-    this.showBanner(`<b>${head}</b><small>${detail}</small>`, won ? "won" : lost ? "lost" : "draw", 1500);
+    const dmg = (n: number, who: "foe" | "you") => el("span", { class: `dmg ${who}` }, [icon("shield"), `-${n}`]);
+    const detail = [...(dmgFoe ? [dmg(dmgFoe, "foe")] : []), ...(dmgYou ? [dmg(dmgYou, "you")] : [])];
+    this.showBanner(head, detail, won ? "won" : lost ? "lost" : "draw", 1500);
     sfx(won ? "round" : lost ? "hurt" : "tap", 1);
     if (lost) buzz("heavy");
     // Health bars count down.
     const from: [number, number] = [...this.hpShown];
     const to: [number, number] = [this.match.sides[0].hp, this.match.sides[1].hp];
-    const t0 = performance.now();
+    let t0 = 0;
     const step = () => {
       const u = Math.min(1, (performance.now() - t0) / 700);
       this.hpShown = [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
       this.refreshHud();
       if (u < 1 && !this.destroyed) requestAnimationFrame(step);
+      else setTimeout(() => { if (this.destroyed) return; this.trail = [...to]; this.refreshHud(); }, 250);
     };
-    setTimeout(step, 300);
+    setTimeout(() => {
+      t0 = performance.now();
+      for (const [i, bar] of [this.h.youHp, this.h.foeHp].entries()) if (to[i] < from[i]) {
+        const hp = bar.parentElement!;
+        hp.classList.remove("hit"); void hp.offsetWidth; hp.classList.add("hit");
+      }
+      step();
+    }, 300);
     if (lost) this.root.classList.add("hurt"), setTimeout(() => this.root.classList.remove("hurt"), 500);
     setTimeout(() => {
       if (this.destroyed) return;
@@ -529,7 +570,7 @@ export class GameScreen {
   }
 
   private flashStatus(text: string) {
-    this.h.status.textContent = text;
+    this.h.status.firstElementChild!.textContent = text;
     this.h.status.classList.remove("flash"); void this.h.status.offsetWidth; this.h.status.classList.add("flash");
   }
 
@@ -541,15 +582,15 @@ export class GameScreen {
     const m = this.match;
     pop.replaceChildren();
     pop.className = `pop ${own ? "own" : "theirs"} rank-${p.rank}`;
-    const face = el("canvas", { class: "pop-portrait" }) as HTMLCanvasElement;
+    const face = framedPortrait(p.kind, p.rank, "pop-portrait").frame;
     pop.append(el("div", { class: "pop-top" }, [
       face,
       el("div", { class: "pop-id" }, [
         el("div", { class: "pop-head" }, [el("b", {}, [def.name]), el("span", { class: "pop-rank" }, [TIER_NAMES[p.rank - 1] ?? ""])]),
+        el("span", { class: "role-line" }, [roleBadge(def.role), ROLE_LABEL[def.role]]),
         el("div", { class: "pop-text" }, [def.short]),
       ]),
     ]));
-    requestAnimationFrame(() => paintPortrait(face, p.kind, p.rank));
     const ab = abilityOf(p.kind);
     if (ab && (p.rank >= 3 || !own)) pop.append(el("div", { class: `pop-ability ${p.rank >= 4 ? "on" : ""}` }, [el("b", {}, [ab.name]), " ", ab.text]));
     if (own && this.phase === "deploy") {
@@ -582,8 +623,11 @@ export class GameScreen {
     pop.classList.remove("hidden");
     const r = pop.getBoundingClientRect();
     const x = Math.max(8, Math.min(window.innerWidth - r.width - 8, sx - r.width / 2));
-    const above = sy - r.height - 28;
-    const y = above > this.view.rect.y ? above : sy + 30;
+    const above = sy - r.height - 30;
+    const isAbove = above > this.view.rect.y;
+    const y = isAbove ? above : sy + 32;
+    pop.classList.toggle("below", !isAbove);
+    pop.style.setProperty("--ax", `${Math.max(22, Math.min(r.width - 22, sx - x))}px`);
     pop.style.left = `${x}px`;
     pop.style.top = `${y}px`;
   }
@@ -600,7 +644,7 @@ export class GameScreen {
     sfx("upgrade");
     buzz(ascended ? "heavy" : "medium");
     const ab = abilityOf(p.kind);
-    this.showBanner(`<b>${TIER_NAMES[p.rank - 1]}</b><small>${UNITS[p.kind].name}${ascended && ab ? " · " + ab.name : ""}</small>`, ascended ? "ascend" : "evolve", 1100);
+    this.showBanner(TIER_NAMES[p.rank - 1], `${UNITS[p.kind].name}${ascended && ab ? " · " + ab.name : ""}`, ascended ? "ascend" : "evolve", 1100);
   }
 
   private closePop() {
@@ -623,8 +667,8 @@ export class GameScreen {
     this.paused = true;
     const s = load().settings;
     const m = this.h.menu;
-    m.replaceChildren(el("div", { class: "sheet" }, [
-      el("h2", {}, ["Paused"]),
+    m.replaceChildren(el("div", { class: "sheet pause-sheet" }, [
+      ribbon("Paused"),
       button("Resume", "primary", () => this.closeMenu()),
       ...(this.o.onRestart ? [button("Restart", "", () => { this.closeMenu(); this.o.onRestart!(); })] : []),
       button(`Sound: ${s.sound ? "on" : "off"}`, "ghost", () => { save((x) => { x.settings.sound = !x.settings.sound; }); import("../audio/sfx").then((a) => a.setSound(load().settings.sound)); this.openMenu(); }),
