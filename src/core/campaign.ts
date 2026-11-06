@@ -147,7 +147,7 @@ const DRAFTS: Draft[] = [
   { name: "Clockwork", foe: "Skymarshal Ren", line: "Ren's harriers own the sky.", foeHp: 400, power: 0.99,
     foeRoster: ["harrier", "shade", "sapper", "lancer", "keg", "ravager", "trickster"],
     ai: ai(0.92, "ambush", 0.65, 0.4, 0.8, 2), stars: [WIN, hp(160), losses(5)] },
-  { name: "Crossed Steel", foe: "Blademaster Oku", line: "Oku's school teaches only the sword.", foeHp: 400, power: 1.16,
+  { name: "Crossed Steel", foe: "Blademaster Oku", line: "Oku's school teaches only the sword.", foeHp: 400, power: 1.04,
     foeRoster: ["blades", "ravager", "duelist", "banner", "sapper", "trickster", "medic", "pikeman"],
     ai: ai(0.93, "swarm", 0.7, 0.4, 0.6, 2), stars: [WIN, hp(160), rounds(14)] },
   { name: "Hold the Ford", foe: "Rider Calla", line: "Calla's lancers cross at a gallop.", foeHp: 400, power: 1.06,
