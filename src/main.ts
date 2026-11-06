@@ -3,6 +3,7 @@ import { DEFAULT_AI, TACTICS, type AIProfile, type Tactic } from "./core/ai";
 import { ACTS, LEVELS } from "./core/campaign";
 import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type LevelDef, type PuzzleDef } from "./core/content";
 import { UNITS, UNIT_KINDS, START_HP, type UnitKind } from "./core/defs";
+import { beginDaily, canScore, dailyBoard, dailyConfig, dailyResult, dateKey, finishDaily, streakOn } from "./core/daily";
 import { boonChoices, duelConfig, endDuel, gauntletFoe, boardValue, newRun, takeBoon, type GauntletRun } from "./core/gauntlet";
 import type { Match } from "./core/match";
 import { PUZZLES } from "./core/puzzles";
@@ -60,6 +61,7 @@ function title() {
     ]),
     el("div", { class: "menu" }, [
       btn(el("span", {}, ["Campaign", el("small", {}, [`${camp}/${LEVELS.length}`])]), "primary big", campaign),
+      btn(el("span", {}, ["Daily", el("small", {}, [dailyTag()])]), "big daily-btn", daily),
       btn(el("span", {}, ["Gauntlet", el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big", gauntlet),
       btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big", puzzles),
       btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big", skirmish),
@@ -366,6 +368,87 @@ function boonPick(r: GauntletRun) {
   ]), false);
 }
 
+// ---------------------------------------------------------------- daily challenge
+/** Today's day key: the device's local calendar day. */
+const today = () => dateKey(new Date());
+function dailyTag() {
+  const d = load().daily, k = today();
+  const streak = streakOn(d, k);
+  if (canScore(d, k)) return streak ? `streak ${streak} · new` : "new board";
+  return `streak ${streak} · done`;
+}
+const num = (n: number) => n.toLocaleString("en");
+function untilTomorrow() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const mins = Math.max(1, Math.ceil((next.getTime() - now.getTime()) / 60000));
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+}
+
+function daily() {
+  clear();
+  const key = today();
+  const b = dailyBoard(key);
+  const d = load().daily;
+  const open = canScore(d, key);
+  const t = d.today?.key === key ? d.today : undefined;
+  const when = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const status = open
+    ? el("p", { class: "lead" }, ["One scored attempt today. Same board for every player."])
+    : el("div", { class: `daily-today ${t?.won ? "won" : ""}` }, [
+      el("b", {}, [t?.done ? `${t.won ? "Victory" : "Defeat"} · ${num(t.score)}` : "Attempt abandoned"]),
+      el("small", {}, [`Next board in ${untilTomorrow()}`]),
+    ]);
+  screen("daily", header("Daily", title, el("span", { class: "star-total" }, [icon("crown"), String(streakOn(d, key))])),
+    el("div", { class: "panel daily-card" }, [
+      el("div", { class: "sheet-kicker" }, [`Challenge ${b.number} · ${when}`]),
+      el("div", { class: "daily-rule" }, [ribbon(b.rule.name, "gold small"), el("span", {}, [b.rule.text])]),
+      el("div", { class: "foe-line" }, ["vs ", el("b", {}, [b.foe.name]), el("span", { class: "tag" }, [cap(b.foe.ai.tactic)])]),
+      el("div", { class: "roster" }, b.roster.map((k) => framedPortrait(k, 1, "roster-unit").frame)),
+      el("div", { class: "result-stats" }, [
+        el("span", {}, [el("b", {}, [String(streakOn(d, key))]), "streak"]),
+        el("span", {}, [el("b", {}, [num(d.best)]), "best"]),
+        el("span", {}, [el("b", {}, [String(d.bestStreak)]), "top streak"]),
+      ]),
+      status,
+      open
+        ? btn("Play today's board", "primary big", () => { save((s) => { beginDaily(s.daily, key); }); playDaily(key, false); })
+        : btn("Practice (unscored)", "big", () => playDaily(key, true)),
+    ]));
+}
+
+function playDaily(key: string, practice: boolean, attempt = 0) {
+  clear();
+  const b = dailyBoard(key);
+  const cfg = dailyConfig(b);
+  // Practice replays shuffle the shop; the scored attempt is the same match for everyone.
+  if (practice) cfg.seed = (cfg.seed + 7919 * (attempt + 1)) >>> 0;
+  game = new GameScreen(app, {
+    cfg,
+    foe: b.foe.ai,
+    mode: "daily",
+    arena: b.arena,
+    title: practice ? "Daily practice" : `Daily ${b.number}`,
+    intro: `vs ${b.foe.name} · ${b.rule.name}`,
+    onEnd: (m) => {
+      const r = dailyResult(m);
+      let scored = false;
+      if (!practice) save((s) => { scored = finishDaily(s.daily, key, r); });
+      const d = load().daily;
+      results(m, {
+        heading: r.won ? "Victory" : "Defeat",
+        note: scored
+          ? `Score ${num(r.score)} · streak ${d.streak}${d.bestKey === key ? " · new best!" : ""}`
+          : `Practice: ${num(r.score)}, not scored.`,
+        primary: ["Daily", daily],
+        secondary: ["Menu", title],
+      });
+    },
+    onQuit: daily,
+    ...(practice ? { onRestart: () => playDaily(key, true, attempt + 1) } : {}),
+  });
+}
+
 // ---------------------------------------------------------------- skirmish / AI lab
 interface Lab { foe: AIProfile; you: AIProfile; watch: boolean; hp: [number, number]; }
 
@@ -506,12 +589,13 @@ async function boot() {
   setHaptics(s.settings.haptics);
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
-  // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?gauntlet, ?watch
+  // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }
   if (q.has("campaign")) return campaign(Number(q.get("campaign")) || undefined);
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
+  if (q.has("daily")) return daily();
   if (q.has("barracks")) return barracks();
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
