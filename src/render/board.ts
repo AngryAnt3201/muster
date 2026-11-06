@@ -316,12 +316,13 @@ export class BoardView {
     const sp = sprite(kind, Math.max(1, Math.min(4, o.rank ?? 1)), side, pose);
     if (!sp) { drawUnit(ctx, kind, side, x, y, r, face, o); return; }
     const k = r / (RADIUS(kind) * this.s);
-    const px = sp.size * this.s * k;
+    // Drawn a bit larger than true scale so they read on a phone (collision is unchanged).
+    const px = sp.size * this.s * k * 1.3;
     ctx.save();
     ctx.translate(x, y);
     ctx.globalAlpha *= o.alpha ?? 1;
     if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
-    if (kind !== "mine") drawShadow(ctx, 0, 0, r * 1.05, o.ghost ? 0.2 : 0.38);
+    if (kind !== "mine") drawShadow(ctx, 0, 0, r * 1.3, o.ghost ? 0.2 : 0.38);
     if ((o.rank ?? 1) >= 4 && !o.hidden) {
       // Ascended: a slow pulse of team light on the ground.
       const pulse = 0.55 + 0.45 * Math.sin(this.time * 3 + (o.id ?? 0));

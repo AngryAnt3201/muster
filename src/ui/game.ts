@@ -229,7 +229,9 @@ export class GameScreen {
       card.classList.toggle("picked", this.pickSlot === i);
       card.classList.toggle("is-new", !!k && !seen.has(k));
       if (k && was !== k) {
-        (card.querySelector(".card-name") as HTMLElement).textContent = UNITS[k].name;
+        const nameEl = card.querySelector(".card-name") as HTMLElement;
+        nameEl.textContent = UNITS[k].name;
+        nameEl.classList.toggle("long", UNITS[k].name.length > 11);
         (card.querySelector(".card-cost") as HTMLElement).textContent = String(UNITS[k].cost);
         requestAnimationFrame(() => paintPortrait(card.querySelector("canvas") as HTMLCanvasElement, k));
         card.classList.remove("deal"); void card.offsetWidth; card.classList.add("deal");
