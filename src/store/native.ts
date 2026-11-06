@@ -1,5 +1,6 @@
-// StoreKit 2 on iOS, through the local MusterStore Capacitor plugin (ios/, no third-party SDK).
-// The plugin's side of the contract, which the Swift code must match:
+// StoreKit 2 on iOS, through the local MusterStore Capacitor plugin (no third-party SDK):
+// ios/MusterStore/ios/Sources/MusterStorePlugin/ (npm "muster-store": "file:ios/MusterStore", linked by tools/cap-sync.mjs).
+// The plugin's side of the contract, which the Swift code matches (tests/storekit.test.ts checks the names):
 //   getProducts({ ids: string[] })  -> { products: { id, title, description, displayPrice }[] }   Product.products(for:)
 //   purchase({ id: string })        -> { status: "purchased" | "pending" | "cancelled" | "failed", message? }
 //                                      product.purchase(): .success(verified) finishes the transaction -> purchased,
