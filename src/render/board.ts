@@ -1331,7 +1331,9 @@ export class BoardView {
       const q = cam.project(f.x, f.y, 0.6);
       ctx.save();
       ctx.globalAlpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
-      const size = f.size * q.s * (u < 0.15 ? 0.7 + u * 2 : 1);
+      // Whole pixels only: the float drifts in depth every frame, and a new font size each frame misses the
+      // glyph cache and re-rasterises the text (it was most of the frame in a 24-unit battle).
+      const size = Math.max(6, Math.round(f.size * q.s * (u < 0.15 ? 0.7 + u * 2 : 1)));
       ctx.font = `800 ${size}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.75)";

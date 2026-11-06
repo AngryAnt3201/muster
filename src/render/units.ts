@@ -298,7 +298,7 @@ export function drawUnit(ctx: CanvasRenderingContext2D, kind: BodyKind, side: Si
       body(ctx, r, side, lw);
       ctx.rotate(-face);
       ctx.fillStyle = INK;
-      ctx.font = `900 ${r * 1.1}px ui-rounded, system-ui, sans-serif`;
+      ctx.font = `900 ${Math.max(6, Math.round(r * 1.1))}px ui-rounded, system-ui, sans-serif`; // whole px: keeps the glyph cache warm as r changes with depth
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(String(kind)[0].toUpperCase(), 0, r * 0.05);
     }
