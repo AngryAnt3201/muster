@@ -1,0 +1,377 @@
+{
+  "ppu": 120,
+  "units": {
+    "mine": {
+      "size": 104,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "blades": {
+      "size": 196,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "ranger": {
+      "size": 184,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "bulwark": {
+      "size": 280,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "medic": {
+      "size": 220,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "grenadier": {
+      "size": 132,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "shade": {
+      "size": 216,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "lancer": {
+      "size": 268,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "ballista": {
+      "size": 364,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "hive": {
+      "size": 156,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "storm": {
+      "size": 336,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "golem": {
+      "size": 220,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "sapper": {
+      "size": 256,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "harrier": {
+      "size": 200,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "banner": {
+      "size": 316,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "rime": {
+      "size": 328,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "ravager": {
+      "size": 256,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "grave": {
+      "size": 180,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "bombard": {
+      "size": 144,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "tinker": {
+      "size": 188,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "duelist": {
+      "size": 344,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "pikeman": {
+      "size": 344,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "keg": {
+      "size": 208,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "trickster": {
+      "size": 172,
+      "tiers": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "mite": {
+      "size": 80,
+      "tiers": [
+        1
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "golemling": {
+      "size": 116,
+      "tiers": [
+        1
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "thrall": {
+      "size": 116,
+      "tiers": [
+        1
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "turret": {
+      "size": 152,
+      "tiers": [
+        1
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "decoy": {
+      "size": 136,
+      "tiers": [
+        1
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    },
+    "queen": {
+      "size": 128,
+      "tiers": [
+        1
+      ],
+      "poses": [
+        "idle",
+        "attack"
+      ]
+    }
+  }
+}
