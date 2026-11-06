@@ -1,6 +1,8 @@
-// Top-down tokens for every unit, drawn with paths (no image assets). r is the body radius in pixels.
+// Unit drawing. Bodies draw from the Blender atlases (sprites.ts) through drawFrame/animFor; the top-down tokens
+// below, drawn with paths, are the fallback while an atlas loads and the shop-card icons. r is the radius in px.
 import type { BodyKind, Side } from "../core/defs";
 import { INK, STEEL, TEAM, WOOD, ZAP } from "./palette";
+import type { Anim, Frame } from "./sprites";
 
 export interface DrawOpts {
   rank?: number;
@@ -15,6 +17,40 @@ export interface DrawOpts {
   ghost?: boolean; // placement preview
   hidden?: boolean; // cloaked / buried
   own?: boolean; // viewer's own side (mines and cloaks show faintly)
+  dying?: number; // 0..1 progress of the death animation
+}
+
+/** Atlas sprites draw this much larger than true scale so they read on a phone (collision is unchanged). */
+export const SPRITE_VIS = 1.25;
+
+/** Which animation a body plays and where in it (phase 0..1, see sprites.frame). */
+export function animFor(o: DrawOpts): { anim: Anim; phase: number } {
+  const t = o.t ?? 0, id = o.id ?? 0;
+  if (o.dying !== undefined) return { anim: "death", phase: o.dying };
+  const sw = o.swing ?? -1;
+  if (sw >= 0 && sw < 1) return { anim: "attack", phase: sw };
+  const sp = o.speed ?? 0;
+  // One stride cycle per ~0.7 world units travelled, kept in a readable cadence band.
+  if (sp > 0.2 && !o.ghost) return { anim: "walk", phase: t * Math.max(1.1, Math.min(2.6, sp / 0.7)) + id * 0.37 };
+  return { anim: "idle", phase: t * 0.75 + id * 0.29 };
+}
+
+/**
+ * Draws an atlas frame with its ground anchor at the current origin. k = screen px per atlas px.
+ * flash (0..1) adds a white hit flash on top using additive blending (no extra image needed).
+ */
+export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, k: number, flash = 0) {
+  ctx.save();
+  if (f.flip) ctx.scale(-1, 1);
+  const dx = -f.ax * k, dy = -f.ay * k, dw = f.w * k, dh = f.h * k;
+  ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+  if (flash > 0) {
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha *= Math.min(1, flash) * 0.7;
+    ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+    ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+  }
+  ctx.restore();
 }
 
 const TAU = Math.PI * 2;

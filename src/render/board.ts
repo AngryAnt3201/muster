@@ -3,8 +3,8 @@ import type { Battle, BattleEvent, Body } from "../core/battle";
 import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
-import { sprite, whiteOf } from "./sprites";
-import { drawRank, drawShadow, drawUnit, type DrawOpts } from "./units";
+import { frame, spriteHeight } from "./sprites";
+import { SPRITE_VIS, animFor, drawFrame, drawRank, drawShadow, drawUnit, type DrawOpts } from "./units";
 
 export interface DeployScene {
   mode: "deploy";
@@ -429,22 +429,23 @@ export class BoardView {
     }
   }
 
-  /** Draws a body: its Blender sprite for the rank when loaded, else the drawn token. r is the radius in px. */
+  /** Draws a body: its atlas frame for the rank, facing and animation when loaded, else the drawn token. r is the radius in px. */
   private token(kind: BodyKind, side: Side, x: number, y: number, r: number, face: number, o: DrawOpts & { rank?: number }) {
     const ctx = this.ctx;
-    const swing = o.swing ?? -1;
-    const pose = swing >= 0 && swing < 0.7 ? "attack" : "idle";
-    const sp = sprite(kind, Math.max(1, Math.min(4, o.rank ?? 1)), side, pose);
-    if (!sp) { drawUnit(ctx, kind, side, x, y, r, face, o); return; }
+    const { anim, phase } = animFor({ ...o, t: o.t ?? this.time });
+    const fr = frame(kind, Math.max(1, Math.min(4, o.rank ?? 1)), side, anim, phase, face);
+    if (!fr) {
+      // Fallback token: shrinks as it dies, like the v2 bodies did.
+      drawUnit(ctx, kind, side, x, y, o.dying !== undefined ? r * (1 - 0.2 * o.dying) : r, face, o);
+      return;
+    }
     const k = r / (RADIUS(kind) * this.s);
-    // Drawn a bit larger than true scale so they read on a phone (collision is unchanged).
-    const px = sp.size * this.s * k * 1.3;
     ctx.save();
     ctx.translate(x, y);
     ctx.globalAlpha *= o.alpha ?? 1;
     if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
-    if (kind !== "mine") drawShadow(ctx, 0, 0, r * 1.3, o.ghost ? 0.2 : 0.38);
-    if ((o.rank ?? 1) >= 4 && !o.hidden) {
+    if (kind !== "mine") drawShadow(ctx, 0, 0, r * 1.15, o.ghost ? 0.2 : 0.34);
+    if ((o.rank ?? 1) >= 4 && !o.hidden && o.dying === undefined) {
       // Ascended: a slow pulse of team light on the ground.
       const pulse = 0.55 + 0.45 * Math.sin(this.time * 3 + (o.id ?? 0));
       const g = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.1);
@@ -453,17 +454,19 @@ export class BoardView {
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(0, 0, r * 2.1, 0, TAU); ctx.fill();
     }
-    const moving = (o.speed ?? 0) > 0.2;
-    if (moving) ctx.translate(0, Math.sin(this.time * 14 + (o.id ?? 0)) * r * 0.07);
-    ctx.rotate(face);
-    if (swing >= 0 && swing < 0.5) ctx.translate(Math.sin((swing / 0.5) * Math.PI) * r * 0.22, 0);
-    if (moving) ctx.scale(1 + Math.sin(this.time * 28 + (o.id ?? 0)) * 0.025, 1);
-    ctx.drawImage(sp.img, -px / 2, -px / 2, px, px);
-    if (o.flash && o.flash > 0) {
-      ctx.globalAlpha *= Math.min(1, o.flash) * 0.8;
-      ctx.drawImage(whiteOf(sp), -px / 2, -px / 2, px, px);
+    const swing = o.swing ?? -1;
+    // A short lunge towards the target on the strike.
+    if (swing >= 0 && swing < 0.5) {
+      const l = Math.sin((swing / 0.5) * Math.PI) * r * 0.16;
+      ctx.translate(Math.cos(face) * l, Math.sin(face) * l);
     }
+    drawFrame(ctx, fr, (this.s * k * SPRITE_VIS) / fr.ppu, o.flash ?? 0);
     ctx.restore();
+  }
+
+  /** Extra lift for overlays (health, rank) so they clear an upright sprite's head. r is the radius in px. */
+  private headLift(kind: BodyKind, rank: number, r: number) {
+    return Math.max(0, spriteHeight(kind, rank) * this.s * SPRITE_VIS - r * 1.3);
   }
 
   private evolveAt = new Map<number, number>();
@@ -509,7 +512,7 @@ export class BoardView {
       } else {
         this.token(p.kind, p.side, x, y, r * pop, face, { t: this.time, id: p.id, hidden: p.kind === "mine", own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
       }
-      drawRank(ctx, x, y, Math.max(r, 0.3 * s), p.rank);
+      drawRank(ctx, x, y - this.headLift(p.kind, p.rank, r), Math.max(r, 0.3 * s), p.rank);
     }
     if (sc.ghost) {
       const g = sc.ghost, def = UNITS[g.kind];
@@ -640,8 +643,10 @@ export class BoardView {
       const decoy = bd.kind === "decoy";
       const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
       const kind = decoy ? "trickster" : bd.kind;
-      this.token(kind, bd.side, x, y + dy, bd.radius * s * scale * (bd.alive ? 1 : 0.8 + 0.2 * fade) * (decoy ? RADIUS("trickster") / RADIUS("decoy") : 1), bd.face, {
-        t: this.time, alpha: fade * (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1), flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
+      // Dying bodies play their death frames, then fade over the last part of the window.
+      const dying = bd.alive ? undefined : 1 - fade;
+      this.token(kind, bd.side, x, y + dy, bd.radius * s * scale * (decoy ? RADIUS("trickster") / RADIUS("decoy") : 1), bd.face, {
+        t: this.time, alpha: Math.min(1, fade * 2.5) * (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1), flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp, dying,
         state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
       });
       if (bd.alive && (bd.frozen ?? 0) > 0) this.drawIce(x, y + dy, bd.radius * s * 1.25);
@@ -706,7 +711,7 @@ export class BoardView {
     for (const bd of live) {
       if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed) continue;
       const [x, y0] = lerp(bd);
-      const y = y0 - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0);
+      const y = y0 - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0) - this.headLift(bd.kind, bd.rank, bd.radius * s);
       const w = Math.max(16, bd.radius * s * 1.9), h = 4;
       const top = y - bd.radius * s * 1.3 - 9;
       ctx.fillStyle = "rgba(0,0,0,0.6)";
@@ -717,7 +722,7 @@ export class BoardView {
     for (const bd of live) {
       if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || bd.burrowed || bd.kind === "decoy") continue;
       const [x, y] = lerp(bd);
-      drawRank(ctx, x, y - (bd.hp < bd.maxHp ? 14 : 5) - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0), bd.radius * s * 1.3, bd.rank);
+      drawRank(ctx, x, y - (bd.hp < bd.maxHp ? 14 : 5) - (bd.flying ? (bd.z ?? 1.2) * s * 0.55 : 0) - this.headLift(bd.kind, bd.rank, bd.radius * s), bd.radius * s * 1.3, bd.rank);
     }
   }
 

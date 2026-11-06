@@ -91,7 +91,8 @@ export class GameScreen {
     this.buildHud();
     host.append(this.root);
     this.view = new BoardView(this.canvas);
-    void loadSprites().then(() => preload([...new Set([...this.match.sides[0].roster, ...this.match.sides[1].roster, "mite", "golemling", "thrall", "turret", "decoy", "queen"])]));
+    // Recruits and spawned bodies up front; higher tiers tint on demand (the lower tier shows meanwhile).
+    void loadSprites().then(() => preload([...new Set([...this.match.sides[0].roster, ...this.match.sides[1].roster, "mite", "golemling", "thrall", "turret", "queen"])], [1]));
     this.view.setObstacles(opts.cfg.obstacles);
     this.view.onSound = (n, g) => sfx(n, g);
     this.view.onShake = (a) => { if (a >= 2) buzz("heavy"); };
