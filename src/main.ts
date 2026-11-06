@@ -8,10 +8,10 @@ import type { Match } from "./core/match";
 import { PUZZLES } from "./core/puzzles";
 import { setSound, sfx, unlockAudio } from "./audio/sfx";
 import { initNative, setHaptics } from "./native";
-import { drawIcon } from "./render/units";
+import { loadSprites } from "./render/sprites";
 import { load, save } from "./save";
 import { el, stars } from "./ui/dom";
-import { GameScreen } from "./ui/game";
+import { GameScreen, paintPortrait } from "./ui/game";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -38,7 +38,7 @@ function header(title: string, back: () => void, right?: Node) {
 }
 function icon(kind: keyof typeof UNITS, size = 44) {
   const c = el("canvas", { class: "unit-icon", style: `width:${size}px;height:${size}px` }) as HTMLCanvasElement;
-  requestAnimationFrame(() => drawIcon(c, kind));
+  requestAnimationFrame(() => paintPortrait(c, kind));
   return c;
 }
 
@@ -108,8 +108,8 @@ function levelSheet(l: LevelDef) {
   const best = load().campaign[l.id] ?? 0;
   const objs = el("ul", { class: "objectives" }, l.stars.map((o, i) => el("li", { class: i < best ? "met" : "" }, ["★ ", objectiveText(o)])));
   const tags = el("div", { class: "tags" }, [
-    el("span", { class: "tag" }, [l.ai.tactic]),
-    el("span", { class: "tag" }, [`rival ${l.hp[1]} hp`]),
+    el("span", { class: "tag" }, [cap(l.ai.tactic)]),
+    el("span", { class: "tag" }, [`Rival health ${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, ["boss"])] : []),
   ]);
   const roster = el("div", { class: "roster" }, l.roster.map((k) => {
@@ -351,7 +351,7 @@ async function boot() {
   const s = load();
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
-  await initNative();
+  await Promise.all([initNative(), loadSprites()]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
   const q = new URLSearchParams(location.search);
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?gauntlet, ?watch

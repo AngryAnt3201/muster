@@ -1,9 +1,10 @@
 // The board view: draws the deploy scene and the battle, turns battle events into effects.
 import type { Battle, BattleEvent, Body } from "../core/battle";
-import { H, UNITS, W, ZONE_DEPTH, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
+import { BODY_EXTRA, H, UNITS, W, ZONE_DEPTH, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
-import { drawRank, drawShadow, drawUnit } from "./units";
+import { sprite, whiteOf } from "./sprites";
+import { drawRank, drawShadow, drawUnit, type DrawOpts } from "./units";
 
 export interface DeployScene {
   mode: "deploy";
@@ -24,7 +25,7 @@ export type Scene = DeployScene | BattleScene;
 export interface Rect { x: number; y: number; w: number; h: number; }
 
 const TAU = Math.PI * 2;
-const RADIUS = (k: BodyKind) => (k === "mite" ? 0.15 : k === "golemling" ? 0.36 : UNITS[k as UnitKind].radius);
+const RADIUS = (k: BodyKind): number => (UNITS as Record<string, { radius: number }>)[k]?.radius ?? (BODY_EXTRA as Record<string, { radius: number }>)[k]?.radius ?? 0.3;
 
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
@@ -307,6 +308,46 @@ export class BoardView {
     }
   }
 
+  /** Draws a body: its Blender sprite for the rank when loaded, else the drawn token. r is the radius in px. */
+  private token(kind: BodyKind, side: Side, x: number, y: number, r: number, face: number, o: DrawOpts & { rank?: number }) {
+    const ctx = this.ctx;
+    const swing = o.swing ?? -1;
+    const pose = swing >= 0 && swing < 0.7 ? "attack" : "idle";
+    const sp = sprite(kind, Math.max(1, Math.min(4, o.rank ?? 1)), side, pose);
+    if (!sp) { drawUnit(ctx, kind, side, x, y, r, face, o); return; }
+    const k = r / (RADIUS(kind) * this.s);
+    const px = sp.size * this.s * k;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha *= o.alpha ?? 1;
+    if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
+    if (kind !== "mine") drawShadow(ctx, 0, 0, r * 1.05, o.ghost ? 0.2 : 0.38);
+    if ((o.rank ?? 1) >= 4 && !o.hidden) {
+      // Ascended: a slow pulse of team light on the ground.
+      const pulse = 0.55 + 0.45 * Math.sin(this.time * 3 + (o.id ?? 0));
+      const g = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 2.1);
+      g.addColorStop(0, team(side).glow + (0.35 * pulse) + ")");
+      g.addColorStop(1, team(side).glow + "0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, 0, r * 2.1, 0, TAU); ctx.fill();
+    }
+    const moving = (o.speed ?? 0) > 0.2;
+    if (moving) ctx.translate(0, Math.sin(this.time * 14 + (o.id ?? 0)) * r * 0.07);
+    ctx.rotate(face);
+    if (swing >= 0 && swing < 0.5) ctx.translate(Math.sin((swing / 0.5) * Math.PI) * r * 0.22, 0);
+    if (moving) ctx.scale(1 + Math.sin(this.time * 28 + (o.id ?? 0)) * 0.025, 1);
+    ctx.drawImage(sp.img, -px / 2, -px / 2, px, px);
+    if (o.flash && o.flash > 0) {
+      ctx.globalAlpha *= Math.min(1, o.flash) * 0.8;
+      ctx.drawImage(whiteOf(sp), -px / 2, -px / 2, px, px);
+    }
+    ctx.restore();
+  }
+
+  private evolveAt = new Map<number, number>();
+  /** A rank-up pop on a placed piece. */
+  markEvolve(id: number) { this.evolveAt.set(id, this.time); }
+
   private drawZone(side: Side) {
     const ctx = this.ctx;
     const a = toWorld(side, 0, -0.05), b = toWorld(side, 0, ZONE_DEPTH);
@@ -335,14 +376,16 @@ export class BoardView {
       const sel = sc.selected === p.id;
       if (sel) this.drawSelection(p);
       const revealT = this.reveal.get(p.id);
-      const pop = revealT !== undefined ? Math.min(1, (this.time - revealT) / 0.25) : 1;
+      let pop = revealT !== undefined ? Math.min(1, (this.time - revealT) / 0.25) : 1;
+      const evo = this.evolveAt.get(p.id);
+      if (evo !== undefined && this.time - evo < 0.45) pop *= 1 + 0.45 * Math.sin(((this.time - evo) / 0.45) * Math.PI);
       if (p.kind === "blades") {
         for (let i = 0; i < 3; i++) {
           const a = -Math.PI / 2 * (p.side === 0 ? -1 : 1) + (i * TAU) / 3;
-          drawUnit(ctx, "blades", p.side, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r * pop, face, { t: this.time, id: p.id * 3 + i });
+          this.token("blades", p.side, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank });
         }
       } else {
-        drawUnit(ctx, p.kind, p.side, x, y, r * pop, face, { t: this.time, id: p.id, hidden: p.kind === "mine", own: p.side === 0 || !!sc.showEnemyMines });
+        this.token(p.kind, p.side, x, y, r * pop, face, { t: this.time, id: p.id, hidden: p.kind === "mine", own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
       }
       drawRank(ctx, x, y, Math.max(r, 0.3 * s), p.rank);
     }
@@ -355,9 +398,9 @@ export class BoardView {
       if (g.kind === "blades") {
         for (let i = 0; i < 3; i++) {
           const a = Math.PI / 2 + (i * TAU) / 3;
-          drawUnit(ctx, "blades", 0, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r, -Math.PI / 2, { t: this.time, ghost: true });
+          this.token("blades", 0, x + Math.cos(a) * 0.32 * s, y + Math.sin(a) * 0.32 * s, r, -Math.PI / 2, { t: this.time, ghost: true });
         }
-      } else drawUnit(ctx, g.kind, 0, x, y, r, -Math.PI / 2, { t: this.time, ghost: true, own: true });
+      } else this.token(g.kind, 0, x, y, r, -Math.PI / 2, { t: this.time, ghost: true, own: true });
       if (!g.ok) {
         ctx.globalAlpha = 0.9;
         ctx.strokeStyle = "#ff4d4d"; ctx.lineWidth = 3;
@@ -399,7 +442,7 @@ export class BoardView {
     for (const bd of b.bodies) {
       if (bd.kind !== "mine" || !bd.alive) continue;
       const [x, y] = lerp(bd);
-      drawUnit(ctx, "mine", bd.side, x, y, bd.radius * s, 0, { t: this.time, state: bd.state, hidden: bd.hidden, own: bd.side === 0 });
+      this.token("mine", bd.side, x, y, bd.radius * s, 0, { t: this.time, state: bd.state, hidden: bd.hidden, own: bd.side === 0, rank: bd.rank });
     }
     const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45)).sort((p, q) => p.y - q.y);
     for (const bd of live) {
@@ -411,9 +454,9 @@ export class BoardView {
         this.fx.burst(bd.x - Math.cos(bd.face) * 0.3, bd.y - Math.sin(bd.face) * 0.3, 1, { color: "rgba(170,150,120,0.55)", speed: 0.5, size: 0.12, max: 0.45, kind: "smoke", gravity: 0 });
       if (bd.kind === "shade" && bd.hidden && Math.random() < 0.15)
         this.fx.burst(bd.x, bd.y, 1, { color: "rgba(180,140,255,0.35)", speed: 0.3, size: 0.1, max: 0.5, kind: "smoke", gravity: 0 });
-      drawUnit(ctx, bd.kind, bd.side, x, y, bd.radius * s * (bd.alive ? 1 : 0.8 + 0.2 * fade), bd.face, {
+      this.token(bd.kind, bd.side, x, y, bd.radius * s * (bd.alive ? 1 : 0.8 + 0.2 * fade), bd.face, {
         t: this.time, alpha: fade, flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp, state: bd.state, id: bd.id,
-        hidden: bd.hidden, own: bd.side === 0,
+        hidden: bd.hidden, own: bd.side === 0, rank: bd.rank,
       });
       if (bd.alive && bd.stun > 0.05) this.drawStun(x, y - bd.radius * s * 1.1, bd.radius * s);
     }

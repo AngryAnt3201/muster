@@ -7,6 +7,29 @@ import { sfx, unlockAudio } from "../audio/sfx";
 import { buzz } from "../native";
 import { BoardView, type Scene } from "../render/board";
 import { drawIcon } from "../render/units";
+import { loadSprites, preload, whenPortrait } from "../render/sprites";
+import * as Defs from "../core/defs";
+
+export const TIER_NAMES = ["Recruit", "Veteran", "Elite", "Ascended"];
+/** The rank-4 signature ability, if the build has them. */
+export const abilityOf = (k: UnitKind): { name: string; text: string } | undefined => (Defs as any).ABILITIES?.[k];
+
+/** Draws a unit's portrait into a card canvas, falling back to the drawn token. */
+export function paintPortrait(canvas: HTMLCanvasElement, kind: UnitKind, tier = 1) {
+  drawIcon(canvas, kind);
+  void whenPortrait(kind, tier).then((img) => {
+    if (!img || canvas.dataset.kind !== kind + tier) return;
+    const ctx = canvas.getContext("2d")!;
+    const w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const k = Math.min(w / img.naturalWidth, h / img.naturalHeight) * 1.05;
+    ctx.drawImage(img, (w - img.naturalWidth * k) / 2, (h - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+  });
+  canvas.dataset.kind = kind + tier;
+}
 import { load, save } from "../save";
 import { el, fmt } from "./dom";
 
@@ -68,6 +91,7 @@ export class GameScreen {
     this.buildHud();
     host.append(this.root);
     this.view = new BoardView(this.canvas);
+    void loadSprites().then(() => preload([...new Set([...this.match.sides[0].roster, ...this.match.sides[1].roster, "mite", "golemling", "thrall", "turret", "decoy", "queen"])]));
     this.view.setObstacles(opts.cfg.obstacles);
     this.view.onSound = (n, g) => sfx(n, g);
     this.view.onShake = (a) => { if (a >= 2) buzz("heavy"); };
@@ -207,7 +231,7 @@ export class GameScreen {
       if (k && was !== k) {
         (card.querySelector(".card-name") as HTMLElement).textContent = UNITS[k].name;
         (card.querySelector(".card-cost") as HTMLElement).textContent = String(UNITS[k].cost);
-        requestAnimationFrame(() => drawIcon(card.querySelector("canvas") as HTMLCanvasElement, k));
+        requestAnimationFrame(() => paintPortrait(card.querySelector("canvas") as HTMLCanvasElement, k));
         card.classList.remove("deal"); void card.offsetWidth; card.classList.add("deal");
       }
       if (!k) (card.querySelector(".card-name") as HTMLElement).textContent = "";
@@ -514,18 +538,28 @@ export class GameScreen {
     const own = p.side === 0;
     const m = this.match;
     pop.replaceChildren();
-    pop.className = `pop ${own ? "own" : "theirs"}`;
-    pop.append(el("div", { class: "pop-head" }, [el("b", {}, [def.name]), el("span", { class: "pop-rank" }, ["★".repeat(p.rank)])]));
-    pop.append(el("div", { class: "pop-text" }, [def.short]));
+    pop.className = `pop ${own ? "own" : "theirs"} rank-${p.rank}`;
+    const face = el("canvas", { class: "pop-portrait" }) as HTMLCanvasElement;
+    pop.append(el("div", { class: "pop-top" }, [
+      face,
+      el("div", { class: "pop-id" }, [
+        el("div", { class: "pop-head" }, [el("b", {}, [def.name]), el("span", { class: "pop-rank" }, [TIER_NAMES[p.rank - 1] ?? ""])]),
+        el("div", { class: "pop-text" }, [def.short]),
+      ]),
+    ]));
+    requestAnimationFrame(() => paintPortrait(face, p.kind, p.rank));
+    const ab = abilityOf(p.kind);
+    if (ab && (p.rank >= 3 || !own)) pop.append(el("div", { class: `pop-ability ${p.rank >= 4 ? "on" : ""}` }, [el("b", {}, [ab.name]), " ", ab.text]));
     if (own && this.phase === "deploy") {
-      const up = el("button", { class: "btn small up" }, [p.rank >= 3 ? "Max" : `Rank up · ${upgradeCost(p.kind, p.rank)}`]) as HTMLButtonElement;
-      up.disabled = !!m.canUpgrade(0, p.id);
+      const why = m.canUpgrade(0, p.id);
+      const ascend = p.rank === 3;
+      const label = p.rank >= 4 ? "Ascended" : ascend ? `Ascend · ${upgradeCost(p.kind, p.rank)}` : `Rank up · ${upgradeCost(p.kind, p.rank)}`;
+      const up = el("button", { class: `btn small up ${ascend ? "ascend" : ""}` }, [why && why !== "Need gold" && p.rank < 4 ? why : label]) as HTMLButtonElement;
+      up.disabled = !!why;
       up.addEventListener("click", () => {
         if (m.canUpgrade(0, p.id)) return;
         m.upgrade(0, p.id);
-        sfx("upgrade"); buzz("medium");
-        this.view.fx.ring(p.x, p.y, 0.2, 1.0, 0.4, "#ffd166", 0.06);
-        this.view.fx.burst(p.x, p.y, 14, { color: "#ffd166", speed: 2, size: 0.06, max: 0.5, kind: "spark", gravity: 0 });
+        this.evolve(p);
         this.openPop(p);
         this.refreshHud();
       });
@@ -548,6 +582,21 @@ export class GameScreen {
     const y = above > this.view.rect.y ? above : sy + 30;
     pop.style.left = `${x}px`;
     pop.style.top = `${y}px`;
+  }
+
+  /** The look changes with the rank: a flash, a burst and the new tier's name. */
+  private evolve(p: Piece) {
+    const fx = this.view.fx;
+    const ascended = p.rank >= 4;
+    const col = ascended ? "#fff2b8" : "#ffd166";
+    this.view.markEvolve(p.id);
+    fx.ring(p.x, p.y, 0.1, ascended ? 1.6 : 1.0, ascended ? 0.6 : 0.4, col, ascended ? 0.09 : 0.06, ascended ? "rgba(255,230,150,0.25)" : undefined);
+    fx.burst(p.x, p.y, ascended ? 30 : 14, { color: col, speed: ascended ? 3 : 2, size: 0.06, max: 0.6, kind: "spark", gravity: 0 });
+    if (ascended) { fx.flash = 0.3; fx.flashColor = "#fff2b8"; fx.shake = 0.3; }
+    sfx("upgrade");
+    buzz(ascended ? "heavy" : "medium");
+    const ab = abilityOf(p.kind);
+    this.showBanner(`<b>${TIER_NAMES[p.rank - 1]}</b><small>${UNITS[p.kind].name}${ascended && ab ? " · " + ab.name : ""}</small>`, ascended ? "ascend" : "evolve", 1100);
   }
 
   private closePop() {

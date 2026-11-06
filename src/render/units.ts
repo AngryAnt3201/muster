@@ -255,6 +255,16 @@ export function drawUnit(ctx: CanvasRenderingContext2D, kind: BodyKind, side: Si
       disc(ctx, r * 0.75, 0, r * 0.38, c.dark);
       break;
     }
+    default: {
+      // Any unit without a drawn token yet: a team disc with its initial.
+      ctx.rotate(face);
+      body(ctx, r, side, lw);
+      ctx.rotate(-face);
+      ctx.fillStyle = INK;
+      ctx.font = `900 ${r * 1.1}px ui-rounded, system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(String(kind)[0].toUpperCase(), 0, r * 0.05);
+    }
   }
   if (o.flash && o.flash > 0) {
     ctx.globalCompositeOperation = "lighter";
@@ -305,6 +315,22 @@ const easeOut = (x: number) => 1 - (1 - Math.min(1, Math.max(0, x))) ** 3;
 /** Rank chevrons above a token. */
 export function drawRank(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rank: number) {
   if (rank <= 1) return;
+  if (rank >= 4) {
+    // Ascended: a small gold star.
+    ctx.save();
+    ctx.translate(x, y - r - r * 0.45);
+    const k = Math.max(5, r * 0.42);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? k * 0.45 : k;
+      i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#ffd166"; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.translate(x, y - r - r * 0.35);
   ctx.strokeStyle = "#ffd166"; ctx.lineWidth = Math.max(1.5, r * 0.16); ctx.lineCap = "round"; ctx.lineJoin = "round";
