@@ -1,5 +1,9 @@
 {
   "direction": "meadow",
-  "status": "provisional until Jack picks a direction from outputs/signoff/muster-style/index.html",
-  "choices": ["meadow", "dusk", "toy"]
+  "status": "picked by Jack on 2026-11-06",
+  "choices": [
+    "meadow",
+    "dusk",
+    "toy"
+  ]
 }

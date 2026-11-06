@@ -1,0 +1,175 @@
+{
+ "acts": {
+  "1": {
+   "name": "Borderlands",
+   "edge": "#80c25a",
+   "obstacle": "boulder",
+   "ground": "act1.jpg",
+   "props": [
+    {
+     "file": "act1_prop0.png",
+     "footprint": 0.9571
+    },
+    {
+     "file": "act1_prop1.png",
+     "footprint": 0.9571
+    },
+    {
+     "file": "act1_prop2.png",
+     "footprint": 0.9571
+    }
+   ]
+  },
+  "2": {
+   "name": "Ash Fields",
+   "edge": "#c3b85c",
+   "obstacle": "charstump",
+   "ground": "act2.jpg",
+   "props": [
+    {
+     "file": "act2_prop0.png",
+     "footprint": 0.999
+    },
+    {
+     "file": "act2_prop1.png",
+     "footprint": 0.999
+    },
+    {
+     "file": "act2_prop2.png",
+     "footprint": 0.999
+    }
+   ]
+  },
+  "3": {
+   "name": "Hollow Wood",
+   "edge": "#6cb552",
+   "obstacle": "stump",
+   "ground": "act3.jpg",
+   "props": [
+    {
+     "file": "act3_prop0.png",
+     "footprint": 0.999
+    },
+    {
+     "file": "act3_prop1.png",
+     "footprint": 0.999
+    },
+    {
+     "file": "act3_prop2.png",
+     "footprint": 0.999
+    }
+   ]
+  },
+  "4": {
+   "name": "Iron Pass",
+   "edge": "#a2bd72",
+   "obstacle": "crag",
+   "ground": "act4.jpg",
+   "props": [
+    {
+     "file": "act4_prop0.png",
+     "footprint": 0.9283
+    },
+    {
+     "file": "act4_prop1.png",
+     "footprint": 0.9283
+    },
+    {
+     "file": "act4_prop2.png",
+     "footprint": 0.9283
+    }
+   ]
+  },
+  "5": {
+   "name": "High Keep",
+   "edge": "#8cc45e",
+   "obstacle": "pillar",
+   "ground": "act5.jpg",
+   "props": [
+    {
+     "file": "act5_prop0.png",
+     "footprint": 0.9739
+    },
+    {
+     "file": "act5_prop1.png",
+     "footprint": 0.9739
+    },
+    {
+     "file": "act5_prop2.png",
+     "footprint": 0.9739
+    }
+   ]
+  },
+  "6": {
+   "name": "Frozen Reach",
+   "edge": "#eef5fb",
+   "obstacle": "icerock",
+   "ground": "act6.jpg",
+   "props": [
+    {
+     "file": "act6_prop0.png",
+     "footprint": 0.957
+    },
+    {
+     "file": "act6_prop1.png",
+     "footprint": 0.957
+    },
+    {
+     "file": "act6_prop2.png",
+     "footprint": 0.957
+    }
+   ]
+  },
+  "7": {
+   "name": "Sky Throne",
+   "edge": "#bfe0ff",
+   "obstacle": "obelisk",
+   "ground": "act7.jpg",
+   "props": [
+    {
+     "file": "act7_prop0.png",
+     "footprint": 0.971
+    },
+    {
+     "file": "act7_prop1.png",
+     "footprint": 0.971
+    },
+    {
+     "file": "act7_prop2.png",
+     "footprint": 0.971
+    }
+   ]
+  }
+ },
+ "version": 3,
+ "style": "meadow",
+ "camera": {
+  "tilt": 0.64,
+  "dist": 30.0
+ },
+ "view": {
+  "u0": -0.26,
+  "u1": 0.26,
+  "v0": -0.42,
+  "v1": 0.44
+ },
+ "prop": {
+  "frame": [
+   3.2,
+   3.8
+  ],
+  "anchor": [
+   0.5,
+   0.65789
+  ],
+  "res": [
+   512,
+   608
+  ],
+  "elev": 53.331
+ },
+ "size": [
+  1456,
+  2408
+ ]
+}

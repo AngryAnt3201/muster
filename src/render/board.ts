@@ -3,7 +3,8 @@
 // (zones, contact shadows, mines, mounds), upright things sorted by ground y, the air layer, then bars and effects.
 import type { Battle, BattleEvent, Body, Proj } from "../core/battle";
 import { H, UNITS, W, ZONE_DEPTH, bodyDef, toWorld, type BodyKind, type Obstacle, type Piece, type Side, type UnitKind } from "../core/defs";
-import { Camera, SLAB, sortDrawables, type Drawable, type Rect, type ScreenPt } from "./camera";
+import { arenaFor, backdropRect, propRect, propVariant, type Arena } from "./arena";
+import { Camera, DIST, SLAB, TILT, sortDrawables, type Drawable, type Rect, type ScreenPt } from "./camera";
 import { Fx, frand } from "./fx";
 import { BOARD, GOLD, HEAL, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { frame, hasAtlas, spriteHeight } from "./sprites";
@@ -60,6 +61,9 @@ export class BoardView {
   onShake?: (amount: number) => void;
   onSound?: (name: string, gain?: number) => void;
   private bg?: HTMLCanvasElement;
+  /** The Blender arena for this match's act (null until loaded, or if the art is missing: then the drawn terrain). */
+  arena: Arena | null = null;
+  private arenaReq = 0;
   private reveal = new Map<number, number>(); // piece id -> time revealed
   /** Each commander's shown hp over max hp: drives the keep's damage state (the game keeps it in step with the bar). */
   keepHp: [number, number] = [1, 1];
@@ -96,6 +100,18 @@ export class BoardView {
     this.bg = undefined;
   }
 
+  /** Picks the arena by campaign act (anything without one gets act 1's). */
+  setArena(act: number | undefined): Promise<void> {
+    const req = ++this.arenaReq;
+    return arenaFor(act).then((a) => {
+      if (req !== this.arenaReq) return;
+      // The backdrop is only exact through the camera it was rendered with.
+      const c = a?.m.camera;
+      this.arena = a && c && Math.abs(c.tilt - TILT) < 1e-3 && Math.abs(c.dist - DIST) < 1e-3 ? a : null;
+      this.bg = undefined;
+    });
+  }
+
   /** World (on the ground, or at height z) to screen. */
   toScreen(x: number, y: number, z = 0): ScreenPt { return this.cam.project(x, y, z); }
   /** Screen to the ground point under it. */
@@ -127,12 +143,30 @@ export class BoardView {
 
   // ------------------------------------------------------------ background
   /** The board as a flat top-down texture, ppu pixels per world unit. */
-  private paintGround(ppu: number): HTMLCanvasElement {
+  private paintGround(ppu: number, overlay = false): HTMLCanvasElement {
     const c = document.createElement("canvas");
     const w = Math.round(W * ppu), h = Math.round(H * ppu);
     c.width = w; c.height = h;
     const g = c.getContext("2d")!;
     const s = ppu, X = (x: number) => x * s, Y = (y: number) => y * s;
+    if (overlay) {
+      // Over the arena art: a light team wash on each deploy zone and a glowing back line, nothing else.
+      for (const sd of [0, 1] as Side[]) {
+        const a = toWorld(sd, 0, 0), b = toWorld(sd, 0, ZONE_DEPTH);
+        const y0 = Y(Math.min(a.y, b.y)), y1 = Y(Math.max(a.y, b.y));
+        const zg = g.createLinearGradient(0, sd === 0 ? y1 : y0, 0, sd === 0 ? y0 : y1);
+        zg.addColorStop(0, team(sd).glow + "0.10)");
+        zg.addColorStop(1, team(sd).glow + "0)");
+        g.fillStyle = zg;
+        g.fillRect(0, y0, w, y1 - y0);
+        const ey = Y(sd === 0 ? H - 0.1 : 0.1);
+        const lg = g.createLinearGradient(0, 0, w, 0);
+        lg.addColorStop(0, team(sd).glow + "0)"); lg.addColorStop(0.5, team(sd).glow + "0.55)"); lg.addColorStop(1, team(sd).glow + "0)");
+        g.strokeStyle = lg; g.lineWidth = s * 0.07;
+        g.beginPath(); g.moveTo(0, ey); g.lineTo(w, ey); g.stroke();
+      }
+      return c;
+    }
     const grad = g.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, "#1d1714");
     grad.addColorStop(0.5, BOARD.base0);
@@ -219,6 +253,7 @@ export class BoardView {
     const g = c.getContext("2d")!;
     const dpr = this.dpr, cam = this.cam;
     g.scale(dpr, dpr);
+    if (this.arena) { this.paintArena(g, this.arena); return c; }
     const bgr = g.createLinearGradient(0, 0, 0, this.cssH);
     bgr.addColorStop(0, "#05070c"); bgr.addColorStop(1, "#0b1018");
     g.fillStyle = bgr;
@@ -242,16 +277,7 @@ export class BoardView {
       g.beginPath(); g.moveTo(l.x, l.y + Math.sin(i * 3.1) * 1.5); g.lineTo(r.x, r.y - Math.sin(i * 2.3) * 1.5); g.stroke();
     }
     // The ground: each screen row is one world row scaled across, so a row-by-row copy is an exact warp.
-    const ppu = Math.max(16, Math.min(2048 / W, Math.ceil(cam.scaleAt(H) * dpr)));
-    const tex = this.paintGround(ppu);
-    const top = Math.floor(c00.y * dpr), bot = Math.ceil(c01.y * dpr);
-    g.imageSmoothingEnabled = true;
-    for (let row = top; row < bot; row++) {
-      const ya = Math.max(0, cam.unproject(c00.x, row / dpr).y), yb = Math.min(H, cam.unproject(c00.x, (row + 1) / dpr).y);
-      if (!(yb > ya)) continue;
-      const ym = (ya + yb) / 2, l = cam.project(0, ym).x, r = cam.project(W, ym).x;
-      g.drawImage(tex, 0, ya * ppu, tex.width, Math.max(0.5, (yb - ya) * ppu), l, row / dpr, r - l, 1 / dpr + 0.02);
-    }
+    this.warpGround(g, false);
     // A lit lip along the near edge, and a vignette that darkens toward the far edge.
     g.strokeStyle = "rgba(255,240,210,0.16)"; g.lineWidth = 1.5;
     g.beginPath(); g.moveTo(c01.x, c01.y); g.lineTo(c11.x, c11.y); g.stroke();
@@ -266,6 +292,45 @@ export class BoardView {
     g.fillStyle = hz; g.fillRect(rr.x, rr.y, rr.w, rr.h * 0.35);
     g.restore();
     return c;
+  }
+
+  /** Copies a top-down board texture onto the ground: each screen row is one world row scaled across, so a
+   *  row-by-row copy is an exact warp. */
+  private warpGround(g: CanvasRenderingContext2D, overlay: boolean) {
+    const cam = this.cam, dpr = this.dpr;
+    const c00 = cam.project(0, 0), c01 = cam.project(0, H);
+    const ppu = Math.max(16, Math.min(2048 / W, Math.ceil(cam.scaleAt(H) * dpr)));
+    const tex = this.paintGround(overlay ? Math.min(ppu, 64) : ppu, overlay);
+    const tp = tex.width / W;
+    const top = Math.floor(c00.y * dpr), bot = Math.ceil(c01.y * dpr);
+    g.imageSmoothingEnabled = true;
+    for (let row = top; row < bot; row++) {
+      const ya = Math.max(0, cam.unproject(c00.x, row / dpr).y), yb = Math.min(H, cam.unproject(c00.x, (row + 1) / dpr).y);
+      if (!(yb > ya)) continue;
+      const ym = (ya + yb) / 2, l = cam.project(0, ym).x, r = cam.project(W, ym).x;
+      g.drawImage(tex, 0, ya * tp, tex.width, Math.max(0.5, (yb - ya) * tp), l, row / dpr, r - l, 1 / dpr + 0.02);
+    }
+  }
+
+  /** The Blender arena: its backdrop was rendered through this camera, so one scaled copy lines its ground up with
+   *  the board exactly; the zone wash goes on top. Obstacles stand up later as prop sprites (drawRock). */
+  private paintArena(g: CanvasRenderingContext2D, a: Arena) {
+    g.fillStyle = a.info.edge;
+    g.fillRect(0, 0, this.cssW, this.cssH);
+    const r = backdropRect(a.m, this.cam.k, this.cam.cx, this.cam.cy);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = "high";
+    g.drawImage(a.ground, r.x, r.y, r.w, r.h);
+    this.warpGround(g, true);
+  }
+
+  /** An obstacle's Blender prop, standing on its collision circle (its contact shadow is baked in). */
+  private drawProp(o: Obstacle, a: Arena): boolean {
+    const img = a.props[propVariant(o, a.props.length)];
+    if (!img) return false;
+    const p = this.cam.project(o.x, o.y), r = propRect(a.m, p.x, p.y, o.r, p.s);
+    this.ctx.drawImage(img, r.x, r.y, r.w, r.h);
+    return true;
   }
 
   // ------------------------------------------------------------ events -> effects
@@ -577,6 +642,7 @@ export class BoardView {
 
   /** A rock that stands on its collision circle: the base ring is the circle, projected exactly. */
   private drawRock(o: Obstacle) {
+    if (this.arena && this.drawProp(o, this.arena)) return;
     const ctx = this.ctx, cam = this.cam, n = 14, h = o.r * 0.95;
     const jag = (i: number) => 0.86 + 0.14 * Math.abs(Math.sin(o.x * 7 + o.y * 3 + i * 1.7));
     const at = (i: number, k: number, z: number) => {
@@ -635,7 +701,7 @@ export class BoardView {
 
   private drawDeploy(sc: DeployScene) {
     if (sc.zone !== undefined && sc.zone !== null) this.drawZone(sc.zone);
-    for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
+    if (!this.arena?.props.length) for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
     const shown = sc.pieces.filter((p) => !(p.kind === "mine" && p.side === 1 && !sc.showEnemyMines));
     // Ground layer: selection and range under everything, then contact shadows, then buried mines.
     const sel = shown.find((p) => p.id === sc.selected);
@@ -746,7 +812,7 @@ export class BoardView {
       });
       if (Math.random() < 0.35) this.fx.burst(z.x + frand(-z.r, z.r) * 0.7, z.y + frand(-z.r, z.r) * 0.7, 1, { color: "#ffb347", speed: 0.4, size: 0.05, max: 0.6, kind: "spark", gravity: -1.5, vz: 1 });
     }
-    for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
+    if (!this.arena?.props.length) for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
     for (const bd of b.bodies) {
       if (bd.kind !== "mine" || !bd.alive) continue;
       const [x, y] = pos(bd);

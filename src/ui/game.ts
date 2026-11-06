@@ -41,6 +41,8 @@ export interface GameOpts {
   mode: "campaign" | "skirmish" | "gauntlet" | "puzzle" | "watch" | "demo";
   title?: string;
   showEnemyMines?: boolean;
+  /** Campaign act whose arena to fight in (anything else gets act 1's). */
+  arena?: number;
   /** First-time coaching: drag a card down, then Fight. */
   hint?: boolean;
   onEnd: (m: Match) => void;
@@ -104,6 +106,7 @@ export class GameScreen {
       }
     });
     this.view.setObstacles(opts.cfg.obstacles);
+    void this.view.setArena(opts.arena);
     this.view.onSound = (n, g) => sfx(n, g);
     this.view.onShake = (a) => { if (a >= 2) buzz("heavy"); };
     window.addEventListener("resize", this.onResize);
