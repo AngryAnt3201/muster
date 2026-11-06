@@ -1,0 +1,44 @@
+{
+  "identifier" : "6D3A91C4",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "B7E2F05A",
+      "localizations" : [
+        {
+          "description" : "Every act, the Gauntlet and all puzzles",
+          "displayName" : "Full Army",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.inflect.muster.fullarmy",
+      "referenceName" : "Full Army",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
