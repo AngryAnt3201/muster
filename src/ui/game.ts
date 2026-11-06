@@ -6,6 +6,7 @@ import { Match, type MatchConfig, type RoundReport } from "../core/match";
 import { sfx, unlockAudio } from "../audio/sfx";
 import { buzz } from "../native";
 import { BoardView, type Scene } from "../render/board";
+import type { Assault } from "../render/assault";
 import { drawIcon } from "../render/units";
 import { loadSprites, preload, whenPortrait } from "../render/sprites";
 import * as Defs from "../core/defs";
@@ -70,6 +71,8 @@ export class GameScreen {
   private drag: { type: "card" | "piece"; slot?: number; id?: number; sx: number; sy: number; moved: boolean; pid: number } | null = null;
   private tipTimer = 0;
   private hpShown: [number, number];
+  /** The round-end march on the losing keep; the bars drain when its first blow lands. */
+  private assault?: { a: Assault; from: [number, number]; to: [number, number]; hit: [boolean, boolean]; leaving: boolean };
   private destroyed = false;
   private paused = false;
   private speed = load().settings.speed || 1;
@@ -181,6 +184,8 @@ export class GameScreen {
     this.h.round.innerHTML = this.o.mode === "puzzle" ? `<small>BREAKPOINT</small>` : `<small>ROUND</small><b>${m.round}</b>`;
     this.setHp(this.h.youHp, this.h.youHpText, this.hpShown[0], you.maxHp);
     this.setHp(this.h.foeHp, this.h.foeHpText, this.hpShown[1], foe.maxHp);
+    // The keeps break up in step with the bars.
+    this.view.keepHp = [Math.max(0, this.hpShown[0] / you.maxHp), Math.max(0, this.hpShown[1] / foe.maxHp)];
     this.h.gold.innerHTML = `<b>${you.gold}</b>`;
     this.h.supply.innerHTML = `<b>${m.supplyUsed(0)}</b>/${m.supplyCap(0)}`;
     this.h.foeGold.textContent = this.o.mode === "puzzle" ? "" : `${foe.gold}g`;
@@ -257,6 +262,8 @@ export class GameScreen {
     this.selected = null;
     this.pickSlot = null;
     this.battle = undefined;
+    this.assault = undefined;
+    this.view.assault = undefined;
     this.closePop();
     const m = this.match;
     const inc = m.sides[0].lastIncome;
@@ -342,35 +349,57 @@ export class GameScreen {
 
   private showRound(rep: RoundReport) {
     const won = rep.winner === 0, lost = rep.winner === 1;
-    const dmgFoe = rep.damage[1], dmgYou = rep.damage[0];
     const head = won ? "Round won" : lost ? "Round lost" : "Draw";
-    const detail = [dmgFoe ? `<span class="dmg foe">-${dmgFoe}</span>` : "", dmgYou ? `<span class="dmg you">-${dmgYou}</span>` : ""].join(" ");
-    this.showBanner(`<b>${head}</b><small>${detail}</small>`, won ? "won" : lost ? "lost" : "draw", 1500);
+    this.showBanner(`<b>${head}</b>`, won ? "won" : lost ? "lost" : "draw", 1300);
     sfx(won ? "round" : lost ? "hurt" : "tap", 1);
-    if (lost) buzz("heavy");
-    // Health bars count down.
-    const from: [number, number] = [...this.hpShown];
     const to: [number, number] = [this.match.sides[0].hp, this.match.sides[1].hp];
-    const t0 = performance.now();
-    const step = () => {
-      const u = Math.min(1, (performance.now() - t0) / 700);
-      this.hpShown = [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
+    if (this.battle && rep.damage.some((d) => d > 0)) {
+      // The survivors march on the losing keep; the bars drain only once the first blow lands (see frame()).
+      const a = this.view.startAssault(this.battle, rep.damage, this.watch ? 0.6 : 0.9);
+      this.assault = { a, from: [...this.hpShown], to, hit: [false, false], leaving: false };
+      return;
+    }
+    this.hpShown = to;
+    this.refreshHud();
+    setTimeout(() => this.afterRound(), this.watch ? 1200 : 1500);
+  }
+
+  /** The assault's clock: the hit lands, then the bar, the number and the keep move together. */
+  private stepAssault(dt: number) {
+    const st = this.assault!, a = st.a;
+    this.view.updateAssault(dt * (this.speed > 1 ? 1.4 : 1));
+    for (const side of [0, 1] as Side[]) {
+      if (st.hit[side] || a.t < a.hitAt[side]) continue;
+      st.hit[side] = true;
+      if (side === 0) {
+        buzz("heavy");
+        this.root.classList.add("hurt");
+        setTimeout(() => this.root.classList.remove("hurt"), 500);
+      } else buzz("medium");
+    }
+    const shown: [number, number] = [0, 1].map((s) => st.from[s] + (st.to[s] - st.from[s]) * a.drain(s as Side)) as [number, number];
+    if (shown[0] !== this.hpShown[0] || shown[1] !== this.hpShown[1]) {
+      this.hpShown = shown;
       this.refreshHud();
-      if (u < 1 && !this.destroyed) requestAnimationFrame(step);
-    };
-    setTimeout(step, 300);
-    if (lost) this.root.classList.add("hurt"), setTimeout(() => this.root.classList.remove("hurt"), 500);
-    setTimeout(() => {
-      if (this.destroyed) return;
-      if (this.match.phase === "over") {
-        sfx(this.match.winner === 0 ? "win" : "lose");
-        buzz(this.match.winner === 0 ? "success" : "error");
-        this.o.onEnd(this.match);
-      } else {
-        this.match.next();
-        this.startDeploy();
-      }
-    }, this.watch ? 1500 : 1900);
+    }
+    if (a.over && !st.leaving) {
+      st.leaving = true;
+      this.hpShown = [...st.to];
+      this.refreshHud();
+      this.afterRound();
+    }
+  }
+
+  private afterRound() {
+    if (this.destroyed) return;
+    if (this.match.phase === "over") {
+      sfx(this.match.winner === 0 ? "win" : "lose");
+      buzz(this.match.winner === 0 ? "success" : "error");
+      this.o.onEnd(this.match);
+    } else {
+      this.match.next();
+      this.startDeploy();
+    }
   }
 
   // ------------------------------------------------------------ frame
@@ -392,7 +421,7 @@ export class GameScreen {
           this.endT += dt;
           if (this.endT > 0.9) { this.endT = 0; this.finishBattle(); }
         }
-      }
+      } else if (this.assault && (this.phase === "result" || this.phase === "over")) this.stepAssault(dt);
       this.view.update(dt * (this.phase === "battle" ? Math.min(this.speed, 2) : 1));
     }
     this.view.render(this.scene());

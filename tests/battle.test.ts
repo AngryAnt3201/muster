@@ -183,9 +183,12 @@ describe("battle", () => {
       pieces.push(P(k, 1, 0.8 + (i % 6) * 1.5, 1.2 + Math.floor(i / 6) * 1.3, 4));
     });
     simulate(pieces, { seed: 11 }); // warm up the JIT
-    const t = performance.now();
+    // CPU time of this test process, not wall time: other test files and other jobs on a loaded
+    // machine stretch the wall clock without the sim doing any more work.
+    const t = process.cpuUsage();
     const r = simulate(pieces, { seed: 12 });
-    expect(performance.now() - t).toBeLessThan(600);
+    const used = process.cpuUsage(t);
+    expect((used.user + used.system) / 1000).toBeLessThan(600);
     expect(r.time).toBeGreaterThan(1);
   });
 });

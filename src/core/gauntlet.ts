@@ -2,7 +2,7 @@
 // every win. Rivals get tougher with the stage and with the army you bring.
 import { DEFAULT_AI, TACTICS, draftArmy, type AIProfile, type Tactic } from "./ai";
 import type { Boon, GauntletFoe } from "./content";
-import { START_HP, UNITS, UNIT_KINDS, supplyFor, toLocal, type Mods, type Obstacle, type UnitKind } from "./defs";
+import { ASCEND_ROUND, START_HP, UNITS, UNIT_KINDS, supplyFor, toLocal, type Mods, type Obstacle, type UnitKind } from "./defs";
 import type { Match, MatchConfig, StartPiece } from "./match";
 import { Rng, hashSeed } from "./rng";
 
@@ -30,6 +30,11 @@ export const BOONS: Boon[] = [
   { id: "yew", name: "Yew Bows", text: "Rangers and ballistas +20% damage", apply: (m) => kindMul(m, "kindDmg", ["ranger", "ballista"], 1.2) },
   { id: "stone", name: "Stoneskin", text: "Bulwarks and golems +25% health", apply: (m) => kindMul(m, "kindHp", ["bulwark", "golem"], 1.25) },
   { id: "static", name: "Static", text: "Stormcallers and grenadiers +20% damage", apply: (m) => kindMul(m, "kindDmg", ["storm", "grenadier"], 1.2) },
+  { id: "plate", name: "Light Plate", text: "Harriers and sappers +25% health", apply: (m) => kindMul(m, "kindHp", ["harrier", "sapper"], 1.25) },
+  { id: "warcry", name: "War Cry", text: "Ravagers, duelists, pikemen +15% damage", apply: (m) => kindMul(m, "kindDmg", ["ravager", "duelist", "pikeman"], 1.15) },
+  { id: "blackpowder", name: "Black Powder", text: "Kegs and bombards +20% damage", apply: (m) => kindMul(m, "kindDmg", ["keg", "bombard"], 1.2) },
+  { id: "hoarfrost", name: "Hoarfrost", text: "Rimecallers and tinkers +20% damage", apply: (m) => kindMul(m, "kindDmg", ["rime", "tinker"], 1.2) },
+  { id: "bones", name: "Old Bones", text: "Graves, banners, tricksters +25% health", apply: (m) => kindMul(m, "kindHp", ["grave", "banner", "trickster"], 1.25) },
 ];
 
 /** Boons that can be taken again. */
@@ -37,7 +42,8 @@ const REPEATABLE = new Set(["tithe", "mend", "scout"]);
 /** Boons that only help an army with these kinds in it. */
 const NEEDS: Partial<Record<string, UnitKind[]>> = {
   powder: ["mine"], brood: ["hive"], salve: ["medic"], pikes: ["blades", "lancer"], yew: ["ranger", "ballista"],
-  stone: ["bulwark", "golem"], static: ["storm", "grenadier"],
+  stone: ["bulwark", "golem"], static: ["storm", "grenadier"], plate: ["harrier", "sapper"], warcry: ["ravager", "duelist", "pikeman"],
+  blackpowder: ["keg", "bombard"], hoarfrost: ["rime", "tinker"], bones: ["grave", "banner", "trickster"],
 };
 
 export interface GauntletRun {
@@ -104,14 +110,19 @@ export function gauntletFoe(stage: number, playerValue: number, seed: number): G
     rerolls: stage >= 4 ? 2 : 1,
   };
   // Its army: what you bring, give or take, and a little more every stage.
-  const budget = Math.round(playerValue * Math.min(1.05, 0.62 + stage * 0.045) + 3 + stage * 1.6);
-  const pieces = Math.min(12, Math.max(2 + stage, Math.round(playerValue / 6)));
-  const army = draftArmy(1, budget, UNIT_KINDS, ai, hashSeed(seed, "army", stage), pieces);
+  // Early rivals are a step behind you (a bad first fight shouldn't end a run); from about stage 8 they out-muster you.
+  const share = stage <= 2 ? 0.45 : Math.min(1.6, 0.3 + stage * 0.07);
+  // The first rival starts from nothing, as you do.
+  const budget = stage === 1 ? 0 : Math.round(playerValue * share + 2 + stage * 1.5);
+  const pieces = Math.min(stage >= 8 ? 14 : 12, Math.max(2 + stage, Math.round(playerValue / 6)));
+  // From stage 5 the duel starts late enough (round 8+) for Ascended pieces.
+  const army = draftArmy(1, budget, UNIT_KINDS, ai, hashSeed(seed, "army", stage), pieces, duelFirstRound(stage) >= ASCEND_ROUND ? 4 : 3);
   const name = `${TITLES[rng.int(0, TITLES.length - 1)]} ${NAMES[(hashSeed(seed, "name", stage) >>> 3) % NAMES.length]}`;
   const foe: GauntletFoe = {
     name,
     ai,
-    hp: 90 + stage * 22,
+    // Health grows with your army too: a big board hits hard, so a rival has to last a few rounds of it.
+    hp: stage === 1 ? 70 : Math.round(90 + stage * 22 + (stage >= 5 ? playerValue * 0.6 : 0)),
     start: army.map((p) => ({ kind: p.kind, rank: p.rank, ...toLocal(1, p.x, p.y) })),
   };
   // Every third rival picks its ground; the rest now and then.
@@ -122,6 +133,13 @@ export function gauntletFoe(stage: number, playerValue: number, seed: number): G
 /** Round the duel's economy starts on: later rivals start further in. */
 export const duelFirstRound = (stage: number) => Math.min(8, 1 + (stage - 1) * 2);
 
+/** Late rivals are veterans: from stage 7 their units gain health and damage, keeping pace with your boons (their
+ * army is already as big and as ranked as it can get). */
+export function rivalMods(stage: number): Mods | undefined {
+  const k = Math.max(0, stage - 6) * 0.12;
+  return k > 0 ? { hpMul: +(1 + k).toFixed(3), dmgMul: +(1 + k).toFixed(3) } : undefined;
+}
+
 export function duelConfig(run: GauntletRun, foe: GauntletFoe): MatchConfig {
   const first = duelFirstRound(run.stage);
   // Room for the army you carry plus one more piece (up to a full board); it grows a piece a round as usual, so a
@@ -131,7 +149,7 @@ export function duelConfig(run: GauntletRun, foe: GauntletFoe): MatchConfig {
     seed: hashSeed(run.seed, "duel", run.stage),
     hp: [run.hp, foe.hp],
     start: [run.board, foe.start],
-    mods: [runMods(run), undefined],
+    mods: [runMods(run), rivalMods(run.stage)],
     firstRound: first,
     carryGold: run.gold,
     supply: [room(run.board.length, 1), room(foe.start.length, 0)],
