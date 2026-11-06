@@ -1,6 +1,9 @@
 """Pack post-processed v3 frames (art/build/v3post) into one atlas per body and tier, plus the manifest.
 
-    python3 art/pack_atlas.py [--sheets-only]
+    python3 art/pack_atlas.py [--sheets-only] [--merge]
+
+--merge keeps every body already in public/atlas/manifest.json and only (re)packs the ones posted in
+art/build/v3post, so a worktree that rendered just a few new kinds does not drop the rest from the manifest.
 
 Writes public/atlas/<kind>_t<tier>.png (colour with team parts in white, RGBA),
 public/atlas/<kind>_t<tier>_m.png (team mask, RGB, same layout), public/atlas/manifest.json and the contact
@@ -181,6 +184,7 @@ def sheet_anims(man, kind, tier, team="tide", name=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sheets-only", action="store_true")
+    ap.add_argument("--merge", action="store_true", help="keep the bodies already in the manifest; repack only what is in v3post")
     a = ap.parse_args()
     mp = os.path.join(OUT, "manifest.json")
     if a.sheets_only:
@@ -195,12 +199,20 @@ def main():
                     found.append((kind, int(td[1:])))
         rank = {k: i for i, k in enumerate(ORDER)}
         found.sort(key=lambda kt: (rank.get(kt[0], 99), kt[1]))
+        if a.merge and os.path.exists(mp):
+            old = json.load(open(mp))
+            fresh = {k for k, _ in found}
+            man["units"] = {k: v for k, v in old["units"].items() if k not in fresh}
+            man["sheets"] = {k: v for k, v in old["sheets"].items() if k.rsplit("_t", 1)[0] not in fresh}
         for kind, tier in found:
             name, sheet, radius = pack_one(kind, tier)
             man["sheets"][name] = sheet
             u = man["units"].setdefault(kind, {"tiers": [], "radius": radius})
             u["tiers"].append(tier)
             print("PACK_OK", name, sheet["w"], "x", sheet["h"], flush=True)
+        if a.merge:  # keep the manifest in roster order
+            man["units"] = {k: man["units"][k] for k in sorted(man["units"], key=lambda k: rank.get(k, 99))}
+            man["sheets"] = {k: man["sheets"][k] for k in sorted(man["sheets"], key=lambda s: (rank.get(s.rsplit("_t", 1)[0], 99), s))}
         with open(mp, "w") as f:
             json.dump(man, f, separators=(",", ":"))
     for team in TEAM:

@@ -200,7 +200,7 @@ const REVIVE_R = 3;
 const BOMBARD_MIN = 2.5;
 const THRALL_CAP = 4;
 const HOOK_R = 4.0; // Hookwarden chain reach
-const HOOK_CD = 5.5;
+const HOOK_CD = 4.5;
 const HOOK_SPEED = 12; // chain flight, units per second
 const REEL_SPEED = 8;
 const WARD_HP = 55; // Lamplighter ward at rank 1 (scaled like damage by rank)
@@ -1672,7 +1672,7 @@ export class Battle {
         const v = this.byId(id);
         if (!v || !this.targetable(b, v) || v.structure || v.flying || this.dist(b, v) > HOOK_R * 1.25) continue;
         caught.push(id);
-        this.damage(v, b.dmg, b, b.side, false, b);
+        this.damage(v, b.dmg * 2, b, b.side, false, b); // the hook bites
         if (v.alive) this.emit({ t: "reel", id: b.id, target: v.id, x: v.x, y: v.y });
       }
       b.hits = caught;
@@ -1696,7 +1696,8 @@ export class Battle {
         v.stun = Math.max(v.stun, 0.05);
       }
       if (pulling && b.t < 1.4) return [0, 0];
-      if (b.rank >= 4) for (const id of b.hits) { const v = this.byId(id); if (v && v.alive) v.stun = Math.max(v.stun, 1.0); }
+      // Landed at the Hookwarden's feet, dazed for a moment (Iron Tether: a full second).
+      for (const id of b.hits) { const v = this.byId(id); if (v && v.alive) v.stun = Math.max(v.stun, b.rank >= 4 ? 1.0 : 0.6); }
       b.hits = [];
       b.state = "";
     }
@@ -1749,9 +1750,10 @@ export class Battle {
         if (d > b.range) continue;
         const px = clamp(e.x + e.vx * lead, 0.3, W - 0.3), py = clamp(e.y + e.vy * lead, 0.3, H - 0.3);
         let s = 0;
+        // Score the spot against where everyone else will be by then too.
         for (const o of this.bodies) {
           if (!this.targetable(b, o) || o.flying || o.structure) continue;
-          if (hyp(o.x - px, o.y - py) < r + o.radius) s += isSpawn(o.kind) ? 0.5 : 1;
+          if (hyp(o.x + o.vx * lead - px, o.y + o.vy * lead - py) < r + o.radius) s += isSpawn(o.kind) ? 0.5 : 1;
         }
         if (s > score) { score = s; best = { x: px, y: py }; }
       }
