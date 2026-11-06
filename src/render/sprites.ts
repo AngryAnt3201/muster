@@ -1,6 +1,6 @@
 // Blender-rendered character atlases (public/atlas, see docs/ART-V3-ATLAS.md). One atlas per body and tier holds
 // 5 rendered facings (the other 3 are mirrors) x idle/walk/attack/death frames, with team parts in white and a
-// team mask beside it. Each atlas is tinted once per team into a canvas when first needed. Until a sheet is
+// team mask beside it. Each atlas is tinted for a team into a canvas the first time that team needs it. Until a sheet is
 // ready the renderer falls back to the drawn tokens in units.ts.
 import type { Side } from "../core/defs";
 
@@ -25,8 +25,8 @@ export interface Manifest {
 let manifest: Manifest | null = null;
 let loading: Promise<void> | null = null;
 const portraits = new Map<string, HTMLImageElement | null>();
-/** sheet key -> per-team tinted canvases, "loading", or null when the files failed. */
-const tinted = new Map<string, [HTMLCanvasElement, HTMLCanvasElement] | "loading" | null>();
+/** "<sheet key>|<side>" -> that team's tinted canvas, "loading", or null when the files failed. */
+const tinted = new Map<string, HTMLCanvasElement | "loading" | null>();
 
 const base = () => (import.meta as any).env?.BASE_URL ?? "./";
 
@@ -40,6 +40,8 @@ export function loadSprites(): Promise<void> {
 }
 
 export const spritesReady = () => !!manifest;
+/** Whether a body kind has atlas art at all (the drawn token stands in otherwise). */
+export const hasAtlas = (kind: string) => !!manifest?.units[kind]?.tiers.length;
 export const atlasManifest = () => manifest;
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -77,24 +79,22 @@ function pixels(img: HTMLImageElement): ImageData {
   return g.getImageData(0, 0, c.width, c.height);
 }
 
-function buildSheet(key: string) {
-  if (!manifest || tinted.has(key)) return;
-  tinted.set(key, "loading");
+function buildSheet(key: string, side: Side) {
+  const id = `${key}|${side}`;
+  if (!manifest || tinted.has(id)) return;
+  tinted.set(id, "loading");
   const m = manifest;
   Promise.all([loadImage(`${base()}atlas/${key}.png`), loadImage(`${base()}atlas/${key}_m.png`)])
     .then(([ci, mi]) => {
       const col = pixels(ci), mask = pixels(mi);
-      const outs = [0, 1].map(() => new ImageData(col.width, col.height));
-      tintPixels(col.data, mask.data, [m.teams.tide, m.teams.ember], outs.map((o) => o.data));
-      const canv = outs.map((o) => {
-        const c = document.createElement("canvas");
-        c.width = o.width; c.height = o.height;
-        c.getContext("2d")!.putImageData(o, 0, 0);
-        return c;
-      });
-      tinted.set(key, [canv[0], canv[1]]);
+      const out = new ImageData(col.width, col.height);
+      tintPixels(col.data, mask.data, [side === 0 ? m.teams.tide : m.teams.ember], [out.data]);
+      const c = document.createElement("canvas");
+      c.width = out.width; c.height = out.height;
+      c.getContext("2d")!.putImageData(out, 0, 0);
+      tinted.set(id, c);
     })
-    .catch(() => tinted.set(key, null));
+    .catch(() => tinted.set(id, null));
 }
 
 /** A frame ready to draw: the source rect in `img`, the ground anchor inside it, and whether to mirror it. */
@@ -107,26 +107,25 @@ function tierFor(kind: string, tier: number): number | null {
   return u.tiers.includes(tier) ? tier : u.tiers.filter((x) => x <= tier).pop() ?? u.tiers[0];
 }
 
-/** 8-way facing index for a game angle (radians, y down, 0 = east). */
-export const facing8 = (face: number) => ((Math.round(face / (Math.PI / 4)) % 8) + 8) % 8;
-
 /**
  * The frame of `anim` for a body, or null if its sheet isn't loaded (yet). `phase` is 0..1: the loop position for
- * idle and walk, the progress for attack and death (clamped to the last frame).
+ * idle and walk, the progress for attack and death (clamped to the last frame). `dir` is the 8-way screen facing
+ * from Camera.facing8 (0 = right, 2 = towards the camera, 6 = away); the manifest maps it to a rendered facing,
+ * mirrored for 3, 4 and 5.
  */
-export function frame(kind: string, tier: number, side: Side, anim: Anim, phase: number, face: number): Frame | null {
+export function frame(kind: string, tier: number, side: Side, anim: Anim, phase: number, dir: number): Frame | null {
   if (!manifest) return null;
   const t = tierFor(kind, tier);
   if (t == null) return null;
   let key = `${kind}_t${t}`;
   if (!manifest.sheets[key]) return null;
-  let tc = tinted.get(key);
-  if (tc === undefined) buildSheet(key);
+  let tc = tinted.get(`${key}|${side}`);
+  if (tc === undefined) buildSheet(key, side);
   if (!tc || tc === "loading") {
     // While a newly reached tier tints, keep showing the highest lower tier that is ready.
     tc = undefined;
     for (const lt of manifest.units[kind].tiers.filter((x) => x < t).reverse()) {
-      const c = tinted.get(`${kind}_t${lt}`);
+      const c = tinted.get(`${kind}_t${lt}|${side}`);
       if (c && c !== "loading") { key = `${kind}_t${lt}`; tc = c; break; }
     }
     if (!tc) return null;
@@ -134,14 +133,14 @@ export function frame(kind: string, tier: number, side: Side, anim: Anim, phase:
   const sheet = manifest.sheets[key];
   let a = sheet.anims[anim] ?? sheet.anims.idle;
   if (typeof a === "string") a = sheet.anims[a] as Rect[][];
-  const [di, flip] = manifest.dir8[facing8(face)];
+  const [di, flip] = manifest.dir8[((dir % 8) + 8) % 8];
   const list = a[di];
   if (!list?.length) return null;
   const n = list.length;
   const loop = anim === "idle" || anim === "walk";
   const p = loop ? ((phase % 1) + 1) % 1 : Math.max(0, Math.min(0.999, phase));
   const [x, y, w, h, ax, ay] = list[Math.min(n - 1, Math.floor(p * n))];
-  return { img: tc[side === 0 ? 0 : 1], x, y, w, h, ax, ay, flip, ppu: manifest.ppu };
+  return { img: tc, x, y, w, h, ax, ay, flip, ppu: manifest.ppu };
 }
 
 /** Card and menu portrait (3/4 view), or null. */
@@ -172,13 +171,13 @@ export function whenPortrait(kind: string, tier = 1): Promise<HTMLImageElement |
   }));
 }
 
-/** Warm the atlases for a set of kinds at the given tiers (all rendered tiers when omitted). */
-export function preload(kinds: string[], tiers?: number[]) {
+/** Warm one team's atlases for a set of kinds at the given tiers (all rendered tiers when omitted). */
+export function preload(kinds: string[], side: Side, tiers?: number[]) {
   if (!manifest) return;
   for (const k of kinds) {
     const u = manifest.units[k];
     if (!u) continue;
-    for (const t of tiers ? [...new Set(tiers.map((x) => tierFor(k, x)!))] : u.tiers) buildSheet(`${k}_t${t}`);
+    for (const t of tiers ? [...new Set(tiers.map((x) => tierFor(k, x)!))] : u.tiers) buildSheet(`${k}_t${t}`, side);
   }
 }
 
