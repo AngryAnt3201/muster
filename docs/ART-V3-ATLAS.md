@@ -15,16 +15,28 @@ on PATH when running `npm run art`).
 
 ## Style parameters
 
-All look and camera numbers live in `art/muster_art/style.py`; swapping to the style direction Jack signs off is an
-edit there plus a re-render. Nothing else keeps its own copy.
+All look and camera numbers live in `art/muster_art/style.py`; nothing else keeps its own copy. Its constants hold the
+built-in v2 look, and at import `select()` replaces the look ones with a style direction (`art/style/<id>.json`,
+docs/ART-V3.md):
 
-The shipped atlases use the built-in look below. Its team colours match the provisional Sunlit Meadow direction. Once
-Jack picks a direction, copy that direction file's numbers (`art/style/<id>.json` on the style-directions branch) into
-`style.py`: `outline.color` -> `INK`, `outline.hull` -> `OUTLINE`, `outline.silhouette_px` -> `INK_PX`,
-`shading.bands` -> `RAMP`, `rim.*` -> `RIM_*`, `team` -> `TEAMS`. Then re-run `npm run art`. Leave the camera and
-frame plan as they are, because `CAMERA_EL`, `DIRS` and `ANIMS` are what `src/render/camera.ts` and
-`tests/atlas.test.ts` check against. That branch also adds its own `art/muster_art/style.py` with a different API
-(`S.load()`), so whichever lands second has to merge the two into one module.
+    MUSTER_STYLE=<id> or --style <id>    meadow, dusk or toy
+    MUSTER_STYLE=v2 or --style v2        the built-in v2 look
+    (neither)                            the active direction in art/style/active.json
+
+So once Jack picks: `npm run style:pick -- <id>`, then `npm run art` (with `/usr/local/bin/python3` first on PATH).
+What a direction sets: `outline.color` -> `INK`, `outline.hull` -> `OUTLINE` (0 = no hull lines, Painted Toy),
+`outline.silhouette_px` -> `INK_PX` (x `SS`, post inks at raw size), `shading.bands` -> `RAMP` over N.L in -0.2..1
+(`RAMP_DOT`), `shading.shadow_tint*` -> `SHADOW_TINT*` (tints the dark bands in the kit's Toon group), `shading.spec`
+-> `SPEC`, `shading.bloom` -> `GLOW_GAIN` (relative to meadow's 0.7), `light.key` / `rim.dir` (Blender world) ->
+`KEY` / `RIM_DIR` (camera space), `rim.*` -> `RIM_*`, `team` -> `TEAMS`, `palette` -> `PALETTE` (`parts.Pal`
+materials). The camera and frame plan never change with a direction, because `CAMERA_EL`, `DIRS` and `ANIMS` are what
+`src/render/camera.ts` and `tests/atlas.test.ts` check against (the direction contract's 55 / 35 degree elevations
+are not used for characters).
+
+`render_all.py` writes the style into every raw `meta.json`. `post.py` (and `pack_atlas.py`, which imports it) posts
+in the style the raw renders record unless `--style` / `MUSTER_STYLE` says otherwise, and stops if the raw renders mix
+styles, so a partial re-render can't ink one unit in another direction's colours. The manifest records `style`.
+The shipped atlases are `"style": "v2"` until the full re-render after the pick.
 
 - Camera: orthographic, pitched `CAMERA_EL` = 53.3 degrees below the horizon, which is 90 degrees minus
   `TILT` (0.64 rad) in `src/render/camera.ts`, so a sprite's ground ellipse matches the board's.
@@ -45,7 +57,8 @@ frame plan as they are, because `CAMERA_EL`, `DIRS` and `ANIMS` are what `src/re
 ## Team colour
 
 Team parts render in neutral white plus a mask with the coverage of team main (R), dark (G) and light (B). The runtime
-tints once per sheet and team (`tintPixels` in `src/render/sprites.ts`):
+tints once per sheet and team (`tintPixels` in `src/render/sprites.ts`) with the active direction's team colours
+(`TEAM` in `src/render/palette.ts`), so units match the UI even before a re-render:
 
     rgb = colour * (1 + R*(main - 1) + G*(dark - 1) + B*(light - 1))
 
@@ -55,7 +68,7 @@ tints once per sheet and team (`tintPixels` in `src/render/sprites.ts`):
 - `public/atlas/<kind>_t<tier>_m.png`: team mask, same layout.
 - `public/atlas/manifest.json`:
 
-      { version: 3, ppu, el, dirs, dir8, anims, teams: { tide, ember },
+      { version: 3, style, ppu, el, dirs, dir8, anims, teams: { tide, ember },
         units: { <kind>: { tiers: [1..4], radius } },
         sheets: { <kind>_t<tier>: { w, h, anims: { idle: [dir][frame] = [x, y, w, h, ax, ay], walk: ... | "idle" } } } }
 

@@ -3,6 +3,7 @@
     blender -b --factory-startup -P art/render_all.py -- [--only ranger,golem] [--tiers 1,4] [--jobs 6]
                                                          [--no-post] [--portraits] [--samples 16] [--resume]
     npm run art
+    npm run art -- -- --style dusk          (or MUSTER_STYLE=dusk; default: the active direction in art/style/active.json)
 
 Battle frames (docs/ART-V3-ATLAS.md): the diorama camera from art/muster_art/style.py, 5 rendered facings
 (the other 3 are mirrors), idle/walk/attack/death frames, every frame framed tightly around its own geometry.
@@ -49,7 +50,11 @@ def args():
     ap.add_argument("--portraits", action="store_true", help="render card portraits instead of battle frames")
     ap.add_argument("--samples", type=int, default=16)
     ap.add_argument("--resume", action="store_true", help="skip kind/tier folders that already have meta.json")
-    return ap.parse_args(argv)
+    ap.add_argument("--style", default="", help="style direction id (meadow, dusk, toy) or v2; default MUSTER_STYLE or art/style/active.json")
+    a = ap.parse_args(argv)
+    if a.style:  # before any muster_art import; Blender workers and post.py inherit it
+        os.environ["MUSTER_STYLE"] = a.style
+    return a
 
 
 def kinds_list(a):
@@ -206,7 +211,7 @@ def render_unit(st, k, P, kind, tier, a):
             frames.append({"anim": anim, "i": idx, "dir": di, "w": w, "h": h,
                            "ax": int(round(-x0 * ppu)), "ay": int(round(y1 * ppu)), "file": f"{anim}{idx}_d{di}"})
     with open(os.path.join(out, "meta.json"), "w") as f:
-        json.dump({"kind": kind, "tier": tier, "radius": spec["radius"], "ppu": S.PPU, "ss": S.SS, "frames": frames}, f)
+        json.dump({"kind": kind, "tier": tier, "radius": spec["radius"], "ppu": S.PPU, "ss": S.SS, "style": S.ID, "frames": frames}, f)
     return n
 
 
@@ -292,6 +297,8 @@ def portraits(a, st, P, k, t0):
 def main():
     a = args()
     t0 = time.time()
+    from muster_art import style as S
+    print(f"STYLE {S.ID}", flush=True)
     if a.worker >= 0 or a.jobs <= 1:
         worker(a)
     else:

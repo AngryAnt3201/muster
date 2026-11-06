@@ -98,15 +98,42 @@ def _group_toon():
     cr.elements[0].position = stops[0][0]
     cr.elements[0].color = (stops[0][1] ** 2.2,) * 3 + (1,)
     cr.elements[1].position = stops[-1][0]
-    cr.elements[1].color = (1, 1, 1, 1)
+    cr.elements[1].color = (stops[-1][1] ** 2.2,) * 3 + (1,)
     for p, v in stops[1:-1]:
         e = cr.elements.new(p)
         e.color = (v ** 2.2,) * 3 + (1,)
-    g.links.new(dot.outputs["Value"], ramp.inputs[0])
+    # N.L onto the ramp: identity for the v2 look, -0.2..1 for the style directions (as the style frames shade)
+    to01 = g.nodes.new("ShaderNodeMapRange")
+    to01.inputs["From Min"].default_value = STYLE.RAMP_DOT[0]
+    to01.inputs["From Max"].default_value = STYLE.RAMP_DOT[1]
+    g.links.new(dot.outputs["Value"], to01.inputs["Value"])
+    g.links.new(to01.outputs[0], ramp.inputs[0])
     mul = g.nodes.new("ShaderNodeVectorMath")
     mul.operation = "MULTIPLY"
     g.links.new(gi.outputs["Color"], mul.inputs[0])
     g.links.new(ramp.outputs["Color"], mul.inputs[1])
+    if STYLE.SHADOW_TINT_AMOUNT > 0:
+        # shadow tint: the darker the band, the more the direction's tint colour replaces white
+        vmin = min(v for _, v in stops) ** 2.2
+        bw = g.nodes.new("ShaderNodeRGBToBW")
+        g.links.new(ramp.outputs["Color"], bw.inputs[0])
+        tf = g.nodes.new("ShaderNodeMapRange")
+        tf.inputs["From Min"].default_value = vmin
+        tf.inputs["From Max"].default_value = 1.0
+        tf.inputs["To Min"].default_value = STYLE.SHADOW_TINT_AMOUNT
+        tf.inputs["To Max"].default_value = 0.0
+        g.links.new(bw.outputs[0], tf.inputs["Value"])
+        mix = g.nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.inputs["A"].default_value = (1, 1, 1, 1)
+        h = STYLE.SHADOW_TINT.lstrip("#")
+        mix.inputs["B"].default_value = tuple((int(h[i:i + 2], 16) / 255.0) ** 2.2 for i in (0, 2, 4)) + (1,)
+        g.links.new(tf.outputs[0], mix.inputs["Factor"])
+        tint = g.nodes.new("ShaderNodeVectorMath")
+        tint.operation = "MULTIPLY"
+        g.links.new(mul.outputs[0], tint.inputs[0])
+        g.links.new(mix.outputs["Result"], tint.inputs[1])
+        mul = tint
     # small top highlight for metals
     hl = g.nodes.new("ShaderNodeMapRange")
     hl.clamp = True
@@ -197,6 +224,8 @@ def set_rim(vec, strength):
     """Rim light direction (world) and strength (0 turns rim off, as in the v2 top-down sprites)."""
     v = Vector(vec).normalized()
     t = groups()["toon"]
+    if "R" not in t.nodes:  # style.apply() rebuilt the group with the direction's own fixed rim
+        return
     for i in range(3):
         t.nodes["R"].inputs[i].default_value = v[i]
     t.nodes["rimk"].outputs[0].default_value = strength
@@ -213,8 +242,13 @@ def set_light(vec):
 _M = {}
 
 
+def matname(name):
+    """Blender reads a trailing '.NNN' as a duplicate counter and aborts (stoi out of range) on long float tails."""
+    return name.replace(".", "p")
+
+
 def _new_mat(name):
-    m = bpy.data.materials.new(name)
+    m = bpy.data.materials.new(matname(name))
     nt = m.node_tree
     for n in list(nt.nodes):
         nt.nodes.remove(n)
@@ -334,7 +368,8 @@ def flat(col, alpha=1.0):
     return _M[key]
 
 
-def outline_mat(col=INK):
+def outline_mat(col=None):
+    col = col or INK  # read at call time so a style direction can set kit.INK
     key = ("outline", col)
     if key in _M:
         return _M[key]

@@ -3,6 +3,7 @@
 // team mask beside it. Each atlas is tinted for a team into a canvas the first time that team needs it. Until a sheet is
 // ready the renderer falls back to the drawn tokens in units.ts.
 import type { Side } from "../core/defs";
+import { TEAM } from "./palette";
 
 export type Anim = "idle" | "walk" | "attack" | "death";
 type Rect = [x: number, y: number, w: number, h: number, ax: number, ay: number];
@@ -17,7 +18,10 @@ export interface Manifest {
   dirs: number[];
   dir8: [number, boolean][];
   anims: Record<Anim, number>;
+  /** The team colours the atlases were rendered beside (the runtime tints with the active direction's, TEAM). */
   teams: Record<"tide" | "ember", TeamCols>;
+  /** The style direction the atlases were rendered in ("v2" = the built-in look). */
+  style?: string;
   units: Record<string, { tiers: number[]; radius: number }>;
   sheets: Record<string, Sheet>;
 }
@@ -83,12 +87,12 @@ function buildSheet(key: string, side: Side) {
   const id = `${key}|${side}`;
   if (!manifest || tinted.has(id)) return;
   tinted.set(id, "loading");
-  const m = manifest;
   Promise.all([loadImage(`${base()}atlas/${key}.png`), loadImage(`${base()}atlas/${key}_m.png`)])
     .then(([ci, mi]) => {
       const col = pixels(ci), mask = pixels(mi);
       const out = new ImageData(col.width, col.height);
-      tintPixels(col.data, mask.data, [side === 0 ? m.teams.tide : m.teams.ember], [out.data]);
+      // the active direction's team colours, so units match the rest of the app even before a re-render
+      tintPixels(col.data, mask.data, [TEAM[side]], [out.data]);
       const c = document.createElement("canvas");
       c.width = out.width; c.height = out.height;
       c.getContext("2d")!.putImageData(out, 0, 0);

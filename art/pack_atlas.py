@@ -186,7 +186,7 @@ def main():
     if a.sheets_only:
         man = json.load(open(mp))
     else:
-        man = {"version": 3, "ppu": STYLE.PPU, "el": STYLE.CAMERA_EL, "dirs": STYLE.DIRS, "dir8": STYLE.DIR8,
+        man = {"version": 3, "style": STYLE.ID, "ppu": STYLE.PPU, "el": STYLE.CAMERA_EL, "dirs": STYLE.DIRS, "dir8": STYLE.DIR8,
                "anims": STYLE.ANIMS, "teams": {k: v for k, v in STYLE.TEAMS.items() if k != "neutral"}, "units": {}, "sheets": {}}
         found = []
         for kind in os.listdir(POST3) if os.path.isdir(POST3) else []:

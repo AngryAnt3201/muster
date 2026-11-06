@@ -9,6 +9,7 @@ import { PUZZLES } from "./core/puzzles";
 import { setSound, sfx, unlockAudio } from "./audio/sfx";
 import { initNative, setHaptics } from "./native";
 import { loadSprites } from "./render/sprites";
+import { applyStyleVars } from "./render/style";
 import { load, save } from "./save";
 import { el, stars } from "./ui/dom";
 import { GameScreen, TIER_NAMES, abilityOf, paintPortrait, statsLine } from "./ui/game";
@@ -403,6 +404,7 @@ function showcase(n: number) {
 
 // ---------------------------------------------------------------- boot
 async function boot() {
+  applyStyleVars(document.documentElement);
   const s = load();
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);

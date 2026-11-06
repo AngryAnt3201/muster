@@ -28,6 +28,33 @@ from muster_art import style as STYLE  # noqa: E402  (pure python, no bpy)
 
 RAW = os.path.join(HERE, "build", "raw")
 RAW3 = os.path.join(HERE, "build", "v3")
+
+
+def raw_style():
+    """The look to post in: --style, else MUSTER_STYLE, else the one the raw renders record (render_all.py writes it
+    into each meta.json; renders from before the field are v2). Inking a render in another direction's ink and team
+    colours would mix looks, so mixed raw renders are an error."""
+    argv = sys.argv[1:]
+    if "--style" in argv and argv.index("--style") + 1 < len(argv):
+        return argv[argv.index("--style") + 1]
+    if os.environ.get("MUSTER_STYLE"):
+        return os.environ["MUSTER_STYLE"]
+    seen = set()
+    if os.path.isdir(RAW3):
+        for kind in os.listdir(RAW3):
+            kd = os.path.join(RAW3, kind)
+            for t in os.listdir(kd) if os.path.isdir(kd) else []:
+                mp = os.path.join(kd, t, "meta.json")
+                if os.path.exists(mp):
+                    with open(mp) as f:
+                        seen.add(json.load(f).get("style", "v2"))
+    if len(seen) > 1:
+        sys.exit(f"raw renders in art/build/v3 mix styles {sorted(seen)}; re-render with one --style")
+    return seen.pop() if seen else None
+
+
+STYLE.select(raw_style())
+os.environ["MUSTER_STYLE"] = STYLE.ID  # worker processes and pack_atlas.py post in the same look
 POST3 = os.path.join(HERE, "build", "v3post")
 POR = os.path.join(ROOT, "public", "portraits")
 CONTACT = os.path.join(HERE, "contact")
@@ -114,8 +141,9 @@ def frame(raw_base, ascended, ghost=False):
         g = load_premul(gp)
         ga = g[..., 3]
         r = STYLE.GLOW_PX
-        wide = np.clip(blur(ga, r * 1.8) * 1.6, 0, 0.55)
-        near = np.clip(blur(ga, r * 0.7) * 1.8, 0, 0.9)
+        gg = STYLE.GLOW_GAIN  # the direction's bloom strength
+        wide = np.clip(blur(ga, r * 1.8) * 1.6 * gg, 0, min(0.55 * gg, 0.8))
+        near = np.clip(blur(ga, r * 0.7) * 1.8 * gg, 0, min(0.9 * gg, 1.0))
         ha = np.clip(wide + near * (1 - wide), 0, 1)
         # halo in white with its team weights in the mask: wide -> main, near -> light
         w_light = near
@@ -126,7 +154,7 @@ def frame(raw_base, ascended, ghost=False):
         mask[..., 0:1] += w_main[..., None] * under
         mask[..., 2:3] += w_light[..., None] * under
         # bloom lift on the glowing parts (white, so it brightens whatever colour it lands on)
-        bl = np.mean(np.stack([blur(g[..., i], r * 0.6) for i in range(3)], -1), -1, keepdims=True) * 0.45 * out[..., 3:4]
+        bl = np.mean(np.stack([blur(g[..., i], r * 0.6) for i in range(3)], -1), -1, keepdims=True) * 0.45 * gg * out[..., 3:4]
         out[..., :3] += np.clip(np.minimum(bl, out[..., 3:4] - out[..., :3].max(-1, keepdims=True)), 0, None)
     if ghost:
         # an illusion: faded, washed half way to the team light colour
@@ -279,6 +307,7 @@ def main():
     ap.add_argument("--portraits", action="store_true")
     ap.add_argument("--no-pack", action="store_true")
     ap.add_argument("--resume", action="store_true", help="skip bodies already posted from their current render")
+    ap.add_argument("--style", default="", help="style direction id or v2 (read before argparse, see raw_style)")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 4) - 2))
     a = ap.parse_args()
     if a.portraits:

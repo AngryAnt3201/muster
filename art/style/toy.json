@@ -1,0 +1,47 @@
+{
+  "id": "toy",
+  "name": "Painted Toy",
+  "pitch": "A painted wooden play-set on a sunny table: pastel candy colours, no hull lines (just a thin plum silhouette), hard two-tone shading and chunky bevelled props.",
+  "outline": { "hull": 0.0, "props": 0.0, "color": "#4a2f4a", "silhouette_px": 2 },
+  "shading": {
+    "bands": [[0.0, 0.74], [0.42, 0.74], [0.45, 1.0], [1.0, 1.0]],
+    "shadow_tint": "#c46f93",
+    "shadow_tint_amount": 0.45,
+    "spec": 0.6,
+    "bloom": 0.6
+  },
+  "rim": { "color": "#ffffff", "strength": 0.2, "width": 0.22, "dir": [0, 0.5, 0.85] },
+  "light": { "key": [0, -0.6, 0.85] },
+  "team": {
+    "tide": { "main": "#4fb8ff", "dark": "#2a6fb8", "light": "#c4e6ff" },
+    "ember": { "main": "#ff5f6d", "dark": "#b02e45", "light": "#ffc2c8" }
+  },
+  "palette": {
+    "skin": "#ffd2b0", "hair": "#7a4a3a", "cloth": "#fff3df", "cloth_dk": "#d9c4a3", "leather": "#d08a5a", "leather_dk": "#9c5e3c",
+    "wood": "#e0a86a", "wood_dk": "#b07a48", "steel": "#eef2f9", "iron": "#aeb8ca", "iron_dk": "#7c869a", "gold": "#ffd75e",
+    "gold_dk": "#e0a63a", "stone": "#dcd2c8", "stone_dk": "#b3a79b", "dark": "#6a5a78", "darker": "#4a3d56", "bone": "#fff6e0",
+    "pearl": "#ffffff", "moss": "#9ad48a"
+  },
+  "ground": {
+    "pattern": "tiles",
+    "grass": "#9ddb7c", "grass_dk": "#88cb6c", "grass_lt": "#b5e690",
+    "path": "#ffe2a8", "path_dk": "#f0c987",
+    "strip": "#f6dcb6", "strip_dk": "#e6c194",
+    "edge": "#e9b27c",
+    "rock": "#cdc3dd", "rock_dk": "#a99fc0", "moss": "#9ad48a",
+    "foliage": "#6fd08a", "foliage_dk": "#4fb36b", "trunk": "#c98a5a",
+    "border": "fence", "obstacle": "blocks"
+  },
+  "keep": { "stone": "#f4e8d8", "stone_dk": "#d6c5ae", "roof": "team.main", "trim": "#ffd75e", "wood": "#d89a64", "window": "#4a2f4a", "window_glow": false },
+  "shadow": { "color": "#5a4a6a", "alpha": 0.3 },
+  "grade": { "saturation": 1.0, "contrast": 1.0, "vignette": 0.08, "warmth": 0.02 },
+  "vfx": {
+    "blend": "normal", "glow": 0.85,
+    "slash": "#ffffff", "spark": "#ffe37a", "fire": "#ff9f5a", "fire_hot": "#fff3c4", "smoke": "#d9d0e6",
+    "frost": "#c9f0ff", "zap": "#d6f1ff", "heal": "#8affb8", "arcane": "#c8a6ff", "gold": "#ffd75e", "dust": "#f3dcb8"
+  },
+  "ui": {
+    "font": "Lilita One", "panel": "#fff7ea", "panel_dk": "#f0dcc0", "frame": "#7a4a6a", "accent": "#ff8fa3",
+    "text": "#4a3048", "text_lt": "#ffffff", "button": "#57c78a", "button_dk": "#2f8c5c", "danger": "#ff5f6d", "page": "#ffe9c9"
+  }
+}

@@ -65,6 +65,10 @@ class Pal:
         self.eye = f("#0b0f18")
         self.white = f("#ffffff")
         self.black = f("#0b0f18")
+        if K.STYLE.PALETTE:  # the style direction's material colours (art/style/<id>.json palette)
+            spec = {"steel": 0.3, "iron": 0.15, "gold": 0.35, "pearl": 0.25}
+            for name, col in K.STYLE.PALETTE.items():
+                setattr(self, name, t(col, spec=spec.get(name, 0.0) * K.STYLE.SPEC))
 
 
 # Animation state for the v3 frame renderer. gait is the walk-cycle phase (0..1) while rendering walk frames,

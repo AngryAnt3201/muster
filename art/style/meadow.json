@@ -1,0 +1,47 @@
+{
+  "id": "meadow",
+  "name": "Sunlit Meadow",
+  "pitch": "Bright midday tabletop: warm greens, sandy paths, thick warm-brown ink and soft three-band cel shading with violet shadows. Heroic and readable at a glance.",
+  "outline": { "hull": 0.013, "props": 0.016, "color": "#2b1d14", "silhouette_px": 3 },
+  "shading": {
+    "bands": [[0.0, 0.6], [0.3, 0.6], [0.37, 0.84], [0.66, 0.84], [0.73, 1.0], [1.0, 1.0]],
+    "shadow_tint": "#6c5fb8",
+    "shadow_tint_amount": 0.38,
+    "spec": 1.0,
+    "bloom": 0.7
+  },
+  "rim": { "color": "#fff1cf", "strength": 0.32, "width": 0.3, "dir": [0, 0.6, 0.8] },
+  "light": { "key": [0, -0.4, 1.0] },
+  "team": {
+    "tide": { "main": "#3fd0c9", "dark": "#167c7a", "light": "#a6fff6" },
+    "ember": { "main": "#ff6a4d", "dark": "#a8331f", "light": "#ffc1ad" }
+  },
+  "palette": {
+    "skin": "#f3c49b", "hair": "#5a3a26", "cloth": "#ecdcb4", "cloth_dk": "#a38f69", "leather": "#a2683b", "leather_dk": "#633f24",
+    "wood": "#b97c45", "wood_dk": "#734829", "steel": "#e3ebf2", "iron": "#8a94a2", "iron_dk": "#4f5866", "gold": "#ffcf4d",
+    "gold_dk": "#c98d2a", "stone": "#aaa395", "stone_dk": "#726c63", "dark": "#3a3f4f", "darker": "#22262f", "bone": "#f3ead0",
+    "pearl": "#f8f5ee", "moss": "#86a556"
+  },
+  "ground": {
+    "pattern": "patches",
+    "grass": "#80c25a", "grass_dk": "#64a947", "grass_lt": "#a9da72",
+    "path": "#e8cb90", "path_dk": "#c9a46a",
+    "strip": "#d4bc88", "strip_dk": "#b59a66",
+    "edge": "#8a6a43",
+    "rock": "#b0aaa0", "rock_dk": "#7a746b", "moss": "#7fb04a",
+    "foliage": "#5db24b", "foliage_dk": "#3e8b3b", "trunk": "#8a5a35",
+    "border": "hedge", "obstacle": "boulders"
+  },
+  "keep": { "stone": "#e2d6c1", "stone_dk": "#a69a88", "roof": "team.main", "trim": "#ffcf4d", "wood": "#9a643a", "window": "#2b1d14", "window_glow": false },
+  "shadow": { "color": "#24361c", "alpha": 0.38 },
+  "grade": { "saturation": 1.08, "contrast": 1.04, "vignette": 0.14, "warmth": 0.03 },
+  "vfx": {
+    "blend": "additive", "glow": 1.0,
+    "slash": "#ffffff", "spark": "#ffd166", "fire": "#ffb347", "fire_hot": "#fff1c2", "smoke": "#6f6a72",
+    "frost": "#bfe9ff", "zap": "#cfe8ff", "heal": "#7dffa6", "arcane": "#b48cff", "gold": "#ffd166", "dust": "#d8c49a"
+  },
+  "ui": {
+    "font": "Lilita One", "panel": "#f4e6c4", "panel_dk": "#c9a86a", "frame": "#6b4423", "accent": "#ffcf4d",
+    "text": "#2b1d14", "text_lt": "#fff8e6", "button": "#5bc24a", "button_dk": "#2f7d2a", "danger": "#e8553d", "page": "#7fbf5a"
+  }
+}
