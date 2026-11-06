@@ -2,7 +2,7 @@ import "./styles.css";
 import { DEFAULT_AI, TACTICS, type AIProfile, type Tactic } from "./core/ai";
 import { ACTS, LEVELS } from "./core/campaign";
 import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type LevelDef, type PuzzleDef } from "./core/content";
-import { UNITS, START_HP } from "./core/defs";
+import { UNITS, UNIT_KINDS, START_HP, type UnitKind } from "./core/defs";
 import { boonChoices, duelConfig, endDuel, gauntletFoe, boardValue, newRun, takeBoon, type GauntletRun } from "./core/gauntlet";
 import type { Match } from "./core/match";
 import { PUZZLES } from "./core/puzzles";
@@ -11,7 +11,7 @@ import { initNative, setHaptics } from "./native";
 import { loadSprites } from "./render/sprites";
 import { load, save } from "./save";
 import { el, stars } from "./ui/dom";
-import { GameScreen, paintPortrait } from "./ui/game";
+import { GameScreen, TIER_NAMES, abilityOf, paintPortrait, statsLine } from "./ui/game";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -70,7 +70,10 @@ function title() {
       btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big", puzzles),
       btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big", skirmish),
     ]),
-    el("div", { class: "title-foot" }, [btn(s.settings.sound ? "🔊" : "🔇", "icon-btn", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); })]),
+    el("div", { class: "title-foot" }, [
+      btn("Barracks", "ghost small", barracks),
+      btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
+    ]),
   );
 }
 
@@ -346,6 +349,37 @@ function playSkirmish(lab: Lab) {
 }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
+// ---------------------------------------------------------------- barracks
+function barracks() {
+  clear();
+  const list = el("div", { class: "barracks" }, UNIT_KINDS.map((k: UnitKind) => {
+    const d = UNITS[k];
+    const face = el("canvas", { class: "b-portrait" }) as HTMLCanvasElement;
+    let tier = 1;
+    const tiers = el("div", { class: "b-tiers" }, TIER_NAMES.map((n, i) => {
+      const b = el("button", { class: `chip ${i === 0 ? "on" : ""}` }, [n]);
+      b.addEventListener("click", () => {
+        tier = i + 1; sfx("tap");
+        tiers.querySelectorAll(".chip").forEach((c, j) => c.classList.toggle("on", j === i));
+        paintPortrait(face, k, tier);
+      });
+      return b;
+    }));
+    requestAnimationFrame(() => paintPortrait(face, k, 1));
+    const ab = abilityOf(k);
+    return el("div", { class: "b-card" }, [
+      el("div", { class: "b-top" }, [face, el("div", { class: "b-id" }, [
+        el("div", { class: "b-name" }, [el("b", {}, [d.name]), el("span", { class: "b-cost" }, [String(d.cost)])]),
+        el("div", { class: "b-short" }, [d.short]),
+        el("div", { class: "b-stats" }, [statsLine(k)]),
+      ])]),
+      tiers,
+      ...(ab ? [el("div", { class: "pop-ability" }, [el("b", {}, [`Ascended · ${ab.name}`]), " ", ab.text])] : []),
+    ]);
+  }));
+  screen("barracks-screen", header("Barracks", title, el("span", { class: "star-total" }, [`${UNIT_KINDS.length} units`])), list);
+}
+
 // ---------------------------------------------------------------- boot
 async function boot() {
   const s = load();
@@ -360,6 +394,7 @@ async function boot() {
   if (q.has("campaign")) return campaign();
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
+  if (q.has("barracks")) return barracks();
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });
   title();

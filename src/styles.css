@@ -180,7 +180,7 @@ button { font-family: inherit; color: inherit; }
 .logo-word { font-size: clamp(54px, 18vw, 96px); font-weight: 900; letter-spacing: 0.06em; line-height: 1; background: linear-gradient(#fff 20%, #9dfff7 55%, #3fd0c9); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 4px 0 #0b3b3a) drop-shadow(0 12px 24px rgba(0,0,0,0.6)); }
 .logo-sub { margin-top: 6px; font-size: 13px; font-weight: 800; letter-spacing: 0.32em; text-transform: uppercase; color: #ffc1ad; }
 .menu { display: flex; flex-direction: column; gap: 10px; width: min(420px, 100%); margin: 0 auto; }
-.title-foot { display: flex; justify-content: flex-end; width: min(420px, 100%); margin: 8px auto 0; }
+.title-foot { display: flex; justify-content: space-between; gap: 10px; width: min(420px, 100%); margin: 8px auto 0; }
 
 .acts { display: flex; flex-direction: column; gap: 22px; }
 .act h2 { margin: 0 0 10px; font-size: 20px; font-weight: 900; display: flex; flex-direction: column; }
@@ -231,3 +231,15 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24p
 .hint::after { content: ""; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: rgba(255,209,102,0.95); }
 .hint.drag::after { top: -7px; bottom: auto; border: 7px solid transparent; border-top: 0; border-bottom-color: rgba(255,209,102,0.95); }
 @keyframes bob { 0%, 100% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px); } }
+
+.barracks { display: flex; flex-direction: column; gap: 10px; }
+.b-card { padding: 12px; border-radius: 18px; background: rgba(255,255,255,0.03); box-shadow: inset 0 0 0 1.5px var(--line); display: flex; flex-direction: column; gap: 10px; }
+.b-top { display: flex; gap: 12px; align-items: center; }
+.b-portrait { width: 84px; height: 84px; flex: none; border-radius: 16px; background: radial-gradient(circle at 50% 40%, #24324a, #121a28); }
+.b-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.b-name { display: flex; justify-content: space-between; align-items: center; font-size: 17px; }
+.b-cost { width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff2b8, #e9a623); color: #4a3000; font-weight: 900; font-size: 13px; display: grid; place-items: center; }
+.b-short { font-size: 13px; color: #c8d2de; }
+.b-stats { font-size: 12px; color: var(--muted); }
+.b-tiers { display: flex; gap: 6px; flex-wrap: wrap; }
+.b-card .pop-ability { margin: 0; }
