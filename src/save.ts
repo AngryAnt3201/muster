@@ -1,4 +1,6 @@
 // Progress on this device.
+import type { Entitlement } from "./store/entitlement";
+
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
   puzzles: Record<number, number>;
@@ -6,6 +8,8 @@ export interface Save {
   settings: { sound: boolean; haptics: boolean; speed: number };
   seen: string[]; // unit kinds seen in a shop (NEW badge)
   lab?: unknown;
+  /** The Full Army unlock as last confirmed (cached so the game opens offline). */
+  store?: Entitlement;
 }
 
 const KEY = "muster.save.v1";
