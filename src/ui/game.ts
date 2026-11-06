@@ -1,11 +1,12 @@
 // One match on screen: deploy (drag from the shop, move, upgrade, sell), then the battle plays out, then the damage.
 import { applyPlan, planTurnAsync, type AIProfile } from "../core/ai";
 import type { Battle } from "../core/battle";
-import { DT, UNITS, inZone, upgradeCost, type Piece, type Side, type UnitKind } from "../core/defs";
+import { BODY_EXTRA, DT, UNITS, clampToZone, inZone, upgradeCost, type Piece, type Side, type SpawnKind, type UnitKind } from "../core/defs";
 import { Match, type MatchConfig, type RoundReport } from "../core/match";
 import { sfx, unlockAudio } from "../audio/sfx";
 import { buzz } from "../native";
 import { BoardView, type Scene } from "../render/board";
+import type { Assault } from "../render/assault";
 import { drawIcon } from "../render/units";
 import { loadSprites, preload, whenPortrait } from "../render/sprites";
 import * as Defs from "../core/defs";
@@ -70,6 +71,8 @@ export class GameScreen {
   private drag: { type: "card" | "piece"; slot?: number; id?: number; sx: number; sy: number; moved: boolean; pid: number } | null = null;
   private tipTimer = 0;
   private hpShown: [number, number];
+  /** The round-end march on the losing keep; the bars drain when its first blow lands. */
+  private assault?: { a: Assault; from: [number, number]; to: [number, number]; hit: [boolean, boolean]; leaving: boolean };
   private destroyed = false;
   private paused = false;
   private speed = load().settings.speed || 1;
@@ -91,7 +94,15 @@ export class GameScreen {
     this.buildHud();
     host.append(this.root);
     this.view = new BoardView(this.canvas);
-    void loadSprites().then(() => preload([...new Set([...this.match.sides[0].roster, ...this.match.sides[1].roster, "mite", "golemling", "thrall", "turret", "decoy", "queen"])]));
+    // Each side's recruits and the bodies they spawn, in that side's colours, up front; higher tiers tint on
+    // demand (the lower tier shows meanwhile).
+    void loadSprites().then(() => {
+      for (const side of [0, 1] as const) {
+        const roster: string[] = this.match.sides[side].roster;
+        const spawns = (Object.keys(BODY_EXTRA) as SpawnKind[]).filter((k) => roster.includes(BODY_EXTRA[k].from));
+        preload([...roster, ...spawns], side, [1]);
+      }
+    });
     this.view.setObstacles(opts.cfg.obstacles);
     this.view.onSound = (n, g) => sfx(n, g);
     this.view.onShake = (a) => { if (a >= 2) buzz("heavy"); };
@@ -181,6 +192,8 @@ export class GameScreen {
     this.h.round.innerHTML = this.o.mode === "puzzle" ? `<small>BREAKPOINT</small>` : `<small>ROUND</small><b>${m.round}</b>`;
     this.setHp(this.h.youHp, this.h.youHpText, this.hpShown[0], you.maxHp);
     this.setHp(this.h.foeHp, this.h.foeHpText, this.hpShown[1], foe.maxHp);
+    // The keeps break up in step with the bars.
+    this.view.keepHp = [Math.max(0, this.hpShown[0] / you.maxHp), Math.max(0, this.hpShown[1] / foe.maxHp)];
     this.h.gold.innerHTML = `<b>${you.gold}</b>`;
     this.h.supply.innerHTML = `<b>${m.supplyUsed(0)}</b>/${m.supplyCap(0)}`;
     this.h.foeGold.textContent = this.o.mode === "puzzle" ? "" : `${foe.gold}g`;
@@ -257,6 +270,8 @@ export class GameScreen {
     this.selected = null;
     this.pickSlot = null;
     this.battle = undefined;
+    this.assault = undefined;
+    this.view.assault = undefined;
     this.closePop();
     const m = this.match;
     const inc = m.sides[0].lastIncome;
@@ -342,35 +357,57 @@ export class GameScreen {
 
   private showRound(rep: RoundReport) {
     const won = rep.winner === 0, lost = rep.winner === 1;
-    const dmgFoe = rep.damage[1], dmgYou = rep.damage[0];
     const head = won ? "Round won" : lost ? "Round lost" : "Draw";
-    const detail = [dmgFoe ? `<span class="dmg foe">-${dmgFoe}</span>` : "", dmgYou ? `<span class="dmg you">-${dmgYou}</span>` : ""].join(" ");
-    this.showBanner(`<b>${head}</b><small>${detail}</small>`, won ? "won" : lost ? "lost" : "draw", 1500);
+    this.showBanner(`<b>${head}</b>`, won ? "won" : lost ? "lost" : "draw", 1300);
     sfx(won ? "round" : lost ? "hurt" : "tap", 1);
-    if (lost) buzz("heavy");
-    // Health bars count down.
-    const from: [number, number] = [...this.hpShown];
     const to: [number, number] = [this.match.sides[0].hp, this.match.sides[1].hp];
-    const t0 = performance.now();
-    const step = () => {
-      const u = Math.min(1, (performance.now() - t0) / 700);
-      this.hpShown = [from[0] + (to[0] - from[0]) * u, from[1] + (to[1] - from[1]) * u];
+    if (this.battle && rep.damage.some((d) => d > 0)) {
+      // The survivors march on the losing keep; the bars drain only once the first blow lands (see frame()).
+      const a = this.view.startAssault(this.battle, rep.damage, this.watch ? 0.6 : 0.9);
+      this.assault = { a, from: [...this.hpShown], to, hit: [false, false], leaving: false };
+      return;
+    }
+    this.hpShown = to;
+    this.refreshHud();
+    setTimeout(() => this.afterRound(), this.watch ? 1200 : 1500);
+  }
+
+  /** The assault's clock: the hit lands, then the bar, the number and the keep move together. */
+  private stepAssault(dt: number) {
+    const st = this.assault!, a = st.a;
+    this.view.updateAssault(dt * (this.speed > 1 ? 1.4 : 1));
+    for (const side of [0, 1] as Side[]) {
+      if (st.hit[side] || a.t < a.hitAt[side]) continue;
+      st.hit[side] = true;
+      if (side === 0) {
+        buzz("heavy");
+        this.root.classList.add("hurt");
+        setTimeout(() => this.root.classList.remove("hurt"), 500);
+      } else buzz("medium");
+    }
+    const shown: [number, number] = [0, 1].map((s) => st.from[s] + (st.to[s] - st.from[s]) * a.drain(s as Side)) as [number, number];
+    if (shown[0] !== this.hpShown[0] || shown[1] !== this.hpShown[1]) {
+      this.hpShown = shown;
       this.refreshHud();
-      if (u < 1 && !this.destroyed) requestAnimationFrame(step);
-    };
-    setTimeout(step, 300);
-    if (lost) this.root.classList.add("hurt"), setTimeout(() => this.root.classList.remove("hurt"), 500);
-    setTimeout(() => {
-      if (this.destroyed) return;
-      if (this.match.phase === "over") {
-        sfx(this.match.winner === 0 ? "win" : "lose");
-        buzz(this.match.winner === 0 ? "success" : "error");
-        this.o.onEnd(this.match);
-      } else {
-        this.match.next();
-        this.startDeploy();
-      }
-    }, this.watch ? 1500 : 1900);
+    }
+    if (a.over && !st.leaving) {
+      st.leaving = true;
+      this.hpShown = [...st.to];
+      this.refreshHud();
+      this.afterRound();
+    }
+  }
+
+  private afterRound() {
+    if (this.destroyed) return;
+    if (this.match.phase === "over") {
+      sfx(this.match.winner === 0 ? "win" : "lose");
+      buzz(this.match.winner === 0 ? "success" : "error");
+      this.o.onEnd(this.match);
+    } else {
+      this.match.next();
+      this.startDeploy();
+    }
   }
 
   // ------------------------------------------------------------ frame
@@ -392,7 +429,7 @@ export class GameScreen {
           this.endT += dt;
           if (this.endT > 0.9) { this.endT = 0; this.finishBattle(); }
         }
-      }
+      } else if (this.assault && (this.phase === "result" || this.phase === "over")) this.stepAssault(dt);
       this.view.update(dt * (this.phase === "battle" ? Math.min(this.speed, 2) : 1));
     }
     this.view.render(this.scene());
@@ -452,7 +489,9 @@ export class GameScreen {
     unlockAudio();
     if (this.phase !== "deploy" || this.watch || this.paused) return;
     const w = this.view.toWorld(e.clientX, e.clientY);
-    const mine = this.pieceAt(w.x, w.y, 0);
+    // Figures stand up off the ground: a tap on the body (not just the feet) picks it.
+    const up = this.view.toWorldAt(e.clientX, e.clientY, 0.35);
+    const mine = this.pieceAt(w.x, w.y, 0) ?? this.pieceAt(up.x, up.y, 0);
     if (mine) {
       this.drag = { type: "piece", id: mine.id, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
       return;
@@ -461,7 +500,7 @@ export class GameScreen {
       this.tryBuy(this.pickSlot, w.x, w.y);
       return;
     }
-    const theirs = this.pieceAt(w.x, w.y, 1);
+    const theirs = this.pieceAt(w.x, w.y, 1) ?? this.pieceAt(up.x, up.y, 1);
     if (theirs) { this.openPop(theirs); return; }
     this.selected = null;
     this.closePop();
@@ -480,7 +519,9 @@ export class GameScreen {
       const kind = this.match.sides[0].shop[d.slot!];
       if (!kind) return;
       const ok = inZone(0, w.x, w.y) && !this.match.canBuy(0, d.slot!);
-      this.ghost = { kind, x: w.x, y: w.y, ok };
+      // Show the ghost exactly where the sim will place it (buy clamps into the zone by the unit's radius).
+      const at = ok ? clampToZone(0, w.x, w.y, UNITS[kind].radius) : w;
+      this.ghost = { kind, x: at.x, y: at.y, ok };
     } else {
       try { this.match.move(0, d.id!, w.x, w.y); } catch { /* not now */ }
       this.selected = d.id!;
@@ -578,7 +619,7 @@ export class GameScreen {
       });
       pop.append(el("div", { class: "pop-actions" }, [up, sell]));
     }
-    const sx = this.view.sx(p.x), sy = this.view.sy(p.y);
+    const at = this.view.toScreen(p.x, p.y), sx = at.x, sy = at.y;
     pop.classList.remove("hidden");
     const r = pop.getBoundingClientRect();
     const x = Math.max(8, Math.min(window.innerWidth - r.width - 8, sx - r.width / 2));

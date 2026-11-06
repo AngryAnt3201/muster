@@ -65,6 +65,28 @@ class Pal:
         self.eye = f("#0b0f18")
         self.white = f("#ffffff")
         self.black = f("#0b0f18")
+        if K.STYLE.PALETTE:  # the style direction's material colours (art/style/<id>.json palette)
+            spec = {"steel": 0.3, "iron": 0.15, "gold": 0.35, "pearl": 0.25}
+            for name, col in K.STYLE.PALETTE.items():
+                setattr(self, name, t(col, spec=spec.get(name, 0.0) * K.STYLE.SPEC))
+
+
+# Animation state for the v3 frame renderer. gait is the walk-cycle phase (0..1) while rendering walk frames,
+# None otherwise. Builders keep their (k, P, tier, pose) signature; body plans read this to step their legs.
+ANIM = {"gait": None}
+
+
+def gait():
+    return ANIM["gait"]
+
+
+def step(phase_offset=0.0, stride=1.0, lift=1.0):
+    """(dx, dz) foot offset for a leg whose cycle is shifted by phase_offset (0..1). (0, 0) when not walking."""
+    g = ANIM["gait"]
+    if g is None:
+        return 0.0, 0.0
+    a = 2 * math.pi * (g + phase_offset)
+    return stride * math.sin(a), lift * max(0.0, math.cos(a))
 
 
 # tier scale: the silhouette grows with rank
@@ -125,8 +147,9 @@ def humanoid(k, P, tier, hands, look=None, bulk=1.0, lean=0.0, head_turn=0.0, el
     with k.at(rot=(0, lean, 0)):
         # legs + boots
         for s in (1, -1):
-            k.rod((0.0, s * 0.065, 0.21), (0.015, s * 0.075, 0.05), 0.042, _m(P, lk["legs"]))
-            k.sphere(0.05, _m(P, lk["boots"]), loc=(0.035, s * 0.076, 0.035), scale=(1.45, 1.0, 0.72))
+            fx, fz = step(0.0 if s > 0 else 0.5, stride=0.075, lift=0.04)
+            k.rod((0.0, s * 0.065, 0.21), (0.015 + fx, s * 0.075, 0.05 + fz), 0.042, _m(P, lk["legs"]))
+            k.sphere(0.05, _m(P, lk["boots"]), loc=(0.035 + fx, s * 0.076, 0.035 + fz), scale=(1.45, 1.0, 0.72))
         # torso
         k.sphere(1.0, _m(P, lk["torso"]), loc=(0, 0, 0.31), scale=(0.122, 0.158 * bulk, 0.148))
         k.sphere(1.0, _m(P, lk["belt"]), loc=(0.0, 0, 0.225), scale=(0.124, 0.152 * bulk, 0.04))

@@ -1,0 +1,47 @@
+{
+  "id": "dusk",
+  "name": "Lantern Dusk",
+  "pitch": "Blue-hour battlefield lit by lanterns: deep teal ground, slate stone, crisp thin ink, hard cel bands and a strong cyan back-rim so every unit and spell pops off the dark.",
+  "outline": { "hull": 0.008, "props": 0.011, "color": "#080b14", "silhouette_px": 2 },
+  "shading": {
+    "bands": [[0.0, 0.42], [0.34, 0.42], [0.37, 0.72], [0.62, 0.72], [0.65, 0.96], [1.0, 0.96]],
+    "shadow_tint": "#2c3c86",
+    "shadow_tint_amount": 0.6,
+    "spec": 1.3,
+    "bloom": 1.5
+  },
+  "rim": { "color": "#8fe8ff", "strength": 0.8, "width": 0.4, "dir": [0, 0.9, 0.45] },
+  "light": { "key": [0, -0.1, 1.0] },
+  "team": {
+    "tide": { "main": "#38d6e0", "dark": "#12707c", "light": "#b0fbff" },
+    "ember": { "main": "#ff7a45", "dark": "#a2341a", "light": "#ffc59e" }
+  },
+  "palette": {
+    "skin": "#e6b38f", "hair": "#3e2a22", "cloth": "#cbc2aa", "cloth_dk": "#857c69", "leather": "#8a5a38", "leather_dk": "#4f3422",
+    "wood": "#8f6440", "wood_dk": "#55392a", "steel": "#cfdbe8", "iron": "#76829a", "iron_dk": "#414a5c", "gold": "#ffc94a",
+    "gold_dk": "#b9802a", "stone": "#8b8fa0", "stone_dk": "#585c6c", "dark": "#2c3142", "darker": "#171a24", "bone": "#e2dcc6",
+    "pearl": "#eef0f6", "moss": "#5f8a5c"
+  },
+  "ground": {
+    "pattern": "patches",
+    "grass": "#3f6b5a", "grass_dk": "#30574a", "grass_lt": "#55856c",
+    "path": "#8e8170", "path_dk": "#6c6152",
+    "strip": "#5f5d68", "strip_dk": "#46444f",
+    "edge": "#2a2a34",
+    "rock": "#727789", "rock_dk": "#4b4f60", "moss": "#4f7a55",
+    "foliage": "#2f5d4e", "foliage_dk": "#1e4036", "trunk": "#4e3a2c",
+    "border": "wall", "obstacle": "pillars", "lantern": "#ffcf7a"
+  },
+  "keep": { "stone": "#828799", "stone_dk": "#555a6b", "roof": "team.dark", "trim": "#ffcf7a", "wood": "#5a3d2a", "window": "#ffd98a", "window_glow": true },
+  "shadow": { "color": "#0b111c", "alpha": 0.46 },
+  "grade": { "saturation": 1.06, "contrast": 1.1, "vignette": 0.38, "warmth": -0.02 },
+  "vfx": {
+    "blend": "additive", "glow": 1.35,
+    "slash": "#e8fbff", "spark": "#ffd98a", "fire": "#ff9a3c", "fire_hot": "#fff0c8", "smoke": "#3a3f4f",
+    "frost": "#9fe6ff", "zap": "#a8e6ff", "heal": "#6dffb5", "arcane": "#c39bff", "gold": "#ffd166", "dust": "#8e8170"
+  },
+  "ui": {
+    "font": "Lilita One", "panel": "#1d2433", "panel_dk": "#121826", "frame": "#c99a4a", "accent": "#ffcf7a",
+    "text": "#f4efe2", "text_lt": "#ffffff", "button": "#2fa7b8", "button_dk": "#17606c", "danger": "#ff6a4d", "page": "#141b28"
+  }
+}

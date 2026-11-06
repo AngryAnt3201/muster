@@ -16,13 +16,14 @@ import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-PPU = 120
-INK = "#0b0f18"
+from . import style as STYLE
 
-TEAMS = {
-    "tide": {"main": "#3fd0c9", "dark": "#167c7a", "light": "#a6fff6"},
-    "ember": {"main": "#ff6a4d", "dark": "#a8331f", "light": "#ffc1ad"},
-}
+PPU = 120  # v2 portrait/legacy scale; v3 atlases use STYLE.PPU
+INK = STYLE.INK
+
+TEAMS = STYLE.TEAMS
+# mask channel per team colour key (v3 atlases): R = main, G = dark, B = light
+MASK_CH = {"main": (1.0, 0.0, 0.0, 1.0), "dark": (0.0, 1.0, 0.0, 1.0), "light": (0.0, 0.0, 1.0, 1.0)}
 
 
 def lin(hexcol, a=1.0):
@@ -59,11 +60,24 @@ def _group_glowpass():
     return g
 
 
+def _group_maskpass():
+    g = bpy.data.node_groups.new("MaskPass", "ShaderNodeTree")
+    g.interface.new_socket("Value", in_out="OUTPUT", socket_type="NodeSocketFloat")
+    out = g.nodes.new("NodeGroupOutput")
+    v = g.nodes.new("ShaderNodeValue")
+    v.name = "v"
+    v.outputs[0].default_value = 0.0
+    g.links.new(v.outputs[0], out.inputs[0])
+    return g
+
+
 def _group_toon():
     """Color, Spec -> shaded Color. Light vector lives in node 'L' (Combine XYZ)."""
     g = bpy.data.node_groups.new("Toon", "ShaderNodeTree")
     g.interface.new_socket("Color", in_out="INPUT", socket_type="NodeSocketColor")
     g.interface.new_socket("Spec", in_out="INPUT", socket_type="NodeSocketFloat")
+    rs = g.interface.new_socket("Rim", in_out="INPUT", socket_type="NodeSocketFloat")
+    rs.default_value = 1.0
     g.interface.new_socket("Color", in_out="OUTPUT", socket_type="NodeSocketColor")
     gi = g.nodes.new("NodeGroupInput")
     go = g.nodes.new("NodeGroupOutput")
@@ -80,19 +94,46 @@ def _group_toon():
     cr = ramp.color_ramp
     cr.interpolation = "LINEAR"
     # three cel bands with short soft edges (soft edges keep tiny sprites from aliasing)
-    stops = [(0.0, 0.50), (0.30, 0.50), (0.36, 0.78), (0.70, 0.78), (0.76, 1.0), (1.0, 1.0)]
+    stops = STYLE.RAMP
     cr.elements[0].position = stops[0][0]
     cr.elements[0].color = (stops[0][1] ** 2.2,) * 3 + (1,)
     cr.elements[1].position = stops[-1][0]
-    cr.elements[1].color = (1, 1, 1, 1)
+    cr.elements[1].color = (stops[-1][1] ** 2.2,) * 3 + (1,)
     for p, v in stops[1:-1]:
         e = cr.elements.new(p)
         e.color = (v ** 2.2,) * 3 + (1,)
-    g.links.new(dot.outputs["Value"], ramp.inputs[0])
+    # N.L onto the ramp: identity for the v2 look, -0.2..1 for the style directions (as the style frames shade)
+    to01 = g.nodes.new("ShaderNodeMapRange")
+    to01.inputs["From Min"].default_value = STYLE.RAMP_DOT[0]
+    to01.inputs["From Max"].default_value = STYLE.RAMP_DOT[1]
+    g.links.new(dot.outputs["Value"], to01.inputs["Value"])
+    g.links.new(to01.outputs[0], ramp.inputs[0])
     mul = g.nodes.new("ShaderNodeVectorMath")
     mul.operation = "MULTIPLY"
     g.links.new(gi.outputs["Color"], mul.inputs[0])
     g.links.new(ramp.outputs["Color"], mul.inputs[1])
+    if STYLE.SHADOW_TINT_AMOUNT > 0:
+        # shadow tint: the darker the band, the more the direction's tint colour replaces white
+        vmin = min(v for _, v in stops) ** 2.2
+        bw = g.nodes.new("ShaderNodeRGBToBW")
+        g.links.new(ramp.outputs["Color"], bw.inputs[0])
+        tf = g.nodes.new("ShaderNodeMapRange")
+        tf.inputs["From Min"].default_value = vmin
+        tf.inputs["From Max"].default_value = 1.0
+        tf.inputs["To Min"].default_value = STYLE.SHADOW_TINT_AMOUNT
+        tf.inputs["To Max"].default_value = 0.0
+        g.links.new(bw.outputs[0], tf.inputs["Value"])
+        mix = g.nodes.new("ShaderNodeMix")
+        mix.data_type = "RGBA"
+        mix.inputs["A"].default_value = (1, 1, 1, 1)
+        h = STYLE.SHADOW_TINT.lstrip("#")
+        mix.inputs["B"].default_value = tuple((int(h[i:i + 2], 16) / 255.0) ** 2.2 for i in (0, 2, 4)) + (1,)
+        g.links.new(tf.outputs[0], mix.inputs["Factor"])
+        tint = g.nodes.new("ShaderNodeVectorMath")
+        tint.operation = "MULTIPLY"
+        g.links.new(mul.outputs[0], tint.inputs[0])
+        g.links.new(mix.outputs["Result"], tint.inputs[1])
+        mul = tint
     # small top highlight for metals
     hl = g.nodes.new("ShaderNodeMapRange")
     hl.clamp = True
@@ -107,7 +148,52 @@ def _group_toon():
     add.operation = "ADD"
     g.links.new(mul.outputs[0], add.inputs[0])
     g.links.new(hm.outputs[0], add.inputs[1])
-    g.links.new(add.outputs[0], go.inputs[0])
+    # rim light: silhouette band (facing ratio) x lit by the rim direction, scaled by the Rim input.
+    # Strength node 'rimk' is 0 unless a view turns it on (sprites/portraits from v3 do).
+    lw = g.nodes.new("ShaderNodeLayerWeight")
+    lw.inputs["Blend"].default_value = 0.5
+    band = g.nodes.new("ShaderNodeMapRange")
+    band.clamp = True
+    band.inputs["From Min"].default_value = STYLE.RIM_EDGE[0]
+    band.inputs["From Max"].default_value = STYLE.RIM_EDGE[1]
+    g.links.new(lw.outputs["Facing"], band.inputs["Value"])
+    R = g.nodes.new("ShaderNodeCombineXYZ")
+    R.name = "R"
+    rd = g.nodes.new("ShaderNodeVectorMath")
+    rd.operation = "DOT_PRODUCT"
+    g.links.new(geo.outputs["Normal"], rd.inputs[0])
+    g.links.new(R.outputs[0], rd.inputs[1])
+    rdc = g.nodes.new("ShaderNodeMapRange")
+    rdc.clamp = True
+    rdc.inputs["From Min"].default_value = 0.0
+    rdc.inputs["From Max"].default_value = 0.35
+    g.links.new(rd.outputs["Value"], rdc.inputs["Value"])
+    m1 = g.nodes.new("ShaderNodeMath")
+    m1.operation = "MULTIPLY"
+    g.links.new(band.outputs[0], m1.inputs[0])
+    g.links.new(rdc.outputs[0], m1.inputs[1])
+    m2 = g.nodes.new("ShaderNodeMath")
+    m2.operation = "MULTIPLY"
+    g.links.new(m1.outputs[0], m2.inputs[0])
+    g.links.new(gi.outputs["Rim"], m2.inputs[1])
+    k = g.nodes.new("ShaderNodeValue")
+    k.name = "rimk"
+    k.outputs[0].default_value = 0.0
+    m3 = g.nodes.new("ShaderNodeMath")
+    m3.operation = "MULTIPLY"
+    g.links.new(m2.outputs[0], m3.inputs[0])
+    g.links.new(k.outputs[0], m3.inputs[1])
+    rc = g.nodes.new("ShaderNodeRGB")
+    rc.outputs[0].default_value = lin(STYLE.RIM_COLOR)
+    rcol = g.nodes.new("ShaderNodeVectorMath")
+    rcol.operation = "SCALE"
+    g.links.new(rc.outputs[0], rcol.inputs[0])
+    g.links.new(m3.outputs[0], rcol.inputs["Scale"])
+    add2 = g.nodes.new("ShaderNodeVectorMath")
+    add2.operation = "ADD"
+    g.links.new(add.outputs[0], add2.inputs[0])
+    g.links.new(rcol.outputs[0], add2.inputs[1])
+    g.links.new(add2.outputs[0], go.inputs[0])
     return g
 
 
@@ -116,6 +202,7 @@ def groups():
         _G["team"] = _group_team()
         _G["glow"] = _group_glowpass()
         _G["toon"] = _group_toon()
+        _G["mask"] = _group_maskpass()
     return _G
 
 
@@ -129,6 +216,21 @@ def set_glowpass(on):
     groups()["glow"].nodes["v"].outputs[0].default_value = 1.0 if on else 0.0
 
 
+def set_maskpass(on):
+    groups()["mask"].nodes["v"].outputs[0].default_value = 1.0 if on else 0.0
+
+
+def set_rim(vec, strength):
+    """Rim light direction (world) and strength (0 turns rim off, as in the v2 top-down sprites)."""
+    v = Vector(vec).normalized()
+    t = groups()["toon"]
+    if "R" not in t.nodes:  # style.apply() rebuilt the group with the direction's own fixed rim
+        return
+    for i in range(3):
+        t.nodes["R"].inputs[i].default_value = v[i]
+    t.nodes["rimk"].outputs[0].default_value = strength
+
+
 def set_light(vec):
     v = Vector(vec).normalized()
     L = groups()["toon"].nodes["L"]
@@ -140,8 +242,13 @@ def set_light(vec):
 _M = {}
 
 
+def matname(name):
+    """Blender reads a trailing '.NNN' as a duplicate counter and aborts (stoi out of range) on long float tails."""
+    return name.replace(".", "p")
+
+
 def _new_mat(name):
-    m = bpy.data.materials.new(name)
+    m = bpy.data.materials.new(matname(name))
     nt = m.node_tree
     for n in list(nt.nodes):
         nt.nodes.remove(n)
@@ -160,7 +267,37 @@ def _color_socket(nt, col):
     return rgb.outputs[0]
 
 
-def _finish(m, nt, out, shader, holdout=True, alpha=1.0):
+def _mask_socket(nt, col, mult=1.0, toon_shade=False):
+    """Emission for the mask pass: team colours write their channel at full weight, others black. The runtime
+    multiplies the shaded base by the team colour (see art/muster_art/style.py), so the mask stays flat and
+    compresses to a handful of palette entries. toon_shade=True shades it like the base instead."""
+    em = nt.nodes.new("ShaderNodeEmission")
+    if col.startswith("team."):
+        ch = MASK_CH[col.split(".")[1]]
+        c = tuple(x * mult for x in ch[:3]) + (1.0,)
+        if toon_shade:
+            tg = nt.nodes.new("ShaderNodeGroup")
+            tg.node_tree = groups()["toon"]
+            tg.inputs["Color"].default_value = c
+            tg.inputs["Spec"].default_value = 0.0
+            tg.inputs["Rim"].default_value = 0.0
+            nt.links.new(tg.outputs[0], em.inputs["Color"])
+        else:
+            em.inputs["Color"].default_value = c
+    else:
+        em.inputs["Color"].default_value = (0, 0, 0, 1)
+    return em.outputs[0]
+
+
+def _finish(m, nt, out, shader, holdout=True, alpha=1.0, mask=None):
+    if mask is not None:
+        mp = nt.nodes.new("ShaderNodeGroup")
+        mp.node_tree = groups()["mask"]
+        mx = nt.nodes.new("ShaderNodeMixShader")
+        nt.links.new(mp.outputs[0], mx.inputs[0])
+        nt.links.new(shader, mx.inputs[1])
+        nt.links.new(mask, mx.inputs[2])
+        shader = mx.outputs[0]
     if alpha < 1.0:
         tr = nt.nodes.new("ShaderNodeBsdfTransparent")
         mx = nt.nodes.new("ShaderNodeMixShader")
@@ -200,7 +337,7 @@ def toon(col, spec=0.0, alpha=1.0, mult=1.0):
     tg.inputs["Spec"].default_value = spec
     em = nt.nodes.new("ShaderNodeEmission")
     nt.links.new(tg.outputs[0], em.inputs["Color"])
-    _M[key] = _finish(m, nt, out, em.outputs[0], alpha=alpha)
+    _M[key] = _finish(m, nt, out, em.outputs[0], alpha=alpha, mask=_mask_socket(nt, col))
     return _M[key]
 
 
@@ -214,7 +351,7 @@ def glow(col, strength=1.0, alpha=1.0):
     em = nt.nodes.new("ShaderNodeEmission")
     em.inputs["Strength"].default_value = strength
     nt.links.new(c, em.inputs["Color"])
-    _M[key] = _finish(m, nt, out, em.outputs[0], holdout=False, alpha=alpha)
+    _M[key] = _finish(m, nt, out, em.outputs[0], holdout=False, alpha=alpha, mask=_mask_socket(nt, col))
     return _M[key]
 
 
@@ -227,11 +364,12 @@ def flat(col, alpha=1.0):
     c = _color_socket(nt, col)
     em = nt.nodes.new("ShaderNodeEmission")
     nt.links.new(c, em.inputs["Color"])
-    _M[key] = _finish(m, nt, out, em.outputs[0], alpha=alpha)
+    _M[key] = _finish(m, nt, out, em.outputs[0], alpha=alpha, mask=_mask_socket(nt, col))
     return _M[key]
 
 
-def outline_mat(col=INK):
+def outline_mat(col=None):
+    col = col or INK  # read at call time so a style direction can set kit.INK
     key = ("outline", col)
     if key in _M:
         return _M[key]
@@ -240,7 +378,7 @@ def outline_mat(col=INK):
     em = nt.nodes.new("ShaderNodeEmission")
     nt.links.new(c, em.inputs["Color"])
     m.use_backface_culling = True
-    _M[key] = _finish(m, nt, out, em.outputs[0])
+    _M[key] = _finish(m, nt, out, em.outputs[0], mask=_mask_socket(nt, col))
     return _M[key]
 
 
@@ -290,7 +428,7 @@ def catmull(pts, n=6):
 class Kit:
     """Builds one model. All geometry is baked into world space."""
 
-    def __init__(self, outline=0.011):
+    def __init__(self, outline=STYLE.OUTLINE):
         self.coll = bpy.data.collections.get("Unit") or bpy.data.collections.new("Unit")
         if self.coll.name not in bpy.context.scene.collection.children:
             bpy.context.scene.collection.children.link(self.coll)
@@ -598,6 +736,7 @@ class Stage:
         self.cam.data.shift_x = 0
         self.cam.data.shift_y = 0
         set_light((0, 0, 1))
+        set_rim((0, 0, 1), 0.0)
 
     def portrait_view(self, az=-38.0, el=24.0):
         a, e = math.radians(az), math.radians(el)
@@ -608,7 +747,24 @@ class Stage:
         m = self.cam.rotation_euler.to_matrix()
         right, up, back = m.col[0], m.col[1], m.col[2]
         set_light(up * 0.95 - right * 0.45 + back * 0.55)
+        set_rim(up * 0.7 + right * 0.55 - back * 0.6, STYLE.RIM_STRENGTH * 0.8)
         return d
+
+    def diorama_view(self, el=STYLE.CAMERA_EL):
+        """The v3 battle camera: orthographic, pitched `el` down, looking along +Y (game north).
+        Camera space: right = +X, up = (0, sin el, cos el). The world origin projects to the image centre
+        before shift."""
+        e = math.radians(el)
+        d = Vector((0.0, -math.cos(e), math.sin(e)))
+        self.cam.location = d * 20
+        self.cam.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
+        m = self.cam.rotation_euler.to_matrix()
+        right, up, back = m.col[0], m.col[1], m.col[2]
+        kx, ky, kz = STYLE.KEY
+        set_light(right * kx + up * ky + back * kz)
+        rx, ry, rz = STYLE.RIM_DIR
+        set_rim(right * rx + up * ry + back * rz, STYLE.RIM_STRENGTH)
+        return right, up
 
     def project(self, verts):
         """Camera-space XY of world verts (numpy Nx3) for framing."""
@@ -621,8 +777,9 @@ class Stage:
 
     def render(self, path, res, ortho_scale, shift=(0.0, 0.0)):
         sc = self.sc
-        sc.render.resolution_x = res
-        sc.render.resolution_y = res
+        rx, ry = (res, res) if isinstance(res, int) else res
+        sc.render.resolution_x = rx
+        sc.render.resolution_y = ry
         self.cam.data.ortho_scale = ortho_scale
         self.cam.data.shift_x = shift[0]
         self.cam.data.shift_y = shift[1]

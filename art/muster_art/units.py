@@ -330,8 +330,11 @@ def mount(k, P, tier, gallop):
     legs_f = 0.12 if gallop else 0.0
     for sx, sy in ((0.17, 0.08), (0.17, -0.08), (-0.17, 0.08), (-0.17, -0.08)):
         dx = legs_f if sx > 0 else -legs_f
-        k.rod((sx, sy, 0.36), (sx + dx, sy, 0.04), 0.035, coat)
-        k.cyl(0.04, 0.05, P.darker if tier < 4 else P.glow, loc=(sx + dx, sy, 0.03))
+        # diagonal pairs move together in the gait
+        gx, gz = H.step(0.0 if (sx > 0) == (sy > 0) else 0.5, stride=0.11, lift=0.06)
+        dx += gx
+        k.rod((sx, sy, 0.36), (sx + dx, sy, 0.04 + gz), 0.035, coat)
+        k.cyl(0.04, 0.05, P.darker if tier < 4 else P.glow, loc=(sx + dx, sy, 0.03 + gz))
     k.sphere(1.0, coat, loc=(0, 0, 0.42), scale=(0.31, 0.175, 0.15))
     neck_top = V((0.36, 0, 0.62)) if not gallop else V((0.42, 0, 0.56))
     k.tube([V((0.2, 0, 0.45)), neck_top], 0.08, coat, r_end=0.055)
@@ -536,7 +539,8 @@ def golem(k, P, tier, pose):
     with k.at(scale=S):
         # legs
         for s in (1, -1):
-            rock(k, P.stone_dk, (0.0, s * 0.16, 0.15), 0.155, scale=(1, 1, 1.2))
+            gx, gz = H.step(0.0 if s > 0 else 0.5, stride=0.09, lift=0.05)
+            rock(k, P.stone_dk, (gx, s * 0.16, 0.15 + gz), 0.155, scale=(1, 1, 1.2))
         with k.at((0, 0, 0.12)):
             # torso boulders
             rock(k, st, (0, 0, 0.42), 0.27, scale=(0.95, 1.15, 0.9))
@@ -634,12 +638,12 @@ def sapper(k, P, tier, pose):
 
 
 # ================================================================== 14 harrier (flying)
-def wing(k, P, tier, s, sweep, span):
-    """One wing from the shoulder outwards. s=+1 left wing (+Y)."""
+def wing(k, P, tier, s, sweep, span, flap=0.0):
+    """One wing from the shoulder outwards. s=+1 left wing (+Y). flap > 0 raises the wing (degrees)."""
     base = V((0.02, s * 0.06, 0.45))
     feathers = T(tier, P.feather, P.feather, P.feather, P.pearl)
     tip_col = T(tier, P.team, P.team, P.team, P.glow)
-    with k.at(base, rot=(0, 0, s * sweep)):
+    with k.at(base, rot=(s * flap, 0, s * sweep)):
         pts = [(0.06, 0.0), (0.04, s * span * 0.55), (-0.02, s * span), (-0.12, s * span * 0.92), (-0.14, s * span * 0.6), (-0.16, s * span * 0.3), (-0.12, 0.0)]
         if s < 0:
             pts = pts[::-1]
@@ -662,8 +666,9 @@ def harrier(k, P, tier, pose):
     body = T(tier, P.feather, P.feather, P.feather, P.pearl)
     with k.at(scale=S):
         span = T(tier, 0.36, 0.42, 0.46, 0.5) * (0.82 if dive else 1.0)
+        flap = 0.0 if H.gait() is None else 32.0 * math.cos(2 * math.pi * H.gait())
         for s in (1, -1):
-            wing(k, P, tier, s, 38 if dive else -6, span)
+            wing(k, P, tier, s, 38 if dive else -6, span, flap=flap)
         k.sphere(1.0, body, loc=(0, 0, 0.45), scale=(0.2, 0.1, 0.09))
         k.sphere(1.0, P.feather_lt, loc=(0.02, 0, 0.41), scale=(0.17, 0.08, 0.07))
         # tail fan
@@ -1107,7 +1112,8 @@ def bug(k, P, tier, open_jaw, queen=False):
         k.tube([base, base + (tip - base) * 0.6 + V((0, s * 0.012, 0)), tip], 0.012, P.bone_dk, r_end=0.004, smooth_n=2)
         for i, x in enumerate((0.06, 0.02, -0.03)):
             p0 = V((x, s * 0.04, 0.1))
-            k.tube([p0, p0 + V((0.02 * (1 - i), s * 0.07, 0.03)), p0 + V((0.04 * (1 - i) - 0.02, s * 0.12, -0.08))], 0.011, P.chitin_dk, r_end=0.005, smooth_n=2)
+            gx, gz = H.step((i % 2) * 0.5 + (0.0 if s > 0 else 0.5), stride=0.035, lift=0.025)
+            k.tube([p0, p0 + V((0.02 * (1 - i) + gx * 0.5, s * 0.07, 0.03 + gz)), p0 + V((0.04 * (1 - i) - 0.02 + gx, s * 0.12, -0.08 + gz))], 0.011, P.chitin_dk, r_end=0.005, smooth_n=2)
 
 
 @unit("mite", 0.15, spawned=True)
@@ -1135,7 +1141,8 @@ def golemling(k, P, tier, pose):
     atk = pose == "attack"
     with k.at(scale=0.36 / 0.5 * 1.05):
         for s in (1, -1):
-            rock(k, P.stone_dk, (0.0, s * 0.15, 0.12), 0.12)
+            gx, gz = H.step(0.0 if s > 0 else 0.5, stride=0.08, lift=0.045)
+            rock(k, P.stone_dk, (gx, s * 0.15, 0.12 + gz), 0.12)
         rock(k, P.stone, (0, 0, 0.4), 0.25, scale=(0.95, 1.1, 0.9))
         hp = V((0.17, 0, 0.56))
         rock(k, P.stone, hp, 0.1)

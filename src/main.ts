@@ -9,8 +9,11 @@ import { PUZZLES } from "./core/puzzles";
 import { setSound, sfx, unlockAudio } from "./audio/sfx";
 import { initNative, setHaptics } from "./native";
 import { loadSprites } from "./render/sprites";
+import { applyStyleVars } from "./render/style";
 import { load, save } from "./save";
 import { el, stars } from "./ui/dom";
+import { MAP_SIZE } from "./ui/mapdata";
+import { mapForAct, nodeFractions, nodePositions, pathUpTo } from "./ui/maplayout";
 import { GameScreen, TIER_NAMES, abilityOf, paintPortrait, statsLine } from "./ui/game";
 
 const app = document.getElementById("app")!;
@@ -79,32 +82,122 @@ function title() {
 
 // ---------------------------------------------------------------- campaign
 const unlocked = (id: number) => id === 1 || (load().campaign[id - 1] ?? 0) > 0;
+const SVG = "http://www.w3.org/2000/svg";
 
-function campaign() {
+/** The campaign: one illustrated map per act (by ACTS index), level nodes on the painted road, swipe or arrows between acts. */
+function campaign(focusAct?: number) {
   clear();
   const s = load();
+  const acts = ACTS.map((name, i) => ({ name, index: i, levels: LEVELS.filter((l) => l.act === i + 1) })).filter((a) => a.levels.length);
+  const next = LEVELS.find((l) => unlocked(l.id) && !s.campaign[l.id]) ?? [...LEVELS].reverse().find((l) => unlocked(l.id));
+  const want = focusAct ?? next?.act ?? 1;
+  let cur = Math.max(0, acts.findIndex((a) => a.index === want - 1));
   const total = Object.values(s.campaign).reduce((a, b) => a + b, 0);
-  const list = el("div", { class: "acts" });
-  ACTS.forEach((name, i) => {
-    const act = i + 1;
-    const levels = LEVELS.filter((l) => l.act === act);
-    if (!levels.length) return;
-    const nodes = levels.map((l) => {
-      const open = unlocked(l.id);
-      const n = el("button", { class: `node ${open ? "" : "locked"} ${l.boss ? "boss" : ""} ${s.campaign[l.id] ? "done" : ""}` }, [
-        el("span", { class: "node-id" }, [String(l.id)]),
-        stars(s.campaign[l.id] ?? 0),
-      ]);
-      if (l.unlock) n.append(icon(l.unlock, 26));
-      n.addEventListener("click", () => { if (open) { sfx("tap"); levelSheet(l); } else sfx("deny"); });
-      return n;
-    });
-    list.append(el("section", { class: "act" }, [el("h2", {}, [el("small", {}, [`Act ${act}`]), name]), el("div", { class: "nodes" }, nodes)]));
+
+  const kicker = el("small", {});
+  const name = el("span", {});
+  const actStars = el("span", { class: "act-stars" });
+  const head = el("div", { class: "screen-head map-head" }, [
+    btn("‹", "icon-btn back", title),
+    el("h1", {}, [kicker, name]),
+    el("div", { class: "map-totals" }, [actStars, el("span", { class: "star-total" }, [`★ ${total}`])]),
+  ]);
+  const view = el("div", { class: "map-view" });
+  const prev = btn("‹", "icon-btn act-prev", () => go(cur - 1));
+  const nextBtn = btn("›", "icon-btn act-next", () => go(cur + 1));
+  const dots = el("div", { class: "act-dots" });
+  const bar = el("div", { class: "act-bar" }, [prev, dots, nextBtn]);
+  const scr = screen("campaign map-screen", head, view, bar);
+
+  const actOpen = (a: (typeof acts)[number]) => unlocked(a.levels[0].id);
+  acts.forEach((a, i) => {
+    const d = el("button", { class: `act-dot ${actOpen(a) ? "" : "locked"}`, "aria-label": `Act ${a.index + 1}` });
+    d.addEventListener("click", () => { sfx("tap"); go(i); });
+    dots.append(d);
   });
-  screen("campaign", header("Campaign", title, el("span", { class: "star-total" }, [`★ ${total}`])), list);
-  // Scroll to the first unplayed level.
-  const next = LEVELS.find((l) => unlocked(l.id) && !s.campaign[l.id]);
-  if (next) requestAnimationFrame(() => (list.querySelectorAll(".node")[next.id - 1] as HTMLElement)?.scrollIntoView({ block: "center" }));
+
+  let swiped = false;
+  function render(dir = 0) {
+    const a = acts[cur];
+    const map = mapForAct(a.index);
+    const open = actOpen(a);
+    kicker.textContent = `Act ${a.index + 1} of ${acts.length}`;
+    name.textContent = a.name;
+    const got = a.levels.reduce((n, l) => n + (s.campaign[l.id] ?? 0), 0);
+    actStars.textContent = `${got}/${a.levels.length * 3}`;
+    (prev as HTMLButtonElement).disabled = cur === 0;
+    (nextBtn as HTMLButtonElement).disabled = cur === acts.length - 1;
+    dots.querySelectorAll(".act-dot").forEach((d, i) => d.classList.toggle("on", i === cur));
+    scr.style.setProperty("--map-tint", map.tint);
+
+    const pts = nodePositions(map, a.levels.length);
+    const reached = a.levels.reduce((k, l, i) => (unlocked(l.id) ? i : k), -1);
+    const page = el("div", { class: `map ${open ? "" : "locked"} ${dir > 0 ? "from-right" : dir < 0 ? "from-left" : ""}`, style: `background-image:url(${map.image})` });
+    // progress trail: the road walked so far, up to the furthest open node
+    const svg = document.createElementNS(SVG, "svg");
+    svg.setAttribute("class", "map-trail");
+    svg.setAttribute("viewBox", `0 0 ${MAP_SIZE.w} ${MAP_SIZE.h}`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    if (reached > 0) {
+      const t = nodeFractions(a.levels.length)[reached];
+      const line = document.createElementNS(SVG, "polyline");
+      line.setAttribute("points", pathUpTo(map.path, t).map(([x, y]) => `${(x * MAP_SIZE.w).toFixed(1)},${(y * MAP_SIZE.h).toFixed(1)}`).join(" "));
+      svg.append(line);
+    }
+    page.append(svg);
+    a.levels.forEach((l, i) => {
+      const lopen = unlocked(l.id);
+      const best = s.campaign[l.id] ?? 0;
+      const current = next?.id === l.id;
+      const [x, y] = pts[i];
+      const n = el("button", {
+        class: `node ${lopen ? "" : "locked"} ${l.boss ? "boss" : ""} ${best ? "done" : ""} ${current ? "current" : ""}`,
+        style: `left:${(x * 100).toFixed(2)}%;top:${(y * 100).toFixed(2)}%`,
+        "aria-label": `Level ${l.id}: ${l.name}${lopen ? "" : " (locked)"}`,
+      }, [
+        el("span", { class: "node-face" }, [lopen ? el("span", { class: "node-id" }, [String(l.id)]) : el("span", { class: "node-lock" })]),
+        stars(best),
+      ]);
+      if (l.boss) n.append(el("span", { class: "node-boss" }, ["Boss"]));
+      if (l.unlock && lopen) n.append(icon(l.unlock, 24));
+      if (current) n.append(el("span", { class: "node-name" }, [l.name]));
+      n.addEventListener("click", () => {
+        if (swiped) return;
+        if (lopen) { sfx("tap"); levelSheet(l); } else { sfx("deny"); n.classList.remove("shake"); void n.offsetWidth; n.classList.add("shake"); }
+      });
+      page.append(n);
+    });
+    if (!open) {
+      const prevBoss = LEVELS.find((l) => l.id === a.levels[0].id - 1);
+      page.append(el("div", { class: "map-lock" }, [el("span", { class: "node-lock" }), el("b", {}, [`Act ${a.index + 1} is locked`]), el("small", {}, [prevBoss ? `Beat ${prevBoss.foe} to open it` : "Finish the act before it"])]));
+    }
+    view.replaceChildren(page);
+    const focus = page.querySelector(".node.current") ?? page.querySelectorAll(".node")[Math.max(0, reached)];
+    requestAnimationFrame(() => (focus as HTMLElement | null)?.scrollIntoView({ block: "center" }));
+  }
+
+  function go(i: number) {
+    if (i < 0 || i >= acts.length || i === cur) return;
+    const dir = i > cur ? 1 : -1;
+    cur = i;
+    render(dir);
+  }
+
+  // Horizontal swipe changes act; vertical drags still scroll the map.
+  let sx = 0, sy = 0, down = false;
+  view.addEventListener("pointerdown", (e) => { down = true; swiped = false; sx = e.clientX; sy = e.clientY; });
+  view.addEventListener("pointerup", (e) => {
+    if (!down) return;
+    down = false;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      const before = cur;
+      go(cur + (dx < 0 ? 1 : -1));
+      if (cur !== before) { swiped = true; sfx("tap"); setTimeout(() => { swiped = false; }, 0); }
+    }
+  });
+  view.addEventListener("pointercancel", () => { down = false; });
+  render();
 }
 
 function levelSheet(l: LevelDef) {
@@ -146,10 +239,10 @@ function playLevel(l: LevelDef, attempt = 0) {
         stars: m.winner === 0 ? n : undefined,
         lines: l.stars.map((o) => [objectiveText(o), objectiveMet(o, m)] as [string, boolean]),
         primary: m.winner === 0 && nextL ? ["Next level", () => playLevel(nextL)] : ["Retry", () => playLevel(l, attempt + 1)],
-        secondary: ["Campaign", campaign],
+        secondary: ["Campaign", () => campaign(l.act)],
       });
     },
-    onQuit: campaign,
+    onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
   });
 }
@@ -403,6 +496,7 @@ function showcase(n: number) {
 
 // ---------------------------------------------------------------- boot
 async function boot() {
+  applyStyleVars(document.documentElement);
   const s = load();
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
@@ -412,7 +506,7 @@ async function boot() {
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?gauntlet, ?watch
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }
-  if (q.has("campaign")) return campaign();
+  if (q.has("campaign")) return campaign(Number(q.get("campaign")) || undefined);
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
   if (q.has("barracks")) return barracks();
