@@ -51,11 +51,13 @@ export interface GameOpts {
   cfg: MatchConfig;
   foe?: AIProfile; // the rival's AI (omit for a puzzle: the foe board stands still)
   you?: AIProfile; // set to let an AI play your side (watch mode)
-  mode: "campaign" | "skirmish" | "gauntlet" | "puzzle" | "watch" | "demo";
+  mode: "campaign" | "skirmish" | "gauntlet" | "puzzle" | "daily" | "watch" | "demo";
   title?: string;
   showEnemyMines?: boolean;
   /** Campaign act whose arena to fight in (anything else gets act 1's). */
   arena?: number;
+  /** Line under the opening banner (default "vs <rival>"). */
+  intro?: string;
   /** First-time coaching: drag a card down, then Fight. */
   hint?: boolean;
   onEnd: (m: Match) => void;
@@ -316,7 +318,7 @@ export class GameScreen {
     const m = this.match;
     const inc = m.sides[0].lastIncome;
     if (this.o.mode === "puzzle") this.showBanner(this.o.title ?? "Breakpoint", "Win this one battle", "intro", 1600);
-    else if (first) this.showBanner(this.o.title ?? "Muster", `vs ${m.sides[1].name}`, "intro", 1600);
+    else if (first) this.showBanner(this.o.title ?? "Muster", this.o.intro ?? `vs ${m.sides[1].name}`, "intro", 1600);
     else {
       const extra = inc.interest ? ` +${inc.interest} interest` : "";
       this.showBanner(`Round ${m.round}`, [coin("", "icon-only"), `+${inc.base + inc.bonus} gold${extra}`], "round", 1200);
