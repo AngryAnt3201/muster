@@ -14,7 +14,7 @@ ARCHIVE=ios/App/build/Muster.xcarchive
 EXPORT_DIR=ios/App/build/export
 
 prepare() {
-  node tools/release-config.mjs
+  node tools/release-config.mjs "$@"
   npm run build
   npx cap sync ios
 }
@@ -28,7 +28,7 @@ jack_only() {
 
 case "${1:-}" in
   dry)
-    prepare
+    prepare --warn-copy
     xcodebuild -project "$PROJECT" -scheme App -configuration Release \
       -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
       -derivedDataPath ios/App/build/dd-release \
