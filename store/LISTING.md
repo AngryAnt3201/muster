@@ -44,17 +44,17 @@ Muster an army. Place it. Watch it fight.
 
 Muster: Tactics is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.
 
-24 UNITS, EACH WITH A MIND OF ITS OWN
+28 UNITS, EACH WITH A MIND OF ITS OWN
 No grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.
 
 EVOLVE THEM. ASCEND THEM.
-Rank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, 24 in all.
+Rank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, 28 in all.
 
 RIVALS THAT THINK
 Rivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.
 
 FIVE WAYS TO PLAY
-• Campaign: 42 levels across seven acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.
+• Campaign: 48 levels across eight acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.
 • Daily Challenge: one board a day, the same for every player. Win it, keep your streak going and beat your best.
 • Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.
 • Breakpoint: 18 one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.

@@ -8,12 +8,14 @@ import {
 } from "../src/core/gauntlet";
 import { Match, type RoundReport } from "../src/core/match";
 import { PUZZLES, SOLUTIONS } from "../src/core/puzzles";
+import { Battle } from "../src/core/battle";
+import { actGated, levelGated } from "../src/store/entitlement";
 import { fromStart, naive, pieceCost, playPuzzle, solve } from "../tools/solver";
 
 describe("campaign", () => {
-  it("has 42 levels, ids 1..42, seven acts of six, a boss closing each act", () => {
-    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 42 }, (_, i) => i + 1));
-    expect(ACTS).toHaveLength(7);
+  it("has 48 levels, ids 1..48, eight acts of six, a boss closing each act", () => {
+    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 48 }, (_, i) => i + 1));
+    expect(ACTS).toHaveLength(8);
     for (const l of LEVELS) {
       expect(l.act).toBe(Math.ceil(l.id / 6));
       expect(!!l.boss).toBe(l.id % 6 === 0);
@@ -25,7 +27,7 @@ describe("campaign", () => {
     // Bosses: a set-piece board and at least one more twist.
     for (const b of LEVELS.filter((l) => l.boss)) {
       expect(b.start?.[1]?.length).toBeGreaterThan(0);
-      const twists = [b.obstacles?.length, b.noReroll, b.maxRounds, b.mods?.[1]?.broodStart, b.income?.[1], b.supply?.[1], b.hp[0] !== 400].filter(Boolean);
+      const twists = [b.obstacles?.length, b.noReroll, b.maxRounds, b.mods?.[1]?.broodStart, b.mods?.[1]?.litStart, b.income?.[1], b.supply?.[1], b.hp[0] !== 400].filter(Boolean);
       expect(twists.length).toBeGreaterThan(0);
     }
   });
@@ -38,11 +40,12 @@ describe("campaign", () => {
       if (l.id > 1) for (const k of LEVELS[l.id - 2].roster) expect(l.roster).toContain(k);
     }
     expect(new Set(LEVELS[41].roster)).toEqual(new Set(UNIT_KINDS));
+    expect(new Set(LEVELS[47].roster)).toEqual(new Set(UNIT_KINDS));
     expect(LEVELS[29].roster).toHaveLength(12);
     expect(rosterAt(1)).toEqual(["blades", "ranger"]);
     // Acts 6 and 7 bring in one new unit a level, in the spec's order.
     const fresh = ["sapper", "harrier", "banner", "rime", "ravager", "grave", "bombard", "tinker", "duelist", "pikeman", "keg", "trickster"];
-    expect(LEVELS.slice(30).map((l) => l.unlock)).toEqual(fresh);
+    expect(LEVELS.slice(30, 42).map((l) => l.unlock)).toEqual(fresh);
     // Late foes field the new units, in their rosters or on their opening boards.
     for (const l of LEVELS.slice(30)) {
       const kinds = new Set([...(l.foeRoster ?? l.roster), ...(l.start?.[1] ?? []).map((p) => p.kind)]);
@@ -58,13 +61,14 @@ describe("campaign", () => {
     expect(LEVELS[0].ai.difficulty).toBeLessThanOrEqual(0.15);
     expect(LEVELS[29].ai.difficulty).toBeGreaterThanOrEqual(0.85);
     expect(LEVELS[41].ai.difficulty).toBeGreaterThanOrEqual(0.9);
-    for (let a = 1; a < 7; a++) {
+    for (let a = 1; a < ACTS.length; a++) {
       const avg = (act: number) => LEVELS.filter((l) => l.act === act).reduce((s, l) => s + l.ai.difficulty, 0) / 6;
       expect(avg(a + 1)).toBeGreaterThan(avg(a));
     }
     expect(LEVELS[0].hp[1]).toBeLessThanOrEqual(150);
     expect(LEVELS[29].hp[1]).toBe(400);
     expect(LEVELS[41].hp[1]).toBe(400);
+    expect(LEVELS[47].hp[1]).toBe(400);
     for (const l of LEVELS) expect(l.hp[0]).toBe(400);
   });
 
@@ -99,6 +103,70 @@ describe("campaign", () => {
     const stars = starsFor(l, m);
     if (m.winner === 0) expect(stars).toBeGreaterThanOrEqual(1);
     else expect(stars).toBe(0);
+  });
+});
+
+describe("Act 8: The Mirelight Fen", () => {
+  const fen = LEVELS.filter((l) => l.act === 8);
+  const NEW = ["hook", "thorn", "outrider", "lamp"];
+
+  it("is six levels, 43-48, built around the four 1.1 units, with no new unlocks", () => {
+    expect(ACTS[7]).toBe("The Mirelight Fen");
+    expect(fen.map((l) => l.id)).toEqual([43, 44, 45, 46, 47, 48]);
+    for (const l of fen) {
+      expect(l.unlock).toBeUndefined();
+      expect(l.roster).toEqual(rosterAt(42));
+      const kinds = new Set([...(l.foeRoster ?? l.roster), ...(l.start?.[1] ?? []).map((p) => p.kind)]);
+      expect(NEW.some((k) => kinds.has(k as never)), `level ${l.id}`).toBe(true);
+    }
+    // Names are its own: no foe or level name reused from earlier acts.
+    const before = LEVELS.filter((l) => l.act < 8);
+    for (const l of fen) {
+      expect(before.map((b) => b.foe)).not.toContain(l.foe);
+      expect(before.map((b) => b.name)).not.toContain(l.name);
+    }
+  });
+
+  it("ends on Mother Wick: all four new units on her opening board and her own twist, lantern wards on every soldier", () => {
+    const boss = fen[5];
+    expect(boss.boss).toBe(true);
+    expect(boss.foe).toBe("Mother Wick");
+    const start = new Set(boss.start![1]!.map((p) => p.kind));
+    for (const k of NEW) expect(start.has(k as never), k).toBe(true);
+    expect(boss.mods?.[1]?.litStart).toBe(true);
+    // Only this boss has it.
+    expect(LEVELS.filter((l) => l.mods?.[1]?.litStart).map((l) => l.id)).toEqual([48]);
+  });
+
+  it("is behind the Full Army, and open once it is owned", () => {
+    const free = { campaign: {}, puzzles: {} };
+    const owned = { campaign: {}, puzzles: {}, store: { fullArmy: true } };
+    expect(actGated(free, 8)).toBe(true);
+    for (const l of fen) expect(levelGated(free, l)).toBe(true);
+    expect(actGated(owned, 8)).toBe(false);
+    for (const l of fen) expect(levelGated(owned, l)).toBe(false);
+  });
+
+  it("litStart: each of that side's units starts warded (mines and the other side don't), and stays deterministic", () => {
+    const pieces = () => [
+      { id: 1, kind: "blades" as const, side: 0 as const, x: 4.5, y: 10, rank: 1, spent: 3 },
+      { id: 2, kind: "hook" as const, side: 1 as const, x: 4.5, y: 4, rank: 2, spent: 8 },
+      { id: 3, kind: "ranger" as const, side: 1 as const, x: 3, y: 2, rank: 1, spent: 3 },
+      { id: 4, kind: "mine" as const, side: 1 as const, x: 6, y: 5, rank: 1, spent: 2 },
+    ];
+    const b = new Battle(pieces(), { seed: 5, events: true, mods: [undefined, { litStart: true }] });
+    const by = (id: number) => b.bodies.find((x) => x.pieceId === id)!;
+    expect(by(1).ward).toBe(0);
+    expect(by(2).ward).toBeGreaterThan(0);
+    expect(by(3).ward).toBeGreaterThan(0);
+    expect(by(4).ward).toBe(0);
+    expect(b.events.filter((e) => e.t === "ward")).toHaveLength(2);
+    const play = () => {
+      const c = new Battle(pieces(), { seed: 5, mods: [undefined, { litStart: true }] });
+      while (!c.done) c.step();
+      return c.bodies.map((x) => `${x.kind}:${x.hp.toFixed(3)}`).join(",");
+    };
+    expect(play()).toBe(play());
   });
 });
 
