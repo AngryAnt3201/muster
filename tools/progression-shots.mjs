@@ -92,5 +92,18 @@ const settle = (p, ms = 900) => p.waitForTimeout(ms);
   await p.waitForTimeout(2200);
   await p.screenshot({ path: `${out}/result-coins.png` });
 }
+{
+  // Gauntlet: each rival beaten pays coins on the boon pick.
+  const p = await page("result");
+  await p.goto(`http://127.0.0.1:${port}/?gauntlet`);
+  await settle(p, 1500);
+  await p.evaluate(() => {
+    const g = window.__game;
+    g.match.sides[1].hp = 0; g.match.winner = 0; g.match.phase = "over";
+    g.o.onEnd(g.match);
+  });
+  await p.waitForTimeout(1800);
+  await p.screenshot({ path: `${out}/gauntlet-coins.png` });
+}
 await browser.close();
 console.log(errors.length ? `ERRORS:\n${errors.join("\n")}` : "no page errors");
