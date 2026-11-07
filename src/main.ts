@@ -44,6 +44,7 @@ import { onCollectionChange } from "./progression/collection";
 import { readyCount } from "./progression/troops";
 import { battleTab, flameChip, modesTab, settingsBody, starChip, type ModeCard } from "./ui/home";
 import { TABS, neighbour, swipeTabs, tabBar, tabIcon, type Badges, type Tab } from "./ui/tabs";
+import { MAP_DEFS } from "./core/td/maps"; // map data only (no imports), so Bastion stays a lazy chunk
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -158,7 +159,7 @@ function modeCards(): ModeCard[] {
 function bastionStars() {
   let got = 0;
   try { const r = JSON.parse(localStorage.getItem("muster.td.v1") ?? "null"); for (const v of Object.values<number>(r?.stars ?? {})) got += v; } catch { /* fresh */ }
-  return { got, of: 2 * 3 };
+  return { got, of: MAP_DEFS.length * 3 };
 }
 
 /** The settings gear: Sound, Haptics, battle Speed. */
