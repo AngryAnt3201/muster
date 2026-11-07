@@ -117,5 +117,20 @@ if (!skip("battle-bar")) {
   await p.context().close();
 }
 
+// 7. Gauntlet boon sheet: the "Rival N beaten" line clear of the ribbon.
+if (!skip("gauntlet-boons")) {
+  const p = await page();
+  await p.goto(`http://${host}:${port}/?gauntlet`);
+  await p.waitForTimeout(2500);
+  await p.evaluate(() => {
+    const g = window.__game;
+    g.match.sides[1].hp = 0; g.match.winner = 0; g.match.phase = "over";
+    g.o.onEnd(g.match);
+  });
+  await p.waitForTimeout(1800);
+  await shot(p, `gauntlet-boons${tag}`);
+  await p.context().close();
+}
+
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();

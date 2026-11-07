@@ -546,6 +546,9 @@ button { font-family: inherit; color: inherit; }
 .panel { display: flex; flex-direction: column; gap: 16px; padding: 20px 18px; border-radius: 22px; }
 .lead { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; color: var(--k-text); }
 .boon-list { display: flex; flex-direction: column; gap: 10px; }
+/* The boon sheet leads with its ribbon (the shared .results pull-up would lift it out of the sheet), then the kicker. */
+.boons > .ribbon:first-child { margin-top: -6px; }
+.boons > .sheet-kicker { margin-top: -2px; text-align: center; }
 .btn.boon { --b: var(--fam-arcane); text-align: left; padding: 12px 16px 13px; }
 .btn.boon > span { display: flex; flex-direction: column; gap: 4px; }
 .btn.boon b { font-weight: 400; font-size: 20px; }

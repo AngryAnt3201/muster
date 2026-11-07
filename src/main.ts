@@ -421,8 +421,9 @@ function duel() {
 function boonPick(r: GauntletRun) {
   const choices = boonChoices(r);
   sheet(el("div", { class: "boons results" }, [
-    el("div", { class: "sheet-kicker" }, [`Rival ${r.stage - 1} beaten · ${Math.round(r.hp)} health left`]),
+    // Ribbon first, then the kicker: above it, the shared .results ribbon pull-up hid the kicker.
     ribbon("Choose a boon", "gold"),
+    el("div", { class: "sheet-kicker" }, [`Rival ${r.stage - 1} beaten · ${Math.round(r.hp)} health left`]),
     el("div", { class: "boon-list" }, choices.map((b) => btn(el("span", {}, [el("b", {}, [b.name]), el("small", {}, [b.text])]), "boon", () => { takeBoon(r, b.id); closeSheet(); duel(); }))),
   ]), false);
 }

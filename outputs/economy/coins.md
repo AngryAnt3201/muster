@@ -142,8 +142,8 @@ What the table shows:
 
 - The in-match unit popover shows the unit's real health and damage at its rank and troop level (`unitStats` / `statsLine` in `src/ui/game.ts`) with a "Lv N" badge.
 - Gauntlet rival levels, checked with `tools/gauntlet.ts` (6 runs, strong AI, player at level 1, so the worst case): rivals beaten were 0 0 3 6 15 16 (mean 6.7) without rival levels and 0 0 3 6 14 15 (mean 6.3) with them. The median is 6 both ways, so the effect is mild. That's only 6 runs, so it's a sanity check, not tuning.
-- The coin pill in the Barracks header is local (`coinPill()` in `src/ui/barracks.ts`). Swap it for the HUD kit's pill once that lands.
-- This was already there before my change: on the Gauntlet boon sheet, the "Rival N beaten · health left" kicker sits under the ribbon (the shared `.results .ribbon` negative margin). My coin line goes under the ribbon and isn't affected. Left alone because it's shared CSS.
+- The Barracks header uses the shared currency pill (`currencyPill()` in `src/ui/currency.ts`), the same one as the title and Shop.
+- Fixed: the Gauntlet boon sheet's "Rival N beaten · health left" kicker used to sit under the ribbon (the shared `.results .ribbon` pull-up). The sheet now leads with the ribbon and puts the kicker below it, with a `.boons`-scoped margin, so the shared CSS is untouched.
 
 ## Screens
 
