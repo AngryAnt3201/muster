@@ -50,7 +50,15 @@ export interface Anim {
 }
 export type AnimOpts = Partial<Omit<Anim, "sheet" | "x" | "y" | "life">> & { size: number; max: number };
 
-export interface Float { x: number; y: number; text: string; life: number; max: number; color: string; size: number; /** extra height (a flyer's) */ z?: number; }
+export interface Float {
+  x: number; y: number; text: string; life: number; max: number; color: string; size: number;
+  /** extra height (a flyer's) */ z?: number;
+  /** How it is styled (juicedraw.ts drawFloat): plain damage, a crit, a heal, or a word. */
+  kind?: FloatKind;
+}
+export type FloatKind = "dmg" | "crit" | "heal" | "text";
+/** Most numbers on screen at once: past this the oldest plain one goes, so a brawl never turns into a wall of digits. */
+export const MAX_FLOATS = 12;
 
 let seed = 1;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -123,7 +131,7 @@ export class Fx {
     this.bolts = this.bolts.filter((r) => r.life > 0);
     this.beams = this.beams.filter((r) => r.life > 0);
     this.floats = this.floats.filter((r) => r.life > 0);
-    for (const f of this.floats) f.y -= dt * 0.9;
+    for (const f of this.floats) f.y -= dt * 0.35;
     this.shake = Math.max(0, this.shake - dt * 2.8);
     this.flash = Math.max(0, this.flash - dt * 3);
     if (this.parts.length > 900) this.parts.splice(0, this.parts.length - 900);
@@ -166,7 +174,11 @@ export class Fx {
   beam(x0: number, y0: number, x1: number, y1: number, color: string, width = 0.07, max = 0.3) {
     this.beams.push({ x0, y0, x1, y1, life: max, max, color, width });
   }
-  float(x: number, y: number, text: string, color = "#fff", size = 0.32, max = 0.8) {
-    this.floats.push({ x: x + frand(-0.15, 0.15), y, text, life: max, max, color, size });
+  float(x: number, y: number, text: string, color = "#fff", size = 0.32, max = 0.8, kind: FloatKind = "text") {
+    if (this.floats.length >= MAX_FLOATS) {
+      const i = this.floats.findIndex((f) => f.kind === "dmg" || f.kind === "heal");
+      this.floats.splice(i < 0 ? 0 : i, 1);
+    }
+    this.floats.push({ x: x + frand(-0.15, 0.15), y, text, life: max, max, color, size, kind });
   }
 }

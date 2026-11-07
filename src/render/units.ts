@@ -52,12 +52,43 @@ export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, k: number, fl
   const dx = -f.ax * k, dy = -f.ay * k, dw = f.w * k, dh = f.h * k;
   ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
   if (flash > 0) {
-    ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha *= Math.min(1, flash) * 0.7;
-    ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
-    ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+    // A true white hit flash: the frame's silhouette filled white (one small scratch canvas, reused), laid over the
+    // sprite and fading with the sim's flash timer. Falls back to brightening the sprite if the scratch is unavailable.
+    const k = Math.min(1, flash);
+    const sil = whiteSilhouette(f);
+    if (sil) {
+      ctx.globalAlpha *= 0.35 + 0.6 * k;
+      ctx.drawImage(sil, 0, 0, f.w, f.h, dx, dy, dw, dh);
+    } else {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha *= k * 0.7;
+      ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+      ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+    }
   }
   ctx.restore();
+}
+
+let scratch: HTMLCanvasElement | null | undefined;
+let sctx: CanvasRenderingContext2D | null = null;
+/** The frame's alpha filled with white, in a shared scratch canvas (valid until the next call). */
+function whiteSilhouette(f: Frame): HTMLCanvasElement | null {
+  if (scratch === undefined) {
+    try { scratch = document.createElement("canvas"); scratch.width = 256; scratch.height = 256; sctx = scratch.getContext("2d"); } catch { scratch = null; }
+    if (!sctx) scratch = null;
+  }
+  if (!scratch || !sctx) return null;
+  const w = Math.ceil(f.w), h = Math.ceil(f.h);
+  if (w > scratch.width || h > scratch.height) { scratch.width = Math.max(scratch.width, w); scratch.height = Math.max(scratch.height, h); }
+  const g = sctx;
+  g.globalCompositeOperation = "source-over";
+  g.clearRect(0, 0, w + 1, h + 1);
+  g.drawImage(f.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+  g.globalCompositeOperation = "source-in";
+  g.fillStyle = "#ffffff";
+  g.fillRect(0, 0, w + 1, h + 1);
+  g.globalCompositeOperation = "source-over";
+  return scratch;
 }
 
 const TAU = Math.PI * 2;

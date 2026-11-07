@@ -227,7 +227,8 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
         if (e.big) fx.anim("impact", e.x, e.y, { size: 0.9, max: 0.3, tint: GOLD, a: frand(0, 6.28), z: 0.2 });
       }
       fx.burst(e.x, e.y, e.big ? 7 : 3, { color: col, speed: 2.2, size: 0.05, max: 0.3, gravity: 0, kind: "spark" });
-      if (e.dmg >= 18 || e.big) fx.float(e.x, e.y - 0.45, String(e.dmg), e.big ? GOLD : e.shielded ? "#9fb0c0" : "#ffffff", e.big ? 0.38 : 0.28);
+      if (e.big) fx.float(e.x, e.y - 0.45, `${e.dmg}!`, GOLD, 0.42, 0.95, "crit");
+      else if (e.dmg >= 18) fx.float(e.x, e.y - 0.45, String(e.dmg), e.shielded ? "#b9c6d4" : "#ffffff", 0.27, 0.75, "dmg");
       snd(e.shielded ? "clank" : "hit", e.big ? 0.6 : 0.25);
       break;
     }
@@ -265,6 +266,7 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
         fx.anim("heal", e.x, e.y, { size: 1.2, max: 0.75 });
         fx.burst(e.x, e.y, 3, { color: HEAL, speed: 0.6, size: 0.1, max: 0.7, kind: "plus", gravity: -1.2, drag: 3, z: 0.2 });
       }
+      if (e.amt >= 8) fx.float(e.x, e.y - 0.4, `+${e.amt}`, "#7dff9a", 0.25, 0.8, "heal");
       snd("heal", 0.2);
       break;
     }
@@ -285,6 +287,9 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
         fx.anim("smoke", e.x, e.y, { size: 1.0, max: 0.8, tint: "#5a5458" });
         fx.burst(e.x, e.y, 10, { color: "rgba(80,80,80,0.7)", speed: 1, size: 0.2, max: 0.9, kind: "smoke", gravity: 0 });
       } else {
+        fx.anim("impact", e.x, e.y, { size: Math.max(0.8, r * 2.8), max: 0.18, tint: "#ffffff", a: frand(0, 6.28), z: 0.35 });
+        fx.anim("dust", e.x, e.y, { size: Math.max(1, r * 3.6), max: 0.5, tint: DUST, layer: "ground", alpha: 0.7 });
+        fx.burst(e.x, e.y, 5, { color: "#d9cdb8", speed: 1.6, size: 0.06, max: 0.55, kind: "chunk", vz: 3.5, spin: 10 });
         fx.anim("smoke", e.x, e.y, { size: Math.max(0.9, r * 3.4), max: 0.6, tint: "#e3e6ea", z: 0.1 });
         if (!STRUCT.has(e.kind)) fx.anim("soul", e.x, e.y, { size: Math.max(0.8, r * 2.6), max: 0.9, tint: TEAM[e.side].light, delay: 0.08 });
         else fx.anim("flash", e.x, e.y, { size: 1, max: 0.2, tint: GOLD });
