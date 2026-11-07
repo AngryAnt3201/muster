@@ -832,7 +832,7 @@ def main():
             print(f"ARENA {act} camera check: max error {err:.2f}px at {rx}x{ry}", flush=True)
             img = render(os.path.join(BUILD, f"act{act}_raw.png"))
             img = S.downsample(img, ss)
-            img = S.grade(img, st, vignette=False)
+            img = sunlight(S.grade(img, st, vignette=False))
             png = os.path.join(BUILD, f"act{act}.png")
             S.write_png(png, img)
             to_jpeg(png, os.path.join(OUT, f"act{act}.jpg"))
@@ -843,7 +843,7 @@ def main():
                 for o in coll.objects:
                     o.hide_render = o.name not in keep
                 fim = render(os.path.join(BUILD, f"act{act}_fg_raw.png"))
-                fim = S.grade(S.downsample(fim, ss), st, vignette=False)
+                fim = sunlight(S.grade(S.downsample(fim, ss), st, vignette=False))
                 al = fim[..., 3]
                 hh, ww = al.shape
                 # Cells: each side split into FG_ROWS bands; each cell's tight box of covered pixels, as backdrop fractions.
@@ -903,6 +903,19 @@ def main():
             json.dump(man, f, indent=1)
         print(f"ARENA {act} {th['name']} done in {time.time() - t0:.0f}s", flush=True)
     print("ARENAS_DONE", flush=True)
+
+
+def sunlight(img, strength=0.06):
+    """A warm afternoon key from the top-left over the whole frame (backdrop and foreground alike, so they match):
+    a few percent brighter and warmer up-left, cooler and softer down-right. img: premultiplied float HxWx4."""
+    import numpy as np
+    h, w = img.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    k = 0.5 - (xx / w * 0.6 + yy / h) / 1.6  # +0.5 top-left .. -0.5 bottom-right
+    gain = (1 + strength * 2 * k)[..., None] * np.stack([1 + 0.05 * k, 1 + 0.012 * k, 1 - 0.05 * k], -1)
+    out = img.copy()
+    out[..., :3] = np.minimum(img[..., :3] * gain, img[..., 3:4])
+    return out
 
 
 def cam_uv(x, y):
