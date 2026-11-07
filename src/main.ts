@@ -25,18 +25,25 @@ import { settleRewards } from "./economy/rewards";
 import { creditPurchase, earn } from "./economy/wallet";
 import { grantCards } from "./progression/collection";
 import { GemShop } from "./store/gems";
-import { currencyBar } from "./ui/currency";
+// [home] the title's currency bar and commander chip moved into the home top bar (src/ui/home.ts)
 import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
 // [progression] the Army: cards + coins upgrades, commander level, recommended level, defeat hint (src/ui/army.ts)
 import { armyLevel, migrateArmy } from "./progression/troops";
-import { commanderChip, underLevelledHint } from "./ui/army";
+import { underLevelledHint } from "./ui/army";
 // [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
 import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, settleLegacyCoins, withLevels } from "./progression/troops";
 import { foeLevelForAct } from "./progression/economy";
-import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
+import { attachReward, barracksScreen } from "./ui/barracks";
 // [chests] chest slots, free and crown chests, the opening moment (src/progression/chests.ts, src/ui/chests.ts)
 import { seedDemo, winChest } from "./progression/chests";
-import { chestBar, chestDemo, chestEarned } from "./ui/chests";
+import { chestArt, chestDemo, chestEarned } from "./ui/chests";
+// [home] the tabbed home: bottom tab bar, Battle and Modes tabs, settings sheet (src/ui/home.ts, src/ui/tabs.ts)
+import { chests, crownReady, freeBanked, gameNow, localDay, onChestsChange, stateOf } from "./progression/chests";
+import { onWalletChange } from "./economy/wallet";
+import { onCollectionChange } from "./progression/collection";
+import { readyCount } from "./progression/troops";
+import { battleTab, flameChip, modesTab, settingsBody, starChip, type ModeCard } from "./ui/home";
+import { TABS, neighbour, swipeTabs, tabBar, tabIcon, type Badges, type Tab } from "./ui/tabs";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -83,41 +90,104 @@ function unitIcon(kind: keyof typeof UNITS, size = 44) {
   return c;
 }
 
-// ---------------------------------------------------------------- title
-function title() {
+// ================================================================ [home] title, tabs and top-level navigation (feature/home)
+// The home is five tabs over a bottom bar (src/ui/tabs.ts): Shop, Army, Battle (the default), Modes, Pass. The bar stays on
+// these top-level screens; battles and sub-screens (campaign map, Daily, Gauntlet...) hide it. `title()` is the way home
+// from anywhere: it reopens the tab the player left from, so Daily's back button lands on Modes and the map's on Battle.
+let tab: Tab = "battle";
+function title() { home(tab); }
+
+/** Draws tab `t` (dir: the side it slides in from after a swipe or a tap on a neighbour). */
+function home(t: Tab = tab, dir = 0) {
   clear();
-  here = title;
-  const s = load();
-  const camp = Object.keys(s.campaign).length;
-  screen("title",
-    currencyBar("title-cur"), // [gems] coin and gem counters
-    commanderChip(), // [progression] commander level and XP
-    el("div", { class: "logo" }, [
-      el("span", { class: "logo-word", "data-t": "MUSTER" }, [el("span", {}, ["MUSTER"])]),
-      el("div", { class: "logo-sub" }, [ribbon("build · place · clash", "small")]),
-    ]),
-    chestBar(), // [chests]
-    el("div", { class: "menu" }, [
-      btn(el("span", {}, ["Campaign", el("small", {}, [`${camp}/${LEVELS.length}`])]), "primary big", campaign),
-      // Secondary modes in pairs, so the menu stays low and the key art's clash shows above it.
-      el("div", { class: "menu-row" }, [
-        btn(el("span", {}, ["Daily", el("small", {}, [dailyTag()])]), "big half daily-btn", daily),
-        btn(el("span", {}, ["Gauntlet", el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big half gauntlet-btn", gauntlet),
-      ]),
-      el("div", { class: "menu-row" }, [
-        btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big half puzzles-btn", puzzles),
-        btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big half skirmish-btn", skirmish),
-      ]),
-      // [td] hook: Bastion, the tower-defence mode (src/ui/td.ts). Free, like every mode.
-      btn(el("span", {}, ["Bastion", el("small", {}, ["hold the road"])]), "big bastion-btn", () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); }),
-    ]),
-    el("div", { class: "title-foot" }, [
-      btn(barracksLabel(), "ghost small", barracks), // [progression] badge when a troop can level up
-      btn(el("span", {}, [icon("crown"), "Shop"]), "gold small shop-btn", () => shopScreen()),
-      btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
-    ]),
-  );
+  tab = t;
+  here = () => home(tab);
+  if (t === "battle") screen("home hm-screen", battleTab({ next: nextBattle(), play: () => playLevel(nextLevel()), map: () => campaign(), settings: settingsSheet }));
+  else if (t === "modes") screen("home hm-screen hm-modes-screen", modesTab(modeCards(), settingsSheet));
+  else if (t === "shop") { markShopSeen(); screen("shop-screen", header("Shop", title, shopCounters()), shopView(starter, gemShop)); } // [store] counters, Starter Pack, chests mount, gem packs, coin bundles
+  else if (t === "army") barracksScreen({ app, back: title, shop: () => home("shop", -1) }); // [progression]
+  else passTab();
+  const page = app.querySelector<HTMLElement>(":scope > .screen:last-of-type");
+  if (page) {
+    page.classList.add("tabbed", `tab-${t}`);
+    if (dir) page.classList.add(dir > 0 ? "tab-in-r" : "tab-in-l");
+    swipeTabs(page, (d) => { const n = neighbour(tab, d); if (n && !sheetEl) { sfx("tap"); home(n, d); } });
+  }
+  app.append(tabBar(t, tabBadges(), (n) => home(n, TABS.indexOf(n) > TABS.indexOf(tab) ? 1 : -1)));
 }
+
+/** The next campaign level to play (the first reached and uncleared one), or the last open one when all are cleared. */
+const nextLevel = () => LEVELS.find((l) => reached(l.id) && !load().campaign[l.id]) ?? [...LEVELS].reverse().find((l) => unlocked(l.id)) ?? LEVELS[0];
+function nextBattle() {
+  const l = nextLevel();
+  return { id: l.id, of: LEVELS.length, name: l.name, act: l.act, actName: ACTS[l.act - 1] ?? "", replay: !!load().campaign[l.id] };
+}
+
+/** Badges: Army counts troops ready to level up; Shop dots until today's deals are seen; Modes dots for a fresh Daily;
+ *  Battle counts chests ready to open (slots, the free chest, the crown chest). */
+function tabBadges(): Badges {
+  const c = chests(), now = gameNow();
+  const ready = c.slots.filter((ch) => ch && stateOf(ch, now) === "ready").length
+    + (freeBanked({ ...c } as never, now) > 0 ? 1 : 0) + (crownReady({ ...c, crown: { ...c.crown } } as never, localDay()) ? 1 : 0);
+  return { army: readyCount(), shop: !shopSeenToday(), modes: canScore(load().daily, today()), battle: ready };
+}
+const SHOP_SEEN = "muster.home.shopSeen";
+const shopSeenToday = () => { try { return localStorage.getItem(SHOP_SEEN) === localDay(); } catch { return true; } };
+const markShopSeen = () => { try { localStorage.setItem(SHOP_SEEN, localDay()); } catch { /* private mode */ } };
+/** Badges follow the wallet, the collection and the chests while the bar is up (an upgrade, a chest opening...). */
+const refreshBar = () => { const bar = app.querySelector(":scope > .tb-bar"); if (bar) bar.replaceWith(tabBar(tab, tabBadges(), (n) => home(n, TABS.indexOf(n) > TABS.indexOf(tab) ? 1 : -1))); };
+onWalletChange(refreshBar); onCollectionChange(refreshBar); onChestsChange(refreshBar);
+
+/** The Modes tab's cards. Each opens the mode's own screen; its back button returns here. */
+function modeCards(): ModeCard[] {
+  const s = load(), d = s.daily, k = today();
+  const streak = streakOn(d, k), fresh = canScore(d, k);
+  const pz = Object.keys(s.puzzles).length, pzStars = Object.values(s.puzzles).reduce((a, b) => a + b, 0);
+  const td = bastionStars();
+  return [
+    { id: "daily", name: "Daily", line: fresh ? "A new board for everyone today" : `Next board in ${untilTomorrow()}`, stat: flameChip(streak), art: "/maps/sky.jpg", dot: fresh, open: daily },
+    { id: "gauntlet", name: "Gauntlet", line: "Rival after rival, one health pool", stat: s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless", art: "/maps/ash.jpg", open: gauntlet },
+    { id: "puzzles", name: "Breakpoint", line: "Win with the gold you're given", stat: starChip(pzStars, PUZZLES.length * 3), progress: pz / PUZZLES.length, art: "/maps/frozen.jpg", open: puzzles },
+    { id: "skirmish", name: "Skirmish", line: "Tune a rival AI and fight it", stat: "AI lab", art: "/arenas/act5.jpg", open: skirmish },
+    // [td] hook: Bastion, the tower-defence mode (src/ui/td.ts). Free, like every mode.
+    { id: "bastion", name: "Bastion", line: "Hold the road, tower by tower", stat: starChip(td.got, td.of), art: "/td/fords_0.webp", open: () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); } },
+  ];
+}
+/** Bastion's stars, read from its own save (src/ui/td.ts, key muster.td.v1) so td.ts stays a lazy chunk. */
+function bastionStars() {
+  let got = 0;
+  try { const r = JSON.parse(localStorage.getItem("muster.td.v1") ?? "null"); for (const v of Object.values<number>(r?.stars ?? {})) got += v; } catch { /* fresh */ }
+  return { got, of: 2 * 3 };
+}
+
+/** The settings gear: Sound, Haptics, battle Speed. */
+function settingsSheet() {
+  const st = load().settings;
+  sheet(el("div", { class: "hm-settings-wrap" }, [
+    settingsBody({
+      sound: st.sound, haptics: st.haptics, speed: st.speed || 1,
+      setSound: (on) => { save((x) => { x.settings.sound = on; }); setSound(on); },
+      setHaptics: (on) => { save((x) => { x.settings.haptics = on; }); setHaptics(on); },
+      setSpeed: (n) => save((x) => { x.settings.speed = n; }),
+    }),
+    btn("Done", "primary", closeSheet),
+  ]));
+}
+
+// ---------------------------------------------------------------- [home] PASS TAB: the lead swaps in the War Pass here
+// At merge, replace this body with the War Pass screen from src/ui/pass.ts, e.g.:
+//   passScreen(app, { back: title, shop: () => home("shop", -1) });
+// It should append one `.screen` to `app` (home() then adds the tab bar and swipe, and hides a `.screen-head > .back`).
+function passTab() {
+  screen("pass-soon", el("div", { class: "hm-pass" }, [
+    tabIcon("pass", "hm-pass-ico"),
+    ribbon("War Pass", "gold"),
+    el("p", { class: "hm-pass-lead" }, ["Coming soon"]),
+    el("p", { class: "hm-pass-line" }, ["A season of rewards for every battle you fight: chests, coins, gems and banners."]),
+    el("div", { class: "hm-pass-teaser", "aria-hidden": "true" }, (["wood", "iron", "gilded", "royal"] as const).map((k, i) => el("span", { class: `hm-pass-tier ${i === 3 ? "top" : ""}` }, [chestArt(k), el("small", {}, [`Tier ${(i + 1) * 5}`])]))),
+  ]));
+}
+// ================================================================ [/home]
 
 // ---------------------------------------------------------------- campaign
 /** Reached in the campaign: the first level, or the one before it cleared. */
@@ -441,12 +511,6 @@ function boonPick(r: GauntletRun) {
 // ---------------------------------------------------------------- daily challenge
 /** Today's day key: the device's local calendar day. */
 const today = () => dateKey(new Date());
-function dailyTag() {
-  const d = load().daily, k = today();
-  const streak = streakOn(d, k);
-  if (canScore(d, k)) return streak ? `streak ${streak} · new` : "new board";
-  return `streak ${streak} · done`;
-}
 const num = (n: number) => n.toLocaleString("en");
 function untilTomorrow() {
   const now = new Date();
@@ -582,21 +646,13 @@ function playSkirmish(lab: Lab) {
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 // ---------------------------------------------------------------- shop
-/** `back` is where the Shop's back button goes: the title, or the screen that opened it (the Barracks' "Get coins"). */
-function shopScreen(back: () => void = title) {
-  clear();
-  here = () => shopScreen(back);
-  screen("shop-screen", header("Shop", back, shopCounters()), shopView(starter, gemShop)); // [store] counters, Starter Pack, chests mount, gem packs, coin bundles
-}
+/** [home] The Shop is a tab now. `back` is kept for older callers; the tab bar is the way out. */
+function shopScreen(_back?: () => void) { home("shop"); }
 
 // ---------------------------------------------------------------- barracks
 // [progression] The Barracks is now the Army (src/ui/army.ts via the barracks.ts alias): the card collection, upgrades
-// with cards + coins, the commander level, "Get coins" to the Shop. The title button reads "Army".
-function barracks() {
-  clear();
-  here = barracks;
-  barracksScreen({ app, back: title, shop: () => shopScreen(barracks) });
-}
+// with cards + coins, the commander level, "Get coins" to the Shop. [home] It is the Army tab.
+function barracks() { home("army"); }
 
 // ---------------------------------------------------------------- showcase (debug / store shots)
 function showcase(n: number) {
@@ -673,6 +729,9 @@ async function boot() {
   if (q.has("daily")) return daily();
   if (q.has("barracks") || q.has("army")) return barracks(); // [progression]
   if (q.has("shop")) return shopScreen();
+  // [home] ?tab=shop|army|battle|modes|pass opens a tab; ?settings opens the settings sheet over Battle.
+  if (q.has("tab") && (TABS as readonly string[]).includes(q.get("tab")!)) return home(q.get("tab") as Tab);
+  if (q.has("settings")) { home("battle"); return settingsSheet(); }
   // [td] hook: ?td opens Bastion's map select, ?td=meadow|fords starts a run.
   if (q.has("td")) return void import("./ui/td").then((m) => (q.get("td") ? m.playBastion(app, q.get("td")!, title) : m.bastionMenu(app, title)));
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }

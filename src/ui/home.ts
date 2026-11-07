@@ -1,0 +1,130 @@
+// The home screen's tab bodies: the Battle tab (slim top bar, key art, the big Battle button, the chest rack), the
+// Modes tab (one illustrated card per mode) and the settings sheet. main.ts owns navigation and passes the actions in.
+import "./home.css";
+import { sfx, unlockAudio } from "../audio/sfx";
+import { MAX_COMMANDER } from "../progression/economy";
+import { commanderBar } from "../progression/troops";
+import { chestBar } from "./chests";
+import { currencyPill } from "./currency";
+import { el, stars } from "./dom";
+import { icon } from "./kit";
+
+function tapper<T extends HTMLElement>(b: T, fn: () => void): T {
+  b.addEventListener("click", () => { unlockAudio(); sfx("tap"); fn(); });
+  return b;
+}
+
+const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M10.2 1.5h3.6l.6 3a7.6 7.6 0 0 1 2 1.2l2.9-1 1.8 3.1-2.3 2a7.6 7.6 0 0 1 0 2.4l2.3 2-1.8 3.1-2.9-1a7.6 7.6 0 0 1-2 1.2l-.6 3h-3.6l-.6-3a7.6 7.6 0 0 1-2-1.2l-2.9 1-1.8-3.1 2.3-2a7.6 7.6 0 0 1 0-2.4l-2.3-2 1.8-3.1 2.9 1a7.6 7.6 0 0 1 2-1.2zM12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2z"/></svg>';
+const MAP = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M2 5.5 8 3l8 2.5L22 3v15.5L16 21l-8-2.5L2 21z" opacity=".35"/><path d="M2 5.5 8 3v15.5L2 21zM16 5.5 22 3v15.5L16 21z"/><circle cx="17.5" cy="9" r="2.2" fill="#e8553d"/></svg>';
+
+/** The slim top bar: commander level with XP, coins, gems, the settings gear. */
+export function homeTopBar(onSettings: () => void): HTMLElement {
+  const b = commanderBar();
+  const pct = b.span ? Math.min(100, (100 * b.into) / b.span) : 100;
+  const gear = tapper(el("button", { class: "icon-btn hm-gear", "aria-label": "Settings" }), onSettings);
+  gear.innerHTML = GEAR;
+  return el("div", { class: "hm-top" }, [
+    el("div", { class: "hm-cmd", role: "status", "aria-label": `Commander level ${b.level}` }, [
+      el("span", { class: "hm-cmd-lv" }, [String(b.level)]),
+      el("span", { class: "hm-cmd-xp" }, [el("i", { style: `width:${pct}%` }), el("small", {}, [b.level >= MAX_COMMANDER ? "max" : `${b.into}/${b.span}`])]),
+    ]),
+    el("div", { class: "hm-cur" }, [currencyPill("coins"), currencyPill("gems")]),
+    gear,
+  ]);
+}
+
+export interface BattleTabOpts {
+  /** The next campaign level: name, act, act name, and whether everything is already cleared. */
+  next: { id: number; of: number; name: string; act: number; actName: string; replay: boolean };
+  play: () => void;
+  map: () => void;
+  settings: () => void;
+}
+
+/** The Battle tab: the key art has the room; the Battle button, map button and chest rack sit low, over the meadow. */
+export function battleTab(o: BattleTabOpts): HTMLElement {
+  const n = o.next;
+  const play = tapper(el("button", { class: "btn primary hm-play", "aria-label": `Battle: ${n.name}` }, [
+    el("span", { class: "hm-play-word" }, [n.replay ? "Replay" : "Battle"]),
+    el("small", { class: "hm-play-lv" }, [`Act ${n.act} · ${n.name}`]),
+  ]), o.play);
+  const map = tapper(el("button", { class: "btn hm-map", "aria-label": "Campaign map" }), o.map);
+  map.innerHTML = MAP;
+  map.append(el("b", {}, ["Map"]));
+  const rack = el("div", { class: "hm-rack" }, [chestBar()]);
+  return el("div", { class: "hm-battle" }, [
+    homeTopBar(o.settings),
+    el("div", { class: "hm-stage" }, [
+      el("div", { class: "hm-arena" }, [el("small", {}, [`Level ${n.id} of ${n.of}`]), el("b", {}, [n.actName])]),
+    ]),
+    el("div", { class: "hm-low" }, [
+      el("div", { class: "hm-go" }, [play, map]),
+      rack,
+    ]),
+  ]);
+}
+
+export interface ModeCard {
+  id: "daily" | "gauntlet" | "puzzles" | "skirmish" | "bastion";
+  name: string;
+  line: string;
+  /** The stat chip, e.g. "streak 3" or "best 4". */
+  stat: Node | string;
+  /** 0..1 for a progress bar under the stat, if any. */
+  progress?: number;
+  art: string;
+  dot?: boolean;
+  open: () => void;
+}
+
+/** The Modes tab: a header and one big illustrated card per mode. */
+export function modesTab(cards: ModeCard[], settings: () => void): HTMLElement {
+  return el("div", { class: "hm-modes" }, [
+    homeTopBar(settings),
+    el("h1", { class: "hm-modes-h" }, ["Modes"]),
+    el("div", { class: "hm-cards" }, cards.map((c, i) => tapper(el("button", {
+      class: `hm-card ${c.id}-btn mode-${c.id} ${c.dot ? "has-dot" : ""}`, style: `--art:url(${c.art});animation-delay:${i * 40}ms`, "aria-label": c.name,
+    }, [
+      el("span", { class: "hm-card-art" }),
+      el("span", { class: "hm-card-body" }, [
+        el("b", { class: "hm-card-name" }, [c.name]),
+        el("small", { class: "hm-card-line" }, [c.line]),
+      ]),
+      el("span", { class: "hm-card-stat" }, [c.stat, ...(c.progress !== undefined ? [el("i", { class: "hm-card-bar" }, [el("i", { style: `width:${Math.round(c.progress * 100)}%` })])] : [])]),
+      ...(c.dot ? [el("i", { class: "tb-dot" })] : []),
+    ]), c.open))),
+  ]);
+}
+
+/** A star count chip (Bastion, Breakpoint). */
+export const starChip = (got: number, of: number) => el("span", { class: "hm-stars" }, [stars(1, 1), `${got}/${of}`]);
+/** A flame chip (Daily streak). */
+export const flameChip = (n: number) => el("span", { class: "hm-flame" }, [icon("flame"), String(n)]);
+
+export interface SettingsOpts {
+  sound: boolean; haptics: boolean; speed: number;
+  setSound: (on: boolean) => void; setHaptics: (on: boolean) => void; setSpeed: (x: number) => void;
+}
+
+/** The settings sheet body: Sound and Haptics switches, battle Speed (1x, 2x, 3x). */
+export function settingsBody(o: SettingsOpts): HTMLElement {
+  const sw = (label: string, on: boolean, set: (v: boolean) => void) => {
+    const b = el("button", { class: `btn ghost toggle hm-set-${label.toLowerCase()} ${on ? "on" : ""}`, role: "switch", "aria-checked": String(on) }, [
+      el("span", {}, [label]), el("span", { class: "switch" }, [el("b")]),
+    ]);
+    return tapper(b, () => { on = !on; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); set(on); });
+  };
+  const speeds = el("div", { class: "hm-speed", role: "radiogroup", "aria-label": "Battle speed" }, [1, 2, 3].map((x) => {
+    const c = el("button", { class: `chip ${o.speed === x ? "on" : ""}`, role: "radio", "aria-checked": String(o.speed === x) }, [`${x}×`]);
+    return tapper(c, () => {
+      speeds.querySelectorAll(".chip").forEach((k, i) => { k.classList.toggle("on", i + 1 === x); k.setAttribute("aria-checked", String(i + 1 === x)); });
+      o.setSpeed(x);
+    });
+  }));
+  return el("div", { class: "hm-settings" }, [
+    el("h2", {}, ["Settings"]),
+    sw("Sound", o.sound, o.setSound),
+    sw("Haptics", o.haptics, o.setHaptics),
+    el("div", { class: "hm-set-row" }, [el("span", {}, ["Battle speed"]), speeds]),
+  ]);
+}
