@@ -12,7 +12,6 @@ const puzzles = Object.fromEntries(Array.from({ length: 5 }, (_, i) => [i + 1, 2
 // A free player a few days in: rewards for Acts 1-2 already paid, some coins from play.
 const wallet = (gems, coins = 640) => ({ coins, gems, earned: { coins, gems }, spent: { coins: 0, gems: 0 }, txIds: [] });
 const player = (gems, extra = {}) => ({ settings: { sound: false, haptics: false, speed: 1 }, campaign, puzzles, gauntlet: { best: 0, runs: 0 }, seen: [], wallet: wallet(gems), ...extra });
-const paid = (s) => ({ ...s, rewards: { claimed: ["*"] } });
 
 const browser = await chromium.launch();
 const errors = [];
@@ -59,5 +58,19 @@ await shots(player(120), { owned: ["co.inflect.muster.fullarmy"], open: [] }, [[
 const fresh = { ...player(35), campaign: Object.fromEntries(Array.from({ length: 5 }, (_, i) => [i + 1, 3])) };
 await shots(fresh, null, [["result-gem-reward", "?gemdemo=reward", [{ wait: 1800 }]]]);
 await shots(player(120, { store: { fullArmy: true, source: "purchase", at: 1 } }), { owned: ["co.inflect.muster.fullarmy"], open: [] }, [["gauntlet-rally", "?gemdemo=rally", [{ wait: 900 }]]]);
+// The App Store Connect review screenshot for the gem packs (store/IAP.md section 4): 1320x2868, the Gems section.
+{
+  const ctx = await browser.newContext({ viewport: { width: 440, height: 956 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  await ctx.addInitScript((s) => { localStorage.setItem("muster.save.v1", JSON.stringify(s)); localStorage.removeItem("muster.mockstore.v1"); }, player(120));
+  const page = await ctx.newPage();
+  await page.goto(base + "?shop");
+  await page.waitForTimeout(1600);
+  await page.evaluate(() => document.querySelector(".gem-section")?.scrollIntoView({ block: "start" }));
+  await page.evaluate(() => document.querySelector(".screen")?.scrollBy(0, -80));
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: "store/screenshots/iap-gems-review.png" });
+  console.log("shot store/screenshots/iap-gems-review.png");
+  await ctx.close();
+}
 console.log(JSON.stringify({ errors }));
 await browser.close();

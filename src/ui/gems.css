@@ -24,7 +24,8 @@
 
 /* ---- Shop */
 .shop-screen .gem-shop { width: min(440px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
-.gem-shop > .shop-cur { position: sticky; top: calc(var(--st) + 58px); z-index: 2; margin: -6px 0 -4px; }
+.screen-head > .cur-bar.shop-cur { flex: none; gap: 6px; }
+.shop-cur .cur-pill { min-width: 0; height: 30px; padding-right: 10px; }
 .gem-shop .shop-offer.owned .shop-heroes, .gem-shop .shop-offer.owned .shop-perks, .gem-shop .shop-offer.owned .shop-pitch { display: none; }
 .gem-section { margin-top: 20px; padding-top: 30px; gap: 12px; }
 .gem-section > .ribbon { margin-top: -48px; }

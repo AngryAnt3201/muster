@@ -25,7 +25,7 @@ import { settleRewards } from "./economy/rewards";
 import { creditPurchase } from "./economy/wallet";
 import { GemShop } from "./store/gems";
 import { currencyBar } from "./ui/currency";
-import { rallyOffer, shopView, showRewards } from "./ui/gemshop";
+import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -568,7 +568,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 // ---------------------------------------------------------------- shop / paywall
 function shopScreen() {
   clear();
-  screen("shop-screen", header("Shop", title), shopView(store, gemShop)); // [gems] Full Army, gem packs, coin bundles
+  screen("shop-screen", header("Shop", title, shopCounters()), shopView(store, gemShop)); // [gems] counters, Full Army, gem packs, coin bundles
 }
 
 /** The Full Army offer as a sheet over the current screen (gates open it); redraws the screen once it's owned. */

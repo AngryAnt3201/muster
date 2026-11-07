@@ -243,3 +243,30 @@ describe("gem sinks", () => {
     expect(canRally({ hp: 50, maxHp: 400, over: false })).toBe(false);
   });
 });
+
+describe("gem packs in the App Store Connect copy", () => {
+  const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
+  const meta = JSON.parse(read("store/metadata.json"));
+  it("lists every pack with the app's ids and gem amounts, inside Apple's limits", () => {
+    expect(meta.gemPacks.type).toBe("Consumable");
+    expect(meta.gemPacks.packs.map((p: { productId: string }) => p.productId)).toEqual(GEM_PACKS.map((p) => p.id));
+    for (const [i, g] of meta.gemPacks.packs.entries()) {
+      expect(g.gems).toBe(GEM_PACKS[i].gems);
+      expect(g.price).toBe(`USD ${GEM_PACKS[i].usd}`);
+      expect(g.referenceName.length).toBeLessThanOrEqual(64);
+      expect(g.displayName.length).toBeLessThanOrEqual(30);
+      expect(g.description.length).toBeLessThanOrEqual(45);
+      expect(g.description).not.toMatch(/\$|USD|\d+\.\d\d/);
+    }
+  });
+  it("is written into store/IAP.md and says Restore covers the Full Army only", () => {
+    const md = read("store/IAP.md");
+    for (const g of meta.gemPacks.packs) for (const v of [g.productId, g.referenceName, g.displayName, g.description]) expect(md).toContain(v);
+    expect(md).toMatch(/Restore Purchases does not bring gems back/);
+    expect(meta.reviewNotes).toMatch(/consumables are used up and cannot be restored/);
+  });
+  it("still promises no ads, no tracking and no random rewards", () => {
+    expect(meta.description).toMatch(/no ads, no tracking/i);
+    expect(meta.description).toMatch(/no loot boxes, no random rewards/);
+  });
+});

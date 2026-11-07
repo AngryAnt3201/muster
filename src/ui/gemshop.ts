@@ -25,11 +25,12 @@ function button(label: string | Node, cls: string, fn: () => void) {
 /** Bigger packs show a bigger pile. */
 const pile = (i: number) => el("span", { class: `gem-pile p${i}` }, Array.from({ length: Math.min(5, i + 1) }, (_, k) => gemIcon(`g${k}`)));
 
+/** The coin and gem counters for the Shop header (the fly-ins land on these). */
+export const shopCounters = () => currencyBar("shop-cur");
+const counter = (c: "gems" | "coins") => document.querySelector<HTMLElement>(`.shop-cur .cur-${c}`) ?? document.createElement("span");
+
 /** Everything under the Shop header. */
 export function shopView(store: StoreController, gems: GemShop) {
-  const bar = currencyBar("shop-cur");
-  const gemPill = bar.querySelector<HTMLElement>(".cur-gems")!;
-  const coinPill = bar.querySelector<HTMLElement>(".cur-coins")!;
   const status = el("p", { class: "gem-status", role: "status", "aria-live": "polite" });
   const say = (text: string, tone: "" | "warn" | "good" = "") => { status.textContent = text; status.className = `gem-status ${tone}`; };
   let busy = false;
@@ -89,7 +90,7 @@ export function shopView(store: StoreController, gems: GemShop) {
       say(`+${fmt(n)} ${GEM_NAME}. Thank you!`, "good");
       buzz("success");
       c.card.classList.remove("gem-pop"); void c.card.offsetWidth; c.card.classList.add("gem-pop");
-      void flyInto(c.card.querySelector(".gem-pile")!, gemPill, "gems", n);
+      void flyInto(c.card.querySelector(".gem-pile")!, counter("gems"), "gems", n);
       refreshCoins();
     } else if (r.status === "pending") say(`Waiting for approval. The ${GEM_NAME.toLowerCase()} arrive by themselves once it goes through.`);
     else if (r.status === "cancelled") say("");
@@ -101,7 +102,7 @@ export function shopView(store: StoreController, gems: GemShop) {
     if (!grid.isConnected) { offCredit(); return; }
     say(`+${fmt(cr.gems)} ${GEM_NAME} arrived. Thank you!`, "good");
     const card = cards.get(cr.productId)?.card ?? grid;
-    void flyInto(card, gemPill, "gems", cr.gems);
+    void flyInto(card, counter("gems"), "gems", cr.gems);
     refreshCoins();
   });
 
@@ -112,7 +113,7 @@ export function shopView(store: StoreController, gems: GemShop) {
       earn("coins", b.coins, `bundle:${b.id}`);
       buzz("light");
       say(`+${fmt(b.coins)} coins.`, "good");
-      void flyInto(row, coinPill, "coins", b.coins);
+      void flyInto(row, counter("coins"), "coins", b.coins);
       refreshCoins();
     });
     const row = el("div", { class: "coin-row", "data-bundle": b.id }, [
@@ -127,7 +128,6 @@ export function shopView(store: StoreController, gems: GemShop) {
 
   load();
   return el("div", { class: "gem-shop" }, [
-    bar,
     fullArmyOffer(store),
     el("section", { class: "gem-section panel" }, [
       ribbon(GEM_NAME, "gem-ribbon"),

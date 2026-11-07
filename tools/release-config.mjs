@@ -92,6 +92,7 @@ const counts = contentCounts();
 console.log(`  counts from src/core: ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(", ")}`);
 const fill = (s) => fillCounts((s ?? "").replaceAll("{{name}}", app.storeName), counts);
 const iap = meta.inAppPurchase;
+const gems = meta.gemPacks;
 const fields = {
   name: [meta.name, 30],
   subtitle: [meta.subtitle, 30],
@@ -105,6 +106,12 @@ const fields = {
     "inAppPurchase.displayName": [iap.displayName, 30],
     "inAppPurchase.description": [iap.description, 45],
     "inAppPurchase.reviewNotes": [iap.reviewNotes, 4000],
+    ...(gems ? Object.fromEntries(gems.packs.flatMap((g) => [
+      [`gemPacks.${g.productId}.referenceName`, [g.referenceName, 64]],
+      [`gemPacks.${g.productId}.displayName`, [g.displayName, 30]],
+      [`gemPacks.${g.productId}.description`, [g.description, 45]],
+    ])) : {}),
+    ...(gems ? { "gemPacks.reviewNotes": [gems.reviewNotes, 4000] } : {}),
   } : {}),
 };
 for (const [k, [v, max]] of Object.entries(fields)) {
@@ -213,7 +220,9 @@ ${meta.ageRating._why}
 ${iap ? `## In-app purchase
 
 One ${iap.type.toLowerCase()}: **${iap.displayName}** (\`${iap.productId}\`), ${iap.price}. Every field to enter in App Store Connect is in \`store/IAP.md\`.
-
+${gems ? `
+Plus ${gems.packs.length} consumable gem packs (\`${gems.packs[0].productId.replace(/\.[^.]+$/, ".*")}\`): ${gems.packs.map((g) => `${g.displayName} ${g.price.replace("USD ", "US$")}`).join(", ")}. Also in \`store/IAP.md\` (section 4). Restore Purchases covers the Full Army only; consumables can't be restored.
+` : ""}
 ` : ""}## App Privacy
 
 **${meta.appPrivacy.label}.** ${meta.appPrivacy.answer} ${meta.appPrivacy.tracking}
@@ -242,9 +251,9 @@ write("store/LISTING.md", md);
 if (iap) {
   const shot = join(root, iap.reviewScreenshot);
   const shotNote = existsSync(shot)
-    ? `\`${iap.reviewScreenshot}\` (1320 x 2868, the Shop screen).`
+    ? `\`${iap.reviewScreenshot}\` (the Shop screen with the Full Army price, 1320x2868). Re-shoot with \`node tools/store-shots.mjs --only=iap-review\` while \`npm run dev\` runs.`
     : `\`${iap.reviewScreenshot}\`: **not shot yet.** With the Shop screen in the build, run \`npm run dev\` in one terminal, then \`node tools/store-shots.mjs --only=iap-review\`. Any iPhone screenshot of the Shop screen with the price showing also works.`;
-  write("store/IAP.md", `# ${meta.name}: Full Army in-app purchase
+  write("store/IAP.md", `# ${meta.name}: in-app purchases (Full Army and gem packs)
 
 Generated from \`store/metadata.json\` (\`inAppPurchase\`) by \`npm run release:config\`. Edit that, not this file.
 What the player gets: the free download has Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles.
@@ -298,7 +307,49 @@ Then submit the version as usual (\`store/RELEASE-CHECKLIST.md\` step 7). The pu
 - **Simulator, no Apple account needed:** \`npm run ios:open\`, pick an iPhone simulator, press Run. The shared App scheme already uses \`ios/App/Muster.storekit\` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and Restore all work locally. Debug > StoreKit > Manage Transactions refunds or deletes the test purchase. The plugin's own StoreKit tests run from \`ios/MusterStore/TestHost\` (command at the top of its project.yml).
 - **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy Full Army from a TestFlight or Xcode build. Sandbox purchases are free.
 - **Restore:** delete the app, reinstall, open Shop > Restore Purchases. Full Army comes back. (Game progress does not; it lives on the device.)
-`);
+${gems ? gemSection() : ""}`);
+}
+
+function gemSection() {
+  const shot = existsSync(join(root, gems.reviewScreenshot))
+    ? `\`${gems.reviewScreenshot}\` (the Shop's Gems section with prices, 1320x2868). Re-shoot with \`PORT=<port> node tools/gems-shots.mjs\` while the dev server runs.`
+    : `\`${gems.reviewScreenshot}\`: **not shot yet.** Run \`PORT=<port> node tools/gems-shots.mjs\` while the dev server runs.`;
+  return `
+## 4. Gem packs (five consumables, 15 min)
+
+Gems are the optional premium currency: free players earn them by playing, and these packs sell them.
+The app decides how many gems each product id gives (\`src/economy/gems.ts\`) and shows StoreKit's own price, so prices can change here without a new build.
+Each pack is credited once per App Store transaction and only then finished, so an interrupted purchase is credited on the next launch.
+**Restore Purchases does not bring gems back.** Consumables are used up; the Shop says so under the packs.
+
+For each row: Apps > ${meta.name} > Monetization > **In-App Purchases** > **+** > Type **${gems.type}**, then the Reference Name and Product ID, **Create**, then fill the page.
+
+| Product ID | Reference Name | Price (US base) | Display Name | Description |
+| --- | --- | --- | --- | --- |
+${gems.packs.map((g) => `| \`${g.productId}\` | \`${g.referenceName}\` (${count(g.referenceName, 64)}) | ${g.price} | \`${g.displayName}\` (${count(g.displayName, 30)}) | \`${g.description}\` (${count(g.description, 45)}) |`).join("\n")}
+
+The same on every pack:
+
+| Section | Field | Enter |
+| --- | --- | --- |
+| Availability | Countries or Regions | ${gems.availability} |
+| Price Schedule | Base price | the row's price; let Apple set the other storefronts from it |
+| App Store Localization (English (U.S.)) | Display Name, Description | the row's values |
+| Family Sharing | | ${gems.familySharing} |
+| Tax Category | | ${gems.taxCategory} |
+| Review Information | Screenshot | ${shot} The same image works for all five. |
+| Review Information | Review Notes | the block below |
+| Promotional Image | | ${gems.promotionalImage} |
+
+Review Notes (same for every pack):
+
+${block(gems.reviewNotes)}
+${count(gems.reviewNotes, 4000)}.
+
+Then on the ${meta.version} version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as Full Army.
+
+Test: the simulator's \`ios/App/Muster.storekit\` already lists the five packs (US$0.99 to US$49.99), so buy, cancel, Ask to Buy and failure all work without an account. Debug > StoreKit > Manage Transactions shows each pack finished once its gems are saved.
+`;
 }
 
 // ---------------------------------------------------------------- site + checklist: rename in place
