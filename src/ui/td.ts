@@ -130,19 +130,19 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
     setTimeout(() => banner.classList.remove("show"), 1900);
   }
 
-  let shown = { wave: -1, gold: -1, hp: -1, phase: "", bonus: -1 };
+  let shown = { wave: -1, gold: -1, hp: -1, phase: "", bonus: -1, secs: -2 };
   function refresh(force = false) {
     if (force || shown.wave !== run.wave) { waveEl.textContent = String(run.wave); shown.wave = run.wave; }
     if (force || shown.gold !== run.gold) { goldEl.textContent = String(run.gold); shown.gold = run.gold; sheetRefresh?.(); }
     if (force || shown.hp !== run.keepHp) { hpFill.style.width = `${(run.keepHp / KEEP_HP) * 100}%`; hpText.textContent = String(run.keepHp); shown.hp = run.keepHp; }
-    const bonus = run.callBonus();
-    if (force || shown.phase !== run.phase || shown.bonus !== bonus) {
-      shown.phase = run.phase; shown.bonus = bonus;
+    const bonus = run.callBonus(), secs = Number.isFinite(run.countdown) ? Math.ceil(run.countdown) : -1;
+    if (force || shown.phase !== run.phase || shown.bonus !== bonus || shown.secs !== secs) {
+      shown.phase = run.phase; shown.bonus = bonus; shown.secs = secs;
       const lbl = callBtn.firstChild as HTMLElement;
       if (run.phase === "build") {
         callBtn.disabled = false;
         const n = run.wave + 1, boss = !!run.waves[run.wave]?.boss;
-        lbl.replaceChildren(el("span", {}, [boss ? "Boss wave" : `Wave ${n}`]), el("small", {}, [run.wave === 0 ? "start" : bonus > 0 ? `now +${bonus}` : "call"]));
+        lbl.replaceChildren(el("span", {}, [boss ? "Boss wave" : `Wave ${n}`]), el("small", {}, [run.wave === 0 ? "start" : bonus > 0 ? `${secs}s · now +${bonus}` : `${secs}s`]));
         callBtn.classList.toggle("ready", run.wave === 0);
       } else {
         callBtn.disabled = true;
@@ -309,7 +309,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
   view.cam.centerOn(run.map.w / 2, run.map.h - 9);
 
   // ---- loop
-  let fpsFrames = 0, fpsT = 0, fps = 60;
+  let fpsFrames = 0, fpsT = 0, fps = 60, lastSound = 0;
   function frame(now: number) {
     if (!alive) return;
     const dt = Math.min(0.1, (now - last) / 1000);
@@ -325,7 +325,14 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
         const ev = run.drain();
         view.absorb(ev);
         for (const e of ev) {
-          if (e.t === "wave") { showBanner(e.boss ? BOSS_NAME : `Wave ${e.n}`, e.boss ? "The boss marches" : `of ${run.waveCount}`, e.boss); sfx("tap"); }
+          if (e.t === "wave") { showBanner(e.boss ? BOSS_NAME : `Wave ${e.n}`, e.boss ? "The boss marches" : `of ${run.waveCount}`, e.boss); sfx(e.boss ? "charge" : "fuse"); }
+          if (e.t === "leak") { sfx("crumble", 0.6); }
+          // A few battle sounds, rate-limited so a big wave never turns into noise.
+          if (now - lastSound > 110) {
+            if (e.t === "boom") { sfx("boom", 0.35); lastSound = now; }
+            else if (e.t === "zap") { sfx("zap", 0.5); lastSound = now; }
+            else if (e.t === "die" && e.enemy) { sfx("down", 0.5); lastSound = now; }
+          }
           if (e.t === "cleared") { coins += COINS_PER_WAVE; earn("coins", COINS_PER_WAVE, `bastion ${mapId} wave ${e.n}`); toast(`Wave ${e.n} held  +${e.bonus} gold`); }
         }
         if ((run.phase as string) === "won" || (run.phase as string) === "lost") { finish(); break; }
