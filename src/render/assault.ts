@@ -67,8 +67,8 @@ export class Assault {
   readonly damage: [number, number];
   /** Assault time of the first blow on each damaged keep (Infinity if it takes none). */
   readonly hitAt: [number, number] = [Infinity, Infinity];
-  /** When the HUD may move on to the next round. */
-  readonly endAt: number;
+  /** When the HUD may move on to the next round (pushed back by `hold` for a commander's defeat). */
+  endAt: number;
   private impacts: { at: number; target: Side; style: Style; x: number; y: number; from: Striker | null }[] = [];
   private fired = new Set<string>();
   private byId = new Map<number, Striker>();
@@ -94,6 +94,12 @@ export class Assault {
     for (const m of this.impacts) this.hitAt[m.target] = Math.min(this.hitAt[m.target], m.at);
     const first = Math.min(...this.hitAt.filter(Number.isFinite), STRIKE_FROM);
     this.endAt = (Number.isFinite(first) ? first : 0) + DRAIN + (o.linger ?? 0.9);
+  }
+
+  /** Keeps the assault (and so the HUD) going at least `secs` more: the board calls it when a keep collapses, so the
+   *  fall and the winner's banner play out before the result. */
+  hold(secs: number) {
+    this.endAt = Math.max(this.endAt, this.t + secs);
   }
 
   /** The first blow of the whole assault (Infinity if no keep takes damage). */
