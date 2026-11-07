@@ -17,13 +17,17 @@ export interface ProgressionSave {
   levels: Levels;
   /** Skirmish coins paid today (for the daily cap). */
   skirmish?: { day: string; coins: number };
+  /** Campaign replay coins paid today (for the daily replay cap). */
+  replay?: { day: string; coins: number };
   /** The one-off coins for campaign clears made before troop levels existed have been paid. */
   legacyPaid?: boolean;
 }
 export const normalizeProgression = (p: Partial<ProgressionSave> | undefined): ProgressionSave => {
   const levels: Levels = {};
   for (const [k, v] of Object.entries(p?.levels ?? {})) if (clampLevel(v) > 1) levels[k as UnitKind] = clampLevel(v);
-  return { levels, ...(p?.skirmish ? { skirmish: p.skirmish } : {}), ...(p?.legacyPaid ? { legacyPaid: true } : {}) };
+  return {
+    levels, ...(p?.skirmish ? { skirmish: p.skirmish } : {}), ...(p?.replay ? { replay: p.replay } : {}), ...(p?.legacyPaid ? { legacyPaid: true } : {}),
+  };
 };
 const prog = (): ProgressionSave => {
   const s = load();
@@ -71,9 +75,15 @@ export function settleLegacyCoins(): number {
 }
 
 /** Call before the campaign's own star save, so a first clear is still known. */
-export function awardCampaign(l: LevelDef, won: boolean, stars: number): Reward {
+export function awardCampaign(l: LevelDef, won: boolean, stars: number, now = new Date()): Reward {
   const c = load().campaign;
-  return pay(campaignReward({ act: l.act, won, stars, prevStars: c[l.id] ?? 0, boss: l.boss, actsClearedBefore: actsCleared(c) }), `campaign ${l.id}`);
+  const day = dateKey(now);
+  const p = prog();
+  const replayEarnedToday = p.replay?.day === day ? p.replay.coins : 0;
+  const prevStars = c[l.id] ?? 0;
+  const r = pay(campaignReward({ act: l.act, won, stars, prevStars, boss: l.boss, actsClearedBefore: actsCleared(c), replayEarnedToday }), `campaign ${l.id}`);
+  if (prevStars > 0 && r.coins > 0) save((s) => { s.progression = normalizeProgression(s.progression); s.progression.replay = { day, coins: replayEarnedToday + r.coins }; });
+  return r;
 }
 export const awardGauntletRival = (stage: number) => pay(gauntletRivalReward(stage), `gauntlet ${stage}`);
 export const awardDaily = (won: boolean, scored: boolean, streak: number) => pay(dailyReward({ won, scored, streak }), "daily");

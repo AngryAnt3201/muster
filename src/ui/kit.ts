@@ -105,22 +105,6 @@ export function gem(cls = "") {
   return g;
 }
 
-/**
- * A currency counter pill for menus and the battle top bar: the icon overhangs the left end, the value sits in the
- * display face. `icon` is "coin", "gem" or any node. Not wired to data; update with `setPill`.
- */
-export function currencyPill(iconKind: "coin" | "gem" | Node, value: number | string, cls = "") {
-  const p = document.createElement("span");
-  const kind = iconKind === "coin" ? "coins" : iconKind === "gem" ? "gems" : "custom";
-  p.className = `cpill ${kind} ${cls}`.trim();
-  const ic = document.createElement("span");
-  ic.className = "cpill-icon";
-  ic.append(iconKind === "coin" ? coin("") : iconKind === "gem" ? gem() : iconKind);
-  const b = document.createElement("b");
-  b.textContent = typeof value === "number" ? value.toLocaleString("en") : value;
-  p.append(ic, b);
-  return p;
-}
 
 /** Changes a currency pill's value; it hops when the number goes up. */
 export function setPill(pill: HTMLElement, value: number | string) {

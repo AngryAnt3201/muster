@@ -58,6 +58,7 @@ Losses pay nothing (no farming by forfeit). The hooks sit on the result screens,
 | Campaign win | 30 + 8 × act (38 in Act 1, 94 in Act 8) |
 | + per star earned in that match | 15 (max 45) |
 | + first clear of a level (once) | 100 + 25 × act (125 in Act 1, 300 in Act 8) |
+| Replays (wins on a level already cleared) | the win and stars above, **capped at 400 a day** across all replays (`REPLAY_DAILY_CAP`). The win is paid before the stars, so the last replay under the cap pays a partial amount. First clears are never capped and don't count toward it |
 | Gauntlet, each rival beaten | 30 + 10 × rival number, max 150 (rival 1 = 40, rival 5 = 80) |
 | Daily, scored attempt | win 200, loss 60, plus 10 × streak (max +100). Practice pays 0 |
 | Skirmish win | (20 + 60 × rival difficulty) × fairness, where fairness = rival hp / your hp, clamped to 0.25-1. **Capped at 300 a day.** Watch mode pays 0 |
@@ -137,12 +138,12 @@ What the table shows:
 
 ## Not done yet / notes
 
-- Campaign replays aren't capped. A replay pays the win and that match's stars again (Act 8, 3 stars: 139 coins), so someone grinding three hours makes about 3,500. If that turns out too generous, the lever is a daily replay cap like Skirmish's 300 (`skirmishReward` shows the pattern).
+- Campaign replays are capped at 400 coins a day (`REPLAY_DAILY_CAP` in `src/progression/economy.ts`, tracked per day in `progression.replay`). Before the cap, a replay paid the win and that match's stars again with no limit (Act 8, 3 stars: 139 coins), so someone grinding three hours made about 3,500. 400 keeps the day-of-play model above whole (three Act 5 replays = 345) and is about three Act 8 replays. The most a grinder now makes in a day outside Gauntlet is about 400 replays + 300 Skirmish + 300 Daily = 1,000, in line with the 1,000-a-day anchor. Gauntlet runs are still uncapped.
 
-- The in-match unit popover (`statsLine` in `src/ui/game.ts`) still shows level 1 base stats. Health bars in battle use the real levelled values.
+- The in-match unit popover shows the unit's real health and damage at its rank and troop level (`unitStats` / `statsLine` in `src/ui/game.ts`) with a "Lv N" badge.
 - Gauntlet rival levels, checked with `tools/gauntlet.ts` (6 runs, strong AI, player at level 1, so the worst case): rivals beaten were 0 0 3 6 15 16 (mean 6.7) without rival levels and 0 0 3 6 14 15 (mean 6.3) with them. The median is 6 both ways, so the effect is mild. That's only 6 runs, so it's a sanity check, not tuning.
-- The coin pill in the Barracks header is local (`coinPill()` in `src/ui/barracks.ts`). Swap it for the HUD kit's pill once that lands.
-- This was already there before my change: on the Gauntlet boon sheet, the "Rival N beaten · health left" kicker sits under the ribbon (the shared `.results .ribbon` negative margin). My coin line goes under the ribbon and isn't affected. Left alone because it's shared CSS.
+- The Barracks header uses the shared currency pill (`currencyPill()` in `src/ui/currency.ts`), the same one as the title and Shop.
+- Fixed: the Gauntlet boon sheet's "Rival N beaten · health left" kicker used to sit under the ribbon (the shared `.results .ribbon` pull-up). The sheet now leads with the ribbon and puts the kicker below it, with a `.boons`-scoped margin, so the shared CSS is untouched.
 
 ## Screens
 

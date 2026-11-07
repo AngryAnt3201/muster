@@ -258,17 +258,6 @@ button { font-family: inherit; color: inherit; }
 @keyframes pillBump { 0% { transform: scale(1); } 40% { transform: scale(1.2); } 100% { transform: scale(1); } }
 @keyframes pillSpend { 0% { transform: scale(1); } 35% { transform: scale(0.88) translateY(2px); } 100% { transform: scale(1); } }
 
-/* Currency pill (coins, gems): an icon that overhangs the left end, value in the display face. currencyPill() in ui/kit.ts. */
-.cpill { position: relative; display: inline-flex; align-items: center; height: 30px; min-width: 74px; padding: 0 11px 0 26px; margin-left: 12px; border-radius: 15px;
-  border: 2.5px solid var(--k-ink); background: linear-gradient(rgba(255,255,255,0.1), rgba(0,0,0,0) 50%), rgba(30,18,10,0.72);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), 0 2px 0 rgba(0,0,0,0.4); font: 400 17px/1 var(--display); color: #fff; text-shadow: var(--ol-s); white-space: nowrap; }
-.cpill > .cpill-icon { position: absolute; left: -12px; top: 50%; width: 34px; height: 34px; margin-top: -17px; display: grid; place-items: center; }
-.cpill > .cpill-icon .coin { width: 30px; height: 30px; border-width: 2.5px; font-size: 0; }
-.cpill > .cpill-icon .gem { width: 32px; height: 32px; }
-.cpill b { font-weight: 400; }
-.cpill.gems b { color: #d6f4ff; }
-.cpill.coins b { color: var(--gold); }
-.cpill.bump { animation: pillBump 0.45s cubic-bezier(.2,1.6,.4,1); }
 .gem { display: inline-block; flex: none; line-height: 0; filter: drop-shadow(0 2px 0 var(--k-ink)); }
 .gem svg { width: 100%; height: 100%; display: block; }
 
@@ -297,6 +286,18 @@ button { font-family: inherit; color: inherit; }
 .in-battle .speed, .in-battle .skip { display: block; }
 .in-battle .reroll, .in-battle .fight { display: none; }
 .in-battle .actions { justify-content: flex-end; }
+/* The fight's troop tally fills the row left of 1× and Skip. */
+.tally { display: none; flex: 1; min-width: 0; height: 54px; align-items: center; justify-content: center; gap: 10px; padding: 0 12px; border-radius: 16px;
+  border: 2.5px solid var(--k-ink); background: rgba(0,0,0,0.42); box-shadow: inset 0 2px 0 rgba(255,255,255,0.08); font: 400 15px/1 var(--display); color: rgba(255,255,255,0.7); text-shadow: var(--ol-s); }
+.in-battle .tally { display: flex; }
+.tally > i { font-style: normal; }
+.tally-side { display: inline-flex; align-items: center; gap: 5px; }
+.tally-side b { font-weight: 400; font-size: 26px; color: #fff; min-width: 1.1em; text-align: center; font-variant-numeric: tabular-nums; }
+.tally-side .icon { font-size: 20px; }
+.tally-side.you .icon { color: var(--tide); }
+.tally-side.foe .icon { color: var(--ember); transform: scaleX(-1); }
+.tally-side.hit b { animation: tallyHit 0.3s ease-out; }
+@keyframes tallyHit { 35% { transform: scale(0.82); color: #ffd7c9; } }
 .mode-watch .reroll, .mode-watch .fight { display: none; }
 .mode-watch .speed { display: block; }
 
@@ -341,6 +342,9 @@ button { font-family: inherit; color: inherit; }
 .pop.rank-4 .pop-rank { color: #b05ad0; }
 .pop.rank-4 { box-shadow: inset 0 0 0 3px #c98516, inset 0 0 0 5px #ffe68a, inset 0 7px 0 rgba(255,255,255,0.22), 0 5px 0 rgba(0,0,0,0.3), 0 0 24px rgba(255,216,74,0.45); }
 .pop-text { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--k-text); }
+.pop .role-line { display: flex; }
+.pop-lv { margin-left: auto; padding: 2px 7px 1px; border-radius: 999px; background: var(--k-ink, #3b2a1a); color: #ffe68a; font: 400 12px/1.2 var(--display); letter-spacing: 0.02em; }
+.pop-stats { margin: -3px 0 9px; padding: 5px 10px; border-radius: 10px; background: var(--k-well); border: 1.5px solid rgba(0,0,0,0.12); font-size: 12.5px; font-weight: 700; line-height: 1.3; color: var(--k-text); text-align: center; }
 .pop-ability, .b-card .pop-ability { margin: 0 0 9px; padding: 7px 10px; border-radius: 10px; background: var(--k-well); border: 1.5px solid rgba(0,0,0,0.12); font-size: 12.5px; font-weight: 600; line-height: 1.3; color: var(--k-text); }
 .pop-ability b { font: 400 14px/1 var(--display); color: #b07216; }
 .pop-ability.on { background: rgba(255,216,74,0.28); border-color: #e9a623; }
@@ -542,6 +546,9 @@ button { font-family: inherit; color: inherit; }
 .panel { display: flex; flex-direction: column; gap: 16px; padding: 20px 18px; border-radius: 22px; }
 .lead { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; color: var(--k-text); }
 .boon-list { display: flex; flex-direction: column; gap: 10px; }
+/* The boon sheet leads with its ribbon (the shared .results pull-up would lift it out of the sheet), then the kicker. */
+.boons > .ribbon:first-child { margin-top: -6px; }
+.boons > .sheet-kicker { margin-top: -2px; text-align: center; }
 .btn.boon { --b: var(--fam-arcane); text-align: left; padding: 12px 16px 13px; }
 .btn.boon > span { display: flex; flex-direction: column; gap: 4px; }
 .btn.boon b { font-weight: 400; font-size: 20px; }
@@ -669,9 +676,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 .daily-rival .tag { flex: none; }
 .daily-draft { display: flex; flex-direction: column; gap: 6px; }
 .daily-draft > small, .daily-streak-stats span { font-size: 12px; font-weight: 800; color: var(--k-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.daily-draft .roster { justify-content: center; }
-.daily-draft .roster { gap: 5px; padding: 7px; }
-.daily-draft .roster-unit.frame { width: 36px; height: 36px; }
+.daily-draft .roster { display: grid; grid-template-columns: repeat(var(--n, 9), minmax(0, 44px)); justify-content: center; gap: 4px; padding: 6px; }
+.daily-draft .roster-unit.frame { width: 100%; height: auto; aspect-ratio: 1; padding: 1.5px; }
 /* Streak: a flame, the count, and the last seven days lit. */
 .daily-streak { gap: 10px; padding: 12px 14px 12px; }
 .daily-streak-top { display: flex; align-items: center; gap: 10px; }

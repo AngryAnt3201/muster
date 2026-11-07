@@ -99,7 +99,7 @@ function title() {
     ]),
     el("div", { class: "title-foot" }, [
       btn(barracksLabel(), "ghost small", barracks), // [progression] badge when a troop can level up
-      btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, shopScreen),
+      btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, () => shopScreen()),
       btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
     ]),
   );
@@ -421,8 +421,9 @@ function duel() {
 function boonPick(r: GauntletRun) {
   const choices = boonChoices(r);
   sheet(el("div", { class: "boons results" }, [
-    el("div", { class: "sheet-kicker" }, [`Rival ${r.stage - 1} beaten · ${Math.round(r.hp)} health left`]),
+    // Ribbon first, then the kicker: above it, the shared .results ribbon pull-up hid the kicker.
     ribbon("Choose a boon", "gold"),
+    el("div", { class: "sheet-kicker" }, [`Rival ${r.stage - 1} beaten · ${Math.round(r.hp)} health left`]),
     el("div", { class: "boon-list" }, choices.map((b) => btn(el("span", {}, [el("b", {}, [b.name]), el("small", {}, [b.text])]), "boon", () => { takeBoon(r, b.id); closeSheet(); duel(); }))),
   ]), false);
 }
@@ -570,9 +571,11 @@ function playSkirmish(lab: Lab) {
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 // ---------------------------------------------------------------- shop / paywall
-function shopScreen() {
+/** `back` is where the Shop's back button goes: the title, or the screen that opened it (the Barracks' "Get coins"). */
+function shopScreen(back: () => void = title) {
   clear();
-  screen("shop-screen", header("Shop", title, shopCounters()), shopView(store, gemShop)); // [gems] counters, Full Army, gem packs, coin bundles
+  here = () => shopScreen(back);
+  screen("shop-screen", header("Shop", back, shopCounters()), shopView(store, gemShop)); // [gems] counters, Full Army, gem packs, coin bundles
 }
 
 /** The Full Army offer as a sheet over the current screen (gates open it); redraws the screen once it's owned. */
@@ -587,7 +590,8 @@ function paywall() {
 // [progression] The Barracks lives in src/ui/barracks.ts: troop levels, upgrades with coins, "Get coins" to the Shop.
 function barracks() {
   clear();
-  barracksScreen({ app, back: title, shop: shopScreen });
+  here = barracks;
+  barracksScreen({ app, back: title, shop: () => shopScreen(barracks) });
 }
 
 // ---------------------------------------------------------------- showcase (debug / store shots)
