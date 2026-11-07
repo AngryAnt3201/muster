@@ -2,6 +2,7 @@
 // (<div id="shop-chests">, filled by the chests work), then gem packs (App Store consumables), then coin bundles
 // bought with gems. Nothing sold here unlocks content: every level and mode is free, purchases speed things up. Plus the two small gem moments elsewhere: the free-gem strip on result screens and the
 // Gauntlet Rally. Prices are always StoreKit's displayPrice; gem amounts come from src/economy/gems.ts.
+import { chestShop } from "./chests";
 import { sfx, unlockAudio } from "../audio/sfx";
 import {
   COIN_BUNDLES, GEM_NAME, GEM_PACKS, RALLY_GEMS, applyRally, bestValue, canRally, coinBonus, packBonus, type RallyRun, type Reward,
@@ -132,9 +133,8 @@ export function shopView(starter: StarterShop, gems: GemShop) {
   const offer = starterOffer(starter, { onGone: refreshCoins });
   return el("div", { class: "gem-shop" }, [
     ...(offer ? [offer] : []),
-    // [chests] Mount point for chest offers and daily card offers (another agent fills it; the lead wires it in).
-    // Empty until then, and takes no space.
-    el("div", { id: "shop-chests", class: "shop-chests" }),
+    // [chests] Chest offers for gems (with odds) and the daily card deals for coins.
+    el("div", { id: "shop-chests", class: "shop-chests" }, [chestShop()]),
     el("section", { class: "gem-section panel" }, [
       ribbon(GEM_NAME, "gem-ribbon"),
       el("p", { class: "gem-lead" }, [`Spend ${GEM_NAME.toLowerCase()} on coins for troop upgrades or a Gauntlet Rally. Every Daily win, boss and three-star clear earns them free.`]),

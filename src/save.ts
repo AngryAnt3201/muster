@@ -5,6 +5,7 @@ import type { WalletSave } from "./economy/wallet";
 import type { RewardSave } from "./economy/gems";
 import type { ProgressionSave } from "./progression/troops";
 import type { CollectionSave } from "./progression/collection";
+import type { ChestSave } from "./progression/chests";
 
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
@@ -24,6 +25,8 @@ export interface Save {
   progression?: ProgressionSave;
   /** Units found and spare cards held (src/progression/collection.ts). */
   collection?: CollectionSave;
+  /** Chest slots, timers, the cycle and the free and crown chests (src/progression/chests.ts). */
+  chests?: ChestSave;
 }
 
 const KEY = "muster.save.v1";
