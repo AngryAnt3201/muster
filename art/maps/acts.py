@@ -1,4 +1,4 @@
-"""The eight campaign act maps: palette, road, terrain and props per act, indexed like ACTS in src/core/campaign.ts.
+"""The ten campaign act maps: palette, road, terrain and props per act, indexed like ACTS in src/core/campaign.ts.
 
 Colours are written for the Sunlit Meadow brightness. render_maps.py shifts them for the active style direction
 (darker and cooler with lanterns lit for dusk, pastel for toy), so the acts stay recognisable in every direction.
@@ -86,5 +86,24 @@ ACTS = [
                   "color": ["#3a9fb6", "#7fd2dc"]},
         "props": [("willow", 22), ("reeds", 46), ("lily", 26), ("lanternpost", 9), ("bush", 16), ("stump", 6), ("flowers", 14)],
         "boss": "lanternhall",
+    },
+    {   # 8: The Saltwind Coast, clifftop heath over a storm sea, gorse and wind-bent pines, the lighthouse on the point
+        "id": "coast",
+        "ground": ["#8fb87a", "#74a064", "#b0d095"], "noise": 0.6,
+        "road": ["#e6d5a8", "#a8926a"],
+        "hills": 1.0, "edge": 1.4,
+        "road_pts": [(0.62, 0.86), (0.40, 0.80), (0.42, 0.70), (0.68, 0.63), (0.70, 0.54), (0.46, 0.47), (0.44, 0.38), (0.62, 0.30), (0.52, 0.22)],
+        "water": {"kind": "coast", "color": ["#2f6f8c", "#5f9fb8"]},
+        "props": [("pine", 22), ("gorse", 22), ("rock", 24), ("seastack", 7), ("house", 3), ("flowers", 18), ("fence", 6)],
+        "boss": "lighthouse",
+    },
+    {   # 9: Crownfall Citadel, the ruined high fortress at dusk: broken walls, toppled pillars, braziers and the fallen crown
+        "id": "citadel",
+        "ground": ["#a0946c", "#82765a", "#bba881"], "noise": 0.6,
+        "road": ["#dcc4a6", "#8f765f"],
+        "hills": 1.4, "edge": 2.4, "relief": True,
+        "road_pts": [(0.38, 0.86), (0.64, 0.80), (0.66, 0.70), (0.36, 0.63), (0.32, 0.54), (0.60, 0.47), (0.66, 0.38), (0.42, 0.31), (0.50, 0.22)],
+        "props": [("ruinpillar", 16), ("wall", 12), ("deadtree", 12), ("rock", 20), ("brazier", 9), ("banner", 6), ("bush", 10)],
+        "boss": "ruinedcitadel",
     },
 ]

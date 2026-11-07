@@ -83,7 +83,24 @@ ACTS = {
                                          rock="#a3a48c", rock_dk="#737660", edge="#5d8a49", plank="#cf9d62", plank_dk="#9a6b3d"),
             border="reeds", trees=("willow", "willow", "reedbed", "broad", "willow"), scatter="pond", obstacle="fenlamp", relief="fen",
             water="#2f97b0", water_lt="#7fd2dc", lantern="#ffcf6b", fg="willows"),
+    9: dict(name="Saltwind Coast", g=dict(grass="#93b97c", grass_dk="#78a066", grass_lt="#b3d199", path="#e6d5a8", path_dk="#bfa877",
+                                          strip="#e4d3a4", strip_dk="#c4b07f", foliage="#5f9468", foliage_dk="#3f7150", moss="#7ea56a",
+                                          rock="#aab2b8", rock_dk="#737f8a", edge="#c9b98c", trunk="#8a6a4c",
+                                          sea="#2f6f8c", sea_dk="#25586f", sea_lt="#4f8fa8"),
+            border="posts", trees=("windpine", "gorse", "crag", "windpine", "gorse"), scatter="driftwood", obstacle="seastack",
+            relief="coast", grade="storm", lantern="#ffe08a",
+            dress=dict(wear=True, clumps="thrift", n_clumps=30, tufts=90, gravel=18, banners=("#e8eef2", "#2f6f8f")), fg="coast"),
+    10: dict(name="Crownfall Citadel", g=dict(grass="#8fa466", grass_dk="#748a50", grass_lt="#adbf80", path="#bfa486", path_dk="#8f765f",
+                                              strip="#8aa062", strip_dk="#6f854c", court="#d8b98f", court_dk="#9a806a", foliage="#6f8048", foliage_dk="#4f5e36",
+                                              rock="#ab9b8a", rock_dk="#776a60", trunk="#5e4a40", lantern="#ffb04d"),
+             court=True, border="ruin", trees=("ruinpillar", "dead", "ruinwall", "broad", "ruinpillar", "broad", "ruinwall", "dead", "broad", "brazier", "broad", "ruinwall"),
+             scatter="rubble", obstacle="brokencolumn",
+             relief="flagstones", stones=("#dcbc94", "#e8cda4", "#c9a884", "#d4b48e", "#bba083"), trim="#e0b050", inlay="#e0b050",
+             grade="dusk", vista="citadel",
+             dress=dict(clumps="rubble", n_clumps=28, cracks=40, banners=("#5a3a6e", "#e0b050")), fg="ruins"),
 }
+COAST_FAR, COAST_RIGHT = -5.0, W + 1.55  # Saltwind Coast: the cliff edges (far side and right side)
+COAST_HEAD = (-7.5, 1.4, -10.0)  # the lighthouse headland: x0, x1, far y
 FG_ROWS = 14  # foreground cells per side: each fades on its own when a unit stands under it
 
 
@@ -225,6 +242,36 @@ def main():
                 wk.box((0.6 * s, 0.6 * s, 0.35 * s), toon("court_dk"), loc=B(x, y, 0.17 * s), bevel=0.04)
                 wk.cyl(0.05 * s, 0.4 * s, toon("trunk"), loc=B(x, y, 0.5 * s))
                 wk.ball(0.36 * s, toon("foliage"), loc=B(x, y, 0.9 * s), subdiv=2)
+            elif kind == "windpine":  # a wind-bent clifftop pine, leaning inland
+                wk.rod(B(x, y, 0.0), B(x - 0.25 * s, y, 0.75 * s), 0.08 * s, toon("trunk"), r2=0.05 * s, seg=8)
+                for j, (rr, zz, dx) in enumerate(((0.5, 0.55, -0.32), (0.38, 0.86, -0.45), (0.26, 1.1, -0.55))):
+                    wk.cone(rr * s, 0.48 * s, toon("foliage" if j % 2 == 0 else "foliage_dk"), loc=B(x + dx * s, y, zz * s), rot=(0, -16, 0), seg=9)
+            elif kind == "gorse":
+                wk.ball(0.34 * s, toon("foliage_dk"), loc=B(x, y, 0.22 * s), scale=(1.2, 1.05, 0.75), subdiv=2)
+                for j in range(9):
+                    aa = j * 0.7 + i
+                    wk.sphere(0.05 * s, K.toon("#ffd84d"), loc=B(x + math.cos(aa) * 0.3 * s, y + math.sin(aa) * 0.24 * s, (0.3 + 0.1 * (j % 3)) * s), seg=8, rings=5, outline=0.005)
+            elif kind == "ruinpillar":  # a broken column, sometimes with its fallen drum beside it
+                wk.cyl(0.36 * s, 0.18 * s, toon("court_dk"), loc=B(x, y, 0.09 * s), seg=10, bevel=0.03)
+                hh = (0.7 + 0.7 * rnd(i, 401)) * s
+                wk.cyl(0.24 * s, hh, toon("court"), loc=B(x, y, 0.18 * s + hh / 2), seg=10)
+                wk.cone(0.25 * s, 0.22 * s, toon("court_dk"), loc=B(x + 0.04 * s, y, 0.18 * s + hh + 0.02), rot=(0, 28, 0), seg=6)
+                if i % 2:
+                    wk.cyl(0.22 * s, 0.4 * s, toon("court"), loc=B(x + 0.55 * s, y + 0.1 * s, 0.22 * s), rot=(90, 0, 30 * i), seg=10)
+            elif kind == "ruinwall":  # a stretch of broken curtain wall with a merlon or two
+                ww = 1.1 * s
+                h1, h2 = (0.6 + 0.5 * rnd(i, 411)) * s, (0.4 + 0.4 * rnd(i, 412)) * s
+                wk.box((ww * 0.55, 0.32 * s, h1), toon("court_dk"), loc=B(x - ww * 0.22, y, h1 / 2), bevel=0.03)
+                wk.box((ww * 0.45, 0.32 * s, h2), toon("court"), loc=B(x + ww * 0.28, y, h2 / 2), bevel=0.03)
+                wk.box((0.2 * s, 0.34 * s, 0.18 * s), toon("court"), loc=B(x - ww * 0.36, y, h1 + 0.09 * s), bevel=0.02)
+                wk.ball(0.18 * s, toon("rock"), loc=B(x + ww * 0.55, y + 0.2 * s, 0.08 * s), scale=(1.2, 1, 0.7), subdiv=1, smooth=False)
+            elif kind == "brazier":  # a lit brazier on a tripod: the dusk light of the citadel
+                for j in range(3):
+                    aa = j * math.tau / 3
+                    wk.rod(B(x + math.cos(aa) * 0.22 * s, y + math.sin(aa) * 0.2 * s, 0.0), B(x, y, 0.62 * s), 0.03 * s, K.toon("#3a2a28"), seg=5)
+                wk.cyl(0.22 * s, 0.14 * s, K.toon("#4a3a34"), loc=B(x, y, 0.66 * s), r2=0.14 * s, seg=10)
+                wk.ball(0.17 * s, K.glow("#ff9a3c", 2.6), loc=B(x, y, 0.8 * s), scale=(1, 1, 1.3), subdiv=2, outline=0.006)
+                wk.ball(0.09 * s, K.glow("#ffd27a", 3.0), loc=B(x, y, 0.92 * s), subdiv=2, outline=0)
             else:  # broadleaf
                 wk.cyl(0.08 * s, 0.5 * s, toon("trunk"), loc=B(x, y, 0.25 * s), r2=0.06 * s)
                 for j in range(4):
@@ -262,6 +309,28 @@ def main():
                             rot=(10 * math.cos(aa), 10 * math.sin(aa), 0), seg=5, outline=0.006)
                 if i % 2:
                     wk.cyl(0.03, 0.1, K.toon("#7a4f2f"), loc=B(x, y, 0.42), seg=6, outline=0.005)
+            elif kind == "posts":
+                # Weathered driftwood posts strung with rope, a buoy hung now and then.
+                wk.cyl(0.065, 0.5, K.toon("#9a8a74"), loc=B(x, y, 0.25), r2=0.055, seg=8, bevel=0.01)
+                wk.cyl(0.07, 0.03, K.toon("#cfc3ad"), loc=B(x, y, 0.51), seg=8, outline=0.005)
+                if along_x:
+                    wk.rod(B(x, y, 0.42), B(x + 0.6, y, 0.42), 0.018, K.toon("#d9c49a"), seg=5, outline=0.004)
+                else:
+                    wk.rod(B(x, y, 0.42), B(x, y + 0.6, 0.42), 0.018, K.toon("#d9c49a"), seg=5, outline=0.004)
+                if i % 6 == 2:
+                    wk.sphere(0.09, K.toon("#e2563a" if i % 12 == 2 else "#f4e6c4"), loc=B(x, y + (0 if along_x else 0.3), 0.3), seg=10, rings=6, outline=0.006)
+                if i % 3 == 0:
+                    wk.ball(0.16, toon("rock" if i % 2 else "rock_dk"), loc=B(x + 0.2, y + 0.1, 0.05), scale=(1.2, 1.0, 0.6), subdiv=1, smooth=False, outline=0.005)
+            elif kind == "ruin":
+                # A low broken wall: blocks of uneven height, a merlon here and there, a fallen block in the gaps.
+                if rnd(i, 421) < 0.14:
+                    wk.box((0.36, 0.3, 0.22), toon("court_dk"), loc=B(x + 0.1, y - 0.05, 0.1), rot=(8, 12, 30 * rnd(i, 422)), bevel=0.03, outline=0.006)
+                    return
+                hh = 0.22 + 0.26 * rnd(i, 423)
+                wk.box((0.62, 0.4, hh) if along_x else (0.4, 0.62, hh), toon("court_dk" if i % 3 else "rock_dk"), loc=B(x, y, hh / 2), bevel=0.035, outline=0.006)
+                wk.box((0.64, 0.42, 0.06) if along_x else (0.42, 0.64, 0.06), toon("court"), loc=B(x, y, hh + 0.02), rot=(0, 0, (rnd(i, 424) - 0.5) * 8), bevel=0.02, outline=0.005)
+                if i % 5 == 1:
+                    wk.box((0.22, 0.3, 0.2), toon("court"), loc=B(x, y, hh + 0.14), bevel=0.02, outline=0.005)
             else:
                 if th.get("footing"):
                     # A dry-stone footing under a clipped hedge: the border reads as built, with height and a lit top.
@@ -296,6 +365,13 @@ def main():
                     wk.sphere(0.04, K.toon("#ff9fc0"), loc=B(x - 0.1, y, 0.04), seg=8, rings=5, outline=0.004)
             elif kind == "ice":
                 wk.crystal(0.08, 0.3, K.toon("#bfe9ff", spec=0.5), loc=B(x, y, 0.0), rot=(8, -6, 20 * i))
+            elif kind == "driftwood":
+                wk.cyl(0.05, 0.6, K.toon("#b8a78c"), loc=B(x, y, 0.04), rot=(90, 0, 40 * i), seg=7, outline=0.006)
+                wk.ball(0.1, toon("rock"), loc=B(x + 0.2, y + 0.1, 0.04), scale=(1.2, 1, 0.6), subdiv=1, smooth=False, outline=0.006)
+            elif kind == "rubble":
+                for j in range(3):
+                    aa = j * 2.1 + i
+                    wk.box((0.18, 0.14, 0.1), toon("court" if j % 2 else "court_dk"), loc=B(x + math.cos(aa) * 0.14, y + math.sin(aa) * 0.1, 0.05), rot=(6 * j, 9, 37 * i + 20 * j), bevel=0.02, outline=0.006)
 
         FLAG_H = 0.05
 
@@ -364,6 +440,20 @@ def main():
                     wk.crystal(0.05, 0.2 + 0.06 * j, K.toon("#bfe9ff", spec=0.6), loc=B(x + math.cos(aa) * 0.1, y + math.sin(aa) * 0.07, 0.02), rot=(14 * math.cos(aa), 14 * math.sin(aa), 0))
                 if i % 4 == 0:  # a frozen grass stalk
                     wk.cone(0.03, 0.16, toon("foliage"), loc=B(x - 0.12, y + 0.05, 0.08), seg=5, outline=0.004)
+            elif kind == "thrift":  # sea thrift: tight cushions with pink pompoms on wiry stems
+                wk.ball(0.15, toon("foliage"), loc=B(x, y, 0.0), scale=(1.4, 1.1, 0.42), subdiv=2, outline=0.004)
+                for j in range(6):
+                    aa = j * 1.05 + i
+                    wk.sphere(0.045, K.toon("#f59ac0" if j % 2 else "#ffc4dc"), loc=B(x + math.cos(aa) * 0.12, y + math.sin(aa) * 0.08, 0.1 + 0.03 * (j % 2)), seg=8, rings=5, outline=0.004)
+                if i % 4 == 0:
+                    wk.box((0.06, 0.06, 0.04), K.toon("#f4f0e6"), loc=B(x + 0.2, y - 0.04, 0.02), rot=(0, 0, 25 * i), outline=0.003)  # a shell
+            elif kind == "rubble":
+                for j in range(3 + i % 2):
+                    aa = j * 1.9 + i
+                    wk.box((0.15 + 0.05 * (j % 2), 0.12, 0.07), toon("court" if j % 2 else "court_dk"), loc=B(x + math.cos(aa) * 0.13, y + math.sin(aa) * 0.09, 0.09),
+                           rot=(5 * j, 7, 41 * i + 23 * j), bevel=0.015, outline=0.004)
+                for j in range(2):
+                    wk.cone(0.03, 0.12, toon("grass_lt" if j else "grass_dk"), loc=B(x - 0.12 + 0.05 * j, y + 0.06, 0.12), rot=(12 * (j - 0.5), 0, 0), seg=5, outline=0.003)
             elif kind == "heather":
                 wk.ball(0.15, toon("foliage_dk"), loc=B(x, y, 0.02), scale=(1.3, 1.1, 0.45), subdiv=2, outline=0.004)
                 for j in range(5):
@@ -517,6 +607,133 @@ def main():
                 for (bx, by) in ((3.05, -0.85), (5.55, -0.85), (-1.05, ZD + 0.6), (W + 0.6, ZD + 0.6)):  # flanking the far gate and the strip
                     banner(bx, by, ds["banners"])
 
+        def on_land(x, y, pad=0.0):
+            """Saltwind Coast: the clifftop (the board, the land round it and the lighthouse headland), not the sea."""
+            if y > COAST_FAR + pad and x < COAST_RIGHT - pad:
+                return True
+            return COAST_HEAD[0] + pad < x < COAST_HEAD[1] - pad and COAST_HEAD[2] + pad < y <= COAST_FAR + pad + 0.01
+
+        def coast_build():
+            """Saltwind Coast: grass clifftop over a storm sea. The sea lies a cliff's height below, beyond the far edge and
+            down the right side, with surf at the cliff foot, whitecaps and a few sea stacks; the lighthouse headland juts out
+            top-left."""
+            grass = S.ground_mat(st, "grass", "grass_dk", "patches", key_c="grass_lt")
+            x0, x1 = -16.0, COAST_RIGHT
+            wk.box((x1 - x0, 46, 0.04), grass, loc=B((x0 + x1) / 2, COAST_FAR + 23, -0.02), outline=0)
+            hx0, hx1, hy0 = COAST_HEAD
+            wk.box((hx1 - hx0, COAST_FAR - hy0 + 0.02, 0.04), grass, loc=B((hx0 + hx1) / 2, (COAST_FAR + hy0) / 2, -0.02), outline=0)
+            sea_z = -1.15
+            wk.box((90, 90, 0.04), S.ground_mat(st, "sea", "sea_dk", "patches", scale=2.2, key_c="sea_lt"), loc=B(4.5, 3.0, sea_z), outline=0)
+            # The cliff: a face of stacked rock under each edge (the headland's inland face is the one the camera sees).
+            edges = []
+            yy = COAST_FAR
+            while yy < 26:
+                edges.append((COAST_RIGHT, yy, 0))
+                yy += 0.42
+            xx = hx1
+            while xx < COAST_RIGHT:
+                edges.append((xx, COAST_FAR, 1))
+                xx += 0.42
+            yy = hy0
+            while yy < COAST_FAR:
+                edges.append((hx1, yy, 0))
+                edges.append((hx0, yy, 0))
+                yy += 0.42
+            xx = hx0
+            while xx < hx1:
+                edges.append((xx, hy0, 1))
+                xx += 0.42
+            foam = K.flat("#f4fbff", alpha=0.85)
+            for k, (ex, ey, horiz) in enumerate(edges):
+                r = rnd(k, 501)
+                wk.box((0.5, 0.5, 1.2), toon("rock_dk" if k % 3 else "rock"), loc=B(ex, ey, sea_z / 2), rot=(0, 0, 20 * r), bevel=0.06, outline=0.006)
+                wk.ball(0.26 + 0.12 * r, toon("rock"), loc=B(ex + (0 if horiz else 0.05), ey + (0.05 if horiz else 0), -0.05), scale=(1.2, 1.0, 0.5), subdiv=1, smooth=False, outline=0.006)
+                ox, oy = (0.0, -0.45) if horiz else (0.45 if ex >= COAST_RIGHT - 0.01 or ex == hx1 else -0.45, 0.0)
+                if ex == hx1 and not horiz:
+                    ox = 0.45
+                with wk.at(B(ex + ox * (1 + r), ey + oy * (1 + r), sea_z + 0.03), rot=(0, 0, 90 * r), scale=(1.8, 0.7, 1)):
+                    wk.cyl(0.22 + 0.12 * r, 0.006, foam, seg=12, outline=0)
+            for n in range(140):  # whitecaps on the storm sea
+                x, y = -12 + rnd(n, 511) * 32, -20 + rnd(n, 512) * 44
+                if on_land(x, y, -0.6):
+                    continue
+                with wk.at(B(x, y, sea_z + 0.03), rot=(0, 0, 18 + 14 * rnd(n, 513))):
+                    wk.box((0.5 + 0.6 * rnd(n, 514), 0.06, 0.006), K.flat("#e8f6fa", alpha=0.8), outline=0)
+                    wk.box((0.3 + 0.3 * rnd(n, 515), 0.04, 0.006), K.flat(g["sea_lt"]), loc=(0.1, 0.09, 0), outline=0)
+            for (sx, sy, sr) in ((13.2, -2.0, 0.6), (12.6, 4.6, 0.45), (6.8, -8.2, 0.7), (2.8, -11.0, 0.5), (14.0, 10.5, 0.55)):  # sea stacks
+                wk.ball(sr, toon("rock"), loc=B(sx, sy, sea_z + sr * 0.9), scale=(1.0, 0.9, 1.6), subdiv=1, smooth=False, rot=(0, 0, 40 * sx))
+                wk.ball(sr * 0.75, toon("grass"), loc=B(sx, sy, sea_z + sr * 2.25), scale=(1.0, 0.9, 0.35), subdiv=2)
+                with wk.at(B(sx, sy, sea_z + 0.03), scale=(1.5, 1.1, 1)):
+                    wk.cyl(sr * 1.4, 0.006, foam, seg=16, outline=0)
+
+        def lighthouse(x, y):
+            """The Saltwind light: a red-banded tower on the headland with its lamp lit, and the keeper's cottage."""
+            shadow(x, y, 0.9)
+            wk.cyl(0.78, 0.3, toon("rock"), loc=B(x, y, 0.15), seg=16, bevel=0.04)
+            hh = 3.4
+            wk.cyl(0.52, hh, K.toon("#f4f0e6"), loc=B(x, y, 0.3 + hh / 2), r2=0.36, seg=16)
+            for k in range(3):
+                z = 0.3 + hh * (0.18 + 0.3 * k)
+                rr = 0.52 - (0.16 * (z - 0.3) / hh)
+                wk.cyl(rr + 0.012, 0.36, K.toon("#d8463a"), loc=B(x, y, z), seg=16, outline=0.006)
+            top = 0.3 + hh
+            wk.cyl(0.5, 0.08, K.toon("#2e3a44"), loc=B(x, y, top + 0.04), seg=16, outline=0.006)
+            for k in range(10):
+                aa = k * math.tau / 10
+                wk.cyl(0.015, 0.2, K.toon("#2e3a44"), loc=B(x + math.cos(aa) * 0.46, y + math.sin(aa) * 0.46, top + 0.18), seg=4, outline=0.003)
+            wk.cyl(0.26, 0.42, K.glow(th["lantern"], 3.0), loc=B(x, y, top + 0.3), seg=12, outline=0.006)
+            wk.cone(0.36, 0.34, K.toon("#d8463a"), loc=B(x, y, top + 0.68), seg=12)
+            wk.sphere(0.06, K.toon("#2e3a44"), loc=B(x, y, top + 0.9), seg=8, rings=5)
+            # The keeper's cottage.
+            cx, cy = x - 1.4, y + 0.6
+            shadow(cx, cy, 0.6)
+            wk.box((1.0, 0.7, 0.55), K.toon("#f4f0e6"), loc=B(cx, cy, 0.27), bevel=0.03)
+            wk.box((1.12, 0.82, 0.08), K.toon("#d8463a"), loc=B(cx, cy, 0.58), bevel=0.02)
+            wk.cone(0.62, 0.4, K.toon("#d8463a"), loc=B(cx, cy, 0.82), rot=(0, 0, 45), seg=4)
+            wk.box((0.16, 0.02, 0.26), K.toon("#2e3a44"), loc=B(cx, cy + 0.36, 0.17), outline=0.004)
+            wk.box((0.16, 0.02, 0.14), K.glow(th["lantern"], 1.8), loc=B(cx + 0.28, cy + 0.36, 0.33), outline=0.004)
+
+        def citadel_vista():
+            """Crownfall Citadel: the ruined high keep beyond the far gate, broken towers and a cracked gate arch at dusk,
+            braziers lit along the curtain wall."""
+            yb = -6.4
+            # The curtain wall, broken into stretches of uneven height.
+            xx = -6.0
+            k = 0
+            while xx < W + 6.0:
+                if abs(xx - 4.5) > 1.4 and rnd(k, 601) > 0.16:
+                    hh = 1.1 + 1.2 * rnd(k, 602)
+                    wk.box((1.05, 0.8, hh), toon("court_dk" if k % 2 else "rock_dk"), loc=B(xx, yb, hh / 2), bevel=0.04)
+                    wk.box((1.08, 0.84, 0.08), toon("court"), loc=B(xx, yb, hh + 0.02), bevel=0.02)
+                    if rnd(k, 603) > 0.4:
+                        for m in (-0.3, 0.3):
+                            wk.box((0.28, 0.82, 0.26), toon("court"), loc=B(xx + m, yb, hh + 0.18), bevel=0.02)
+                else:
+                    wk.ball(0.5, toon("court_dk"), loc=B(xx, yb + 0.4, 0.1), scale=(1.4, 1.0, 0.6), subdiv=1, smooth=False)
+                xx += 1.05
+                k += 1
+            # The gate arch behind the far keep, its keystone fallen.
+            for gx in (3.5, 5.5):
+                wk.box((0.7, 0.9, 2.6), toon("court_dk"), loc=B(gx, yb, 1.3), bevel=0.04)
+                wk.box((0.78, 0.98, 0.12), toon("court"), loc=B(gx, yb, 2.66), bevel=0.02)
+            wk.box((1.0, 0.86, 0.5), toon("court"), loc=B(4.0, yb, 2.95), rot=(0, 8, 0), bevel=0.03)
+            wk.box((0.5, 0.5, 0.4), toon("court"), loc=B(5.0, yb + 0.9, 0.2), rot=(10, 14, 30), bevel=0.03)
+            wk.sheet([B(3.3, yb + 0.47, 2.5), B(3.7, yb + 0.47, 2.5), B(3.7, yb + 0.47, 1.4), B(3.55, yb + 0.47, 1.6), B(3.3, yb + 0.47, 1.3)], K.toon("#5a3a6e"), thick=0.02)
+            # Two great towers, their crowns broken.
+            for (tx, ty, th_) in ((-2.6, -8.6, 4.6), (11.8, -8.2, 3.8), (8.6, -11.5, 5.2)):
+                wk.cyl(1.25, 0.35, toon("rock_dk"), loc=B(tx, ty, 0.17), seg=14, bevel=0.04)
+                wk.cyl(1.0, th_, toon("court_dk"), loc=B(tx, ty, 0.3 + th_ / 2), seg=14)
+                for m in range(7):
+                    aa = m * math.tau / 7
+                    if rnd(m, tx) < 0.35:
+                        continue
+                    wk.box((0.34, 0.34, 0.3 + 0.4 * rnd(m, ty)), toon("court"), loc=B(tx + math.cos(aa) * 0.88, ty + math.sin(aa) * 0.88, 0.3 + th_ + 0.2), rot=(0, 0, math.degrees(aa)), bevel=0.02)
+                wk.box((0.22, 0.04, 0.4), K.glow("#ffb04d", 1.6), loc=B(tx, ty + 1.0, 0.3 + th_ * 0.62), outline=0.004)
+                wk.sheet([B(tx - 0.3, ty + 1.02, 0.3 + th_ * 0.45), B(tx + 0.3, ty + 1.02, 0.3 + th_ * 0.45), B(tx + 0.3, ty + 1.02, th_ * 0.05 + 0.9),
+                          B(tx + 0.05, ty + 1.02, th_ * 0.05 + 1.2), B(tx - 0.3, ty + 1.02, th_ * 0.05 + 0.8)], K.toon("#5a3a6e"), thick=0.02)
+            for bx in (-0.8, 1.6, 7.4, 9.8):  # braziers along the wall foot
+                tree("brazier", bx, yb + 0.9, 1.1, int(bx * 10))
+
         fg_objs = []
 
         def fg_build():
@@ -577,6 +794,35 @@ def main():
                                 aa = j * 2.1 + n
                                 wk.ball(0.3 * s_, K.toon("#ffffff"), loc=B(x + inw * (0.05 + 0.12 * j) + math.cos(aa) * 0.08, y + math.sin(aa) * 0.15, (0.85 + 0.12 * (j % 2)) * s_),
                                         scale=(1.2, 1.0, 0.7), subdiv=2)
+                    elif kind == "coast":
+                        if n % 3 == 1:  # gorse on the cliff edge
+                            for j in range(2):
+                                wk.ball(0.3 * s_, toon("foliage_dk"), loc=B(x + inw * 0.12 * j, y + 0.12 * j, (0.95 + 0.1 * j) * s_), scale=(1.2, 1.0, 0.7), subdiv=2)
+                            for j in range(6):
+                                aa = j * 1.1 + n
+                                wk.sphere(0.05, K.toon("#ffd84d"), loc=B(x + inw * 0.1 + math.cos(aa) * 0.26, y + math.sin(aa) * 0.2, 1.12 * s_), seg=8, rings=5, outline=0.005)
+                        else:  # a wind-bent pine leaning in over the board
+                            wk.rod(B(x - inw * 0.1, y, 0.0), B(x + inw * 0.3, y, 1.0 * s_), 0.08 * s_, toon("trunk"), r2=0.05 * s_, seg=8)
+                            for j, (rr, zz, dx) in enumerate(((0.44, 1.05, 0.38), (0.32, 1.32, 0.52))):
+                                wk.cone(rr * s_, 0.42 * s_, toon("foliage" if j % 2 == 0 else "foliage_dk"), loc=B(x + inw * dx, y, zz * s_), rot=(0, 16 * inw, 0), seg=9)
+                    elif kind == "ruins":
+                        if n % 3 == 0:  # a tall broken pillar with a torn violet banner
+                            hh = 1.15 + 0.3 * rnd(n, 431)
+                            wk.cyl(0.13, hh, toon("court"), loc=B(x, y, hh / 2), seg=10)
+                            wk.cone(0.14, 0.16, toon("court_dk"), loc=B(x, y, hh + 0.04), rot=(0, 30 * inw, 0), seg=6)
+                            bx = x + inw * 0.15
+                            wk.sheet([B(bx, y - 0.14, hh - 0.08), B(bx, y + 0.14, hh - 0.08), B(bx, y + 0.14, hh - 0.62), B(bx, y + 0.04, hh - 0.5), B(bx, y - 0.02, hh - 0.74), B(bx, y - 0.14, hh - 0.58)],
+                                     K.toon(th["dress"]["banners"][0]), thick=0.025)
+                            wk.box((0.03, 0.29, 0.05), K.toon(th["dress"]["banners"][1]), loc=B(bx + inw * 0.01, y, hh - 0.2), outline=0)
+                        elif n % 3 == 1:  # a lit brazier on a wall stub
+                            wk.box((0.42, 0.42, 0.75), toon("court_dk"), loc=B(x, y, 0.37), bevel=0.03)
+                            wk.cyl(0.18, 0.1, K.toon("#4a3a34"), loc=B(x, y, 0.8), r2=0.12, seg=10)
+                            wk.ball(0.15, K.glow("#ff9a3c", 2.6), loc=B(x, y, 0.92), scale=(1, 1, 1.3), subdiv=2, outline=0.006)
+                        else:  # a leaning dead tree
+                            wk.rod(B(x - inw * 0.1, y, 0.0), B(x + inw * 0.2, y, 1.0 * s_), 0.07 * s_, toon("trunk"), r2=0.04 * s_, seg=7)
+                            for j in range(3):
+                                aa = j * 1.3 + n
+                                wk.rod(B(x + inw * 0.15, y, (0.7 + 0.12 * j) * s_), B(x + inw * (0.45 + 0.1 * j), y + math.sin(aa) * 0.3, (1.15 + 0.1 * j) * s_), 0.03 * s_, toon("trunk"), r2=0.012 * s_, seg=5)
                     n += 1
                 y += 0.78
             fg_objs.extend(o for o in coll.objects if o.name not in before)
@@ -585,13 +831,18 @@ def main():
             # ---------------- the ground
             court = th.get("court")
             relief = th.get("relief")
-            wk.box((44, 44, 0.04), S.ground_mat(st, "grass", "grass_dk", "patches", key_c="grass_lt"), loc=B(4.5, 3.0, -0.02), outline=0)
+            if relief == "coast":
+                coast_build()
+            else:
+                wk.box((44, 44, 0.04), S.ground_mat(st, "grass", "grass_dk", "patches", key_c="grass_lt"), loc=B(4.5, 3.0, -0.02), outline=0)
 
             def path_x(y):
                 """Centre of the keep-to-keep path at board row y (the ribbon below)."""
                 return 4.5 + 0.32 * math.sin(((y + 6.0) / 0.6) * 0.55)
 
             pts = [(path_x(-6.0 + i * 0.6), -6.0 + i * 0.6) for i in range(int((H + 6.5) / 0.6) + 1)]
+            if relief == "coast":
+                pts = [p for p in pts if p[1] > COAST_FAR + 0.3]
             if relief == "flagstones":
                 # Raised, bevelled flagstones in running bond with ink grout and a few tones each, so the courtyard has
                 # real height (bevels catch the key light, outlines read as grout) instead of a flat brick texture.
@@ -796,6 +1047,8 @@ def main():
                     inside = -1.3 < x < W + 1.3 and -1.25 < y < H + 1.4
                     if inside or (abs(x - 4.5) < 1.2 and y < 0):
                         continue
+                    if th.get("relief") == "coast" and not on_land(x, y, 0.5):
+                        continue
                     u, v = cam_uv(x, y)
                     if not (VIEW["u0"] - 0.04 < u < VIEW["u1"] + 0.04 and VIEW["v0"] - 0.06 < v < VIEW["v1"] + 0.02):
                         continue
@@ -810,6 +1063,10 @@ def main():
                 x = (-0.95 if side == 0 else W + 0.95) + (rnd(n, 2) - 0.5) * 0.4
                 y = -0.8 + rnd(n, 3) * (H + 1.8)
                 scatter(x, y, n)
+            if th.get("relief") == "coast":
+                lighthouse(-1.6, -7.6)
+            if th.get("vista") == "citadel":
+                citadel_vista()
             fg_build()
 
             # ---------------- backdrop through the game camera
@@ -839,7 +1096,7 @@ def main():
             print(f"ARENA {act} camera check: max error {err:.2f}px at {rx}x{ry}", flush=True)
             img = render(os.path.join(BUILD, f"act{act}_raw.png"))
             img = S.downsample(img, ss)
-            img = sunlight(S.grade(img, st, vignette=False))
+            img = mood(sunlight(S.grade(img, st, vignette=False)), th.get("grade"))
             png = os.path.join(BUILD, f"act{act}.png")
             S.write_png(png, img)
             to_jpeg(png, os.path.join(OUT, f"act{act}.jpg"))
@@ -850,7 +1107,7 @@ def main():
                 for o in coll.objects:
                     o.hide_render = o.name not in keep
                 fim = render(os.path.join(BUILD, f"act{act}_fg_raw.png"))
-                fim = sunlight(S.grade(S.downsample(fim, ss), st, vignette=False))
+                fim = mood(sunlight(S.grade(S.downsample(fim, ss), st, vignette=False)), th.get("grade"))
                 al = fim[..., 3]
                 hh, ww = al.shape
                 # Cells: each side split into FG_ROWS bands; each cell's tight box of covered pixels, as backdrop fractions.
@@ -922,6 +1179,27 @@ def sunlight(img, strength=0.06):
     gain = (1 + strength * 2 * k)[..., None] * np.stack([1 + 0.05 * k, 1 + 0.012 * k, 1 - 0.05 * k], -1)
     out = img.copy()
     out[..., :3] = np.minimum(img[..., :3] * gain, img[..., 3:4])
+    return out
+
+
+def mood(img, kind):
+    """Per-act light over the whole frame: 'storm' (cool, a touch grey, darker far side) or 'dusk' (amber far side,
+    violet near side, a little darker), applied to the backdrop and foreground alike so they match."""
+    if not kind:
+        return img
+    import numpy as np
+    h, w = img.shape[:2]
+    t = (np.mgrid[0:h, 0:w][0].astype(np.float32) / h)[..., None]  # 0 far (top) .. 1 near (bottom)
+    rgb = img[..., :3]
+    if kind == "storm":
+        lum = (rgb * np.array([0.3, 0.55, 0.15], np.float32)).sum(-1, keepdims=True)
+        rgb = rgb * 0.86 + lum * 0.14
+        gain = np.array([0.93, 0.98, 1.05], np.float32) * (0.92 + 0.08 * t)
+    else:
+        far, near = np.array([1.1, 0.93, 0.8], np.float32), np.array([0.9, 0.84, 1.0], np.float32)
+        gain = (far * (1 - t) + near * t) * 0.95
+    out = img.copy()
+    out[..., :3] = np.minimum(rgb * gain, img[..., 3:4])
     return out
 
 
@@ -1010,6 +1288,54 @@ def build_obstacle(wk, kind, v, toon, K, B):
             for q in range(3):
                 wk.cone(0.06, 0.8 + 0.15 * q, toon("foliage" if q % 2 else "foliage_dk"), loc=B(x + 0.07 * (q - 1), y, 0.55), rot=(9 * (q - 1), 0, 0), seg=5)
             wk.cyl(0.05, 0.18, K.toon("#7a4f2f"), loc=B(x, y, 1.08), seg=6, outline=0.006)
+    elif kind == "seastack":
+        # A barnacled sea rock: grey stone, a cap of clifftop turf, barnacles and weed at the foot; a buoy on a rope
+        # (v1) or a beached driftwood log and a gull (v2).
+        wk.ball(r * 0.96, toon("rock"), loc=B(0, 0, 0.5), scale=(1.0, 0.9, 1.05 + 0.15 * v), subdiv=1, smooth=False, rot=(0, 0, 30 + v * 45))
+        wk.ball(r * 0.42, toon("rock_dk"), loc=B(0.38, 0.3, 0.2), scale=(1.0, 0.9, 0.8), subdiv=1, smooth=False)
+        wk.ball(r * 0.62, toon("grass"), loc=B(-0.05, -0.05, 1.0 + 0.15 * v), scale=(1.0, 0.95, 0.32), subdiv=2)
+        for j in range(9):
+            aa = j * 0.9 + v
+            wk.cone(0.07, 0.08, K.toon("#f1ece0"), loc=B(math.cos(aa) * 0.86, math.sin(aa) * 0.78, 0.18 + 0.12 * (j % 3)), seg=6, outline=0.005)
+        for j in range(4):
+            aa = j * 1.6 + 0.5
+            wk.ball(0.16, K.toon("#4f7a48"), loc=B(math.cos(aa) * 0.7, math.sin(aa) * 0.66, 0.06), scale=(1.4, 1.0, 0.4), subdiv=2, outline=0.005)
+        if v == 1:
+            wk.rod(B(0.45, 0.45, 1.0), B(0.68, 0.6, 0.78), 0.025, K.toon("#d9c49a"), seg=5, outline=0.004)  # a buoy hung on the rock
+            wk.sphere(0.2, K.toon("#e2563a"), loc=B(0.7, 0.62, 0.66), seg=12, rings=8, outline=0.008)
+            wk.cyl(0.205, 0.07, K.toon("#f4f0e6"), loc=B(0.7, 0.62, 0.66), seg=12, outline=0)
+        elif v == 2:
+            wk.cyl(0.11, 1.0, K.toon("#b8a78c"), loc=B(-0.1, 0.6, 0.1), rot=(90, 0, 72), seg=8)
+            wk.ball(0.12, K.toon("#ffffff"), loc=B(0.05, -0.05, 1.42), scale=(1.4, 0.8, 0.8), subdiv=2, outline=0.006)
+            wk.ball(0.07, K.toon("#ffffff"), loc=B(0.18, -0.05, 1.5), subdiv=2, outline=0.005)
+            wk.cone(0.03, 0.08, K.toon("#ffcf4d"), loc=B(0.27, -0.05, 1.5), rot=(0, 90, 0), seg=5, outline=0.004)
+    elif kind == "brokencolumn":
+        # A fallen column of the citadel: a plinth and a snapped shaft (v0), the drums toppled with a lost gold crown in
+        # the rubble (v1), or a rubble heap under a torn violet banner (v2).
+        stone, dark = toon("court"), toon("court_dk")
+        wk.cyl(r * 0.98, 0.28, dark, loc=B(0, 0, 0.14), seg=10, bevel=0.04)
+        if v == 0:
+            wk.cyl(r * 0.6, 1.25, stone, loc=B(0, 0, 0.9), seg=10)
+            wk.cone(r * 0.62, 0.4, dark, loc=B(0.05, 0, 1.6), rot=(0, 26, 0), seg=7)
+            wk.cyl(r * 0.45, 0.6, stone, loc=B(0.28, 0.28, 0.3), rot=(90, 0, 60), seg=10)
+        elif v == 1:
+            wk.cyl(r * 0.6, 0.55, stone, loc=B(0, 0, 0.55), seg=10)
+            wk.cyl(r * 0.45, 0.75, stone, loc=B(-0.25, 0.3, 0.3), rot=(90, 0, -30), seg=10)
+            gold = K.toon("#e0b050", spec=0.5)
+            wk.cyl(0.3, 0.16, gold, loc=B(0.2, 0.2, 0.92), seg=16, outline=0.006)  # the fallen crown on the drum
+            wk.cyl(0.25, 0.165, K.toon("#7a3a5a"), loc=B(0.2, 0.2, 0.925), seg=16, outline=0)
+            for j in range(6):
+                aa = j * math.tau / 6
+                wk.cone(0.07, 0.2, gold, loc=B(0.2 + math.cos(aa) * 0.29, 0.2 + math.sin(aa) * 0.29, 1.1), seg=4, outline=0.005)
+                if j % 2 == 0:
+                    wk.sphere(0.035, K.toon("#d8463a", spec=0.4), loc=B(0.2 + math.cos(aa) * 0.31, 0.2 + math.sin(aa) * 0.31, 0.93), seg=8, rings=5, outline=0.003)
+        else:
+            for j in range(6):
+                aa = j * 1.05
+                wk.box((0.5, 0.42, 0.36), stone if j % 2 else dark, loc=B(math.cos(aa) * 0.45, math.sin(aa) * 0.4, 0.4 + 0.15 * (j % 2)), rot=(9 * j, 12, 33 * j), bevel=0.03)
+            wk.cyl(0.04, 1.8, K.toon("#5e4a40"), loc=B(-0.1, 0.0, 1.2), rot=(0, 8, 0), seg=6)
+            wk.sheet([B(-0.05, 0.0, 2.0), B(0.55, 0.0, 2.0), B(0.55, 0.0, 1.35), B(0.38, 0.0, 1.5), B(0.25, 0.0, 1.25), B(-0.05, 0.0, 1.4)], K.toon("#5a3a6e"), thick=0.025)
+            wk.box((0.6, 0.03, 0.06), K.toon("#e0b050"), loc=B(0.25, 0.0, 1.8), outline=0)
     else:  # boulder
         wk.ball(r * 0.95, toon("rock"), loc=B(0, 0, 0.42), scale=(1.0, 0.92, 0.72 + 0.1 * v), subdiv=1, smooth=False, rot=(0, 0, 20 + v * 40))
         wk.ball(r * 0.4, toon("rock_dk"), loc=B(0.48, 0.38, 0.2), scale=(1.0, 0.9, 0.7), subdiv=1, smooth=False)

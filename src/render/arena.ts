@@ -33,7 +33,7 @@ export interface ArenaManifest {
   acts: Record<string, ArenaAct>;
 }
 
-export const ARENA_COUNT = 8;
+export const ARENA_COUNT = 10;
 
 let manifest: ArenaManifest | null = null;
 let loading: Promise<ArenaManifest | null> | null = null;

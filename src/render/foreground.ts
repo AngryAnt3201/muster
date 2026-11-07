@@ -2,7 +2,8 @@
 //  - the foreground: border canopy, boughs and banners that overhang the board edge, rendered in Blender through the
 //    game camera as act<n>_fg.webp (the same frame as the backdrop) and drawn over the units. It is cut into cells
 //    (each side in bands); a cell fades out while a unit's screen box overlaps it, so units under it stay readable.
-//  - ambient motion under the units: water glints on the Fen's mere, cloud wisps drifting past the Sky Throne.
+//  - ambient motion under the units: water glints on the Fen's mere, cloud wisps drifting past the Sky Throne,
+//    spray off the Saltwind cliffs and embers rising from the Crownfall braziers (all outside the board but the glints).
 // Render-only: the sim never sees any of it, and obstacles and lanes are untouched.
 import { H, W, ZONE_DEPTH } from "../core/defs";
 import { backdropRect, type Arena } from "./arena";
@@ -75,6 +76,16 @@ export function glintSpots(n = 22): { x: number; y: number; ph: number }[] {
   return out;
 }
 
+/** Where the Coast's spray and the Citadel's embers rise: just outside the board's side edges, world coordinates. */
+export function sideSpots(n = 14): { x: number; y: number; ph: number }[] {
+  const out: { x: number; y: number; ph: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const side = i % 2;
+    out.push({ x: side ? W + 0.75 + 0.5 * rnd(i, 3) : -0.75 - 0.5 * rnd(i, 3), y: -0.6 + rnd(i, 5) * (H + 1.2), ph: rnd(i, 7) });
+  }
+  return out;
+}
+
 const TAU = Math.PI * 2;
 
 export class ArenaLayers {
@@ -83,11 +94,29 @@ export class ArenaLayers {
   private last = -1;
   private wisp?: HTMLCanvasElement;
   private glints = glintSpots();
+  private sides = sideSpots();
 
   /** Ambient motion on the ground, under the units. */
   ambient(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number) {
     if (a.info.obstacle === "fenlamp") this.shimmer(ctx, cam, time);
     else if (a.info.obstacle === "obelisk") this.clouds(ctx, a, cam, time);
+    else if (a.info.obstacle === "seastack") this.rise(ctx, cam, time, "#f2fbff", 0.5, 1.6);
+    else if (a.info.obstacle === "brokencolumn") this.rise(ctx, cam, time, "#ffb04d", 0.35, 2.2);
+  }
+
+  /** Motes rising off the side edges and fading as they climb: sea spray on the Coast, embers in the Citadel. */
+  private rise(ctx: CanvasRenderingContext2D, cam: Camera, time: number, col: string, speed: number, top: number) {
+    ctx.save();
+    ctx.fillStyle = col;
+    for (const m of this.sides) {
+      const t = (time * speed * 0.25 + m.ph) % 1;
+      const p = cam.project(m.x + Math.sin(time * 0.9 + m.ph * TAU) * 0.15, m.y, t * top);
+      ctx.globalAlpha = Math.sin(t * Math.PI) * 0.75;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(1, p.s * 0.035 * (1 - t * 0.5)), 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Small glints on the mere that swell and fade, a few at a time. */

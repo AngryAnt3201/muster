@@ -8,12 +8,13 @@ import { Camera, DIST, TILT } from "../src/render/camera";
 
 const DIR = join(__dirname, "..", "public", "arenas");
 const man = JSON.parse(readFileSync(join(DIR, "manifest.json"), "utf8")) as ArenaManifest;
-const NAMES = ["Borderlands", "Ash Fields", "Hollow Wood", "Iron Pass", "High Keep", "Frozen Reach", "Sky Throne", "Mirelight Fen"];
+const NAMES = ["Borderlands", "Ash Fields", "Hollow Wood", "Iron Pass", "High Keep", "Frozen Reach", "Sky Throne", "Mirelight Fen", "Saltwind Coast", "Crownfall Citadel"];
 
 describe("arenas", () => {
-  it("has a backdrop and three obstacle props for each of the 8 acts", () => {
+  it("has a backdrop and three obstacle props for each of the 10 acts", () => {
     expect(man.version).toBe(3);
-    expect(Object.keys(man.acts).sort()).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
+    expect(ARENA_COUNT).toBe(10);
+    expect(Object.keys(man.acts).sort((a, b) => +a - +b)).toEqual(Array.from({ length: ARENA_COUNT }, (_, i) => String(i + 1)));
     for (let a = 1; a <= ARENA_COUNT; a++) {
       const info = man.acts[String(a)];
       expect(info.name).toBe(NAMES[a - 1]);
@@ -68,10 +69,10 @@ describe("arenas", () => {
   });
 
   it("picks the arena by act and falls back to act 1", () => {
-    for (let a = 1; a <= 8; a++) expect(arenaAct(a, man)).toBe(a);
+    for (let a = 1; a <= ARENA_COUNT; a++) expect(arenaAct(a, man)).toBe(a);
     expect(arenaAct(undefined, man)).toBe(1);
     expect(arenaAct(0, man)).toBe(1);
-    expect(arenaAct(9, man)).toBe(1);
+    expect(arenaAct(ARENA_COUNT + 1, man)).toBe(1);
     expect(arenaAct(3, null)).toBe(3);
     expect(arenaAct(12, null)).toBe(1);
     for (const l of LEVELS) expect(man.acts[String(arenaAct(l.act, man))]).toBeDefined();

@@ -53,6 +53,7 @@ import { onQuestsChange, settleQuests } from "./progression/quests";
 import { usePassStore } from "./store/pass";
 import { seedPassDemo } from "./progression/pass";
 import { seedQuestDemo } from "./progression/quests";
+import { showEnding } from "./ui/ending";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -363,7 +364,9 @@ function playLevel(l: LevelDef, attempt = 0) {
         lines: l.stars.map((o) => [objectiveText(o), objectiveMet(o, m)] as [string, boolean]),
         primary: m.winner === 0 && nextL
           ? ["Next level", () => playLevel(nextL)]
-          : ["Retry", () => playLevel(l, attempt + 1)],
+          : m.winner === 0 && l.boss // the last boss: the ending card, then back to the map
+            ? ["Continue", () => { campaign(l.act); showEnding(app, () => campaign(l.act)); }]
+            : ["Retry", () => playLevel(l, attempt + 1)],
         secondary: ["Campaign", () => campaign(l.act)],
       });
       attachReward(coins, barracks); // [progression]
@@ -738,6 +741,7 @@ async function boot() {
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }
   if (q.has("campaign")) return campaign(Number(q.get("campaign")) || undefined);
+  if (q.has("ending")) { campaign(ACTS.length); return void showEnding(app, () => campaign(ACTS.length)); } // review shot of the ending
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
   if (q.has("daily")) return daily();

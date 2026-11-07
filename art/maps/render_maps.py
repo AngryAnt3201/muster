@@ -302,6 +302,12 @@ class Terrain:
             self.lake = uv_to_ground(w["u"], w["v"])
         if w and w["kind"] == "ponds":
             self.ponds = [(*uv_to_ground(u, v), r) for u, v, r in w["ponds"]]
+        if w and w["kind"] == "coast":
+            self.top = road[-1][1]
+
+    def shore(self, y):
+        """Saltwind Coast: the cliff line, sea to its left, curling out to a point under the lighthouse at the top."""
+        return -2.55 + 0.4 * np.sin(y * 0.8) + 1.7 * smoothstep(self.top - 2.5, self.top + 0.6, y)
 
     def height(self, x, y):
         a = self.act
@@ -330,6 +336,8 @@ class Terrain:
             dl = np.hypot((x - lx) / 1.25, y - ly)
             r = self.water["r"]
             h = np.minimum(h, -0.5 + (h + 0.5) * smoothstep(r - 0.2, r + 0.6, dl))
+        if self.water and self.water["kind"] == "coast":
+            h = np.minimum(h, -0.75 + (h + 0.75) * smoothstep(-0.15, 0.35, x - self.shore(y)))
         if self.water and self.water["kind"] == "ponds":
             for px, py, r in self.ponds:
                 dl = np.hypot((x - px) / 1.3, y - py) + 0.18 * np.sin(x * 2.3 + y * 1.7)
@@ -346,6 +354,8 @@ class Terrain:
             return True
         if self.water["kind"] == "river":
             return abs(y - (self.river_y + 0.35 * math.sin(x * 0.8))) < self.water["width"] / 2 + pad
+        if self.water["kind"] == "coast":
+            return x < float(self.shore(np.array(y))) + pad
         if self.water["kind"] == "ponds":
             return any(math.hypot((x - px) / 1.3, y - py) < r + pad for px, py, r in self.ponds)
         lx, ly = self.lake
@@ -623,6 +633,37 @@ class Props:
         k.ball(0.075, glow("#ffcf6b", 1.6), loc=(0.3, 0, 0.78), scale=(1, 1, 1.2), subdiv=2)
         k.box((0.14, 0.14, 0.03), toon("#3a2a20"), loc=(0.3, 0, 0.69))
 
+    def gorse(self, s=1.0):
+        k, r = self.k, self.rng
+        self.bush(col="#4f7f4a", col2="#5f9058")
+        for j in range(7):
+            a = j * 0.9 + r.uniform(0, 0.5)
+            k.sphere(0.05, toon("#ffd84d"), loc=(math.cos(a) * 0.22, math.sin(a) * 0.12, 0.24 + 0.06 * (j % 2)), seg=8, rings=5, outline=0.004)
+
+    def seastack(self, s=1.0):
+        k, r = self.k, self.rng
+        k.ball(0.32, toon("#a3abb2"), loc=(0, 0, 0.3), scale=(1.0, 0.9, 1.8), subdiv=1, smooth=False, rot=(0, 0, r.uniform(0, 90)))
+        k.ball(0.24, toon("#7fa86a"), loc=(0, 0, 0.82), scale=(1.0, 0.9, 0.35), subdiv=2)
+        disc(k, 0, 0, 0.02, 0.48, toon("#eef8fb"), 0.8)
+
+    def ruinpillar(self, s=1.0):
+        k, r = self.k, self.rng
+        st = toon("#d6bca4")
+        k.cyl(0.22, 0.1, toon("#9c827a"), loc=(0, 0, 0.05), seg=10)
+        hh = r.uniform(0.4, 1.0)
+        k.cyl(0.14, hh, st, loc=(0, 0, 0.1 + hh / 2), seg=10)
+        k.cone(0.15, 0.14, toon("#9c827a"), loc=(0.02, 0, 0.1 + hh + 0.02), rot=(0, 25, 0), seg=6)
+        if r.random() < 0.5:
+            k.cyl(0.13, 0.3, st, loc=(0.32, 0.05, 0.13), rot=(90, 0, r.uniform(0, 180)), seg=10)
+
+    def brazier(self, s=1.0):
+        k = self.k
+        for j in range(3):
+            a = j * math.tau / 3
+            k.rod((math.cos(a) * 0.13, math.sin(a) * 0.13, 0), (0, 0, 0.42), 0.02, toon("#3a2a28"), seg=5)
+        k.cyl(0.14, 0.09, toon("#4a3a34"), loc=(0, 0, 0.45), r2=0.09, seg=10)
+        k.ball(0.11, glow("#ff9a3c", 1.8), loc=(0, 0, 0.55), scale=(1, 1, 1.3), subdiv=2, outline=0.004)
+
     # ---- landmarks
     def camp(self):
         k, r = self.k, self.rng
@@ -790,6 +831,51 @@ class Props:
             x, z = -1.3 + t * 3.0, 2.15 - 0.35 * math.sin(t * math.pi)
             k.ball(0.07, lamp, loc=(x, 0.25, z), subdiv=1, outline=0.004)
 
+    def lighthouse(self):
+        """The Saltwind light on the point: a red-banded tower, the lamp lit and the keeper's cottage."""
+        k = self.k
+        white, red, dk = toon("#f4f0e6"), toon("#d8463a"), toon("#2e3a44")
+        k.cyl(0.62, 0.22, toon("#a3abb2"), loc=(0, 0.8, 0.11), seg=16)
+        k.cyl(0.42, 2.5, white, loc=(0, 0.8, 1.47), r2=0.28, seg=16)
+        for z in (0.75, 1.5, 2.25):
+            rr = 0.42 - 0.14 * (z - 0.22) / 2.5
+            k.cyl(rr + 0.012, 0.28, red, loc=(0, 0.8, z), seg=16)
+        k.cyl(0.4, 0.07, dk, loc=(0, 0.8, 2.76), seg=16)
+        k.cyl(0.22, 0.34, glow("#ffe08a", 2.0), loc=(0, 0.8, 2.97), seg=12)
+        k.cone(0.3, 0.3, red, loc=(0, 0.8, 3.28), seg=12)
+        with k.at((1.1, 0.5, 0)):  # the keeper's cottage
+            k.box((0.8, 0.55, 0.45), white, loc=(0, 0, 0.22), bevel=0.02)
+            k.prism([(-0.48, 0), (0.48, 0), (0, 0.36)], 0.66, red, loc=(0, 0, 0.45), rot=(90, 0, 0))
+            k.box((0.13, 0.04, 0.12), light_or("#ffd98a", "#5a7fa8"), loc=(0.2, -0.28, 0.27))
+        with k.at((-0.6, 0.2, 0)):
+            self.banner(col=self.foe)
+
+    def ruinedcitadel(self):
+        """Crownfall Citadel: the broken high keep at dusk, one tower snapped, the gate arch cracked, braziers lit."""
+        k, r = self.k, self.rng
+        st, dk = toon("#d6bca4"), toon("#9c827a")
+        roof = toon(self.foe_dk, raw=True)
+        k.box((2.9, 1.4, 1.0), st, loc=(0, 0.9, 0.5), bevel=0.04)
+        for i, x in enumerate((-1.15, -0.6, 0.0, 0.6, 1.15)):
+            if i != 3:
+                k.box((0.3, 1.4, 0.22 + 0.1 * (i % 2)), st, loc=(x, 0.9, 1.12))
+        k.ball(0.35, dk, loc=(0.6, 0.2, 0.15), scale=(1.4, 1.0, 0.6), subdiv=1, smooth=False)  # the breach's rubble
+        k.box((1.2, 1.0, 1.5), st, loc=(-0.1, 1.15, 1.75), bevel=0.04)
+        k.prism([(-0.75, 0), (0.45, 0), (-0.2, 0.55)], 1.1, roof, loc=(-0.1, 1.15, 2.5), rot=(90, 0, 0))  # a roof half fallen
+        k.cyl(0.42, 2.2, st, loc=(-1.55, 0.5, 1.1), seg=14)
+        k.cone(0.55, 0.8, roof, loc=(-1.55, 0.5, 2.2), seg=14)
+        k.cyl(0.42, 1.2, st, loc=(1.55, 0.5, 0.6), seg=14)  # the snapped tower
+        k.cone(0.44, 0.35, dk, loc=(1.6, 0.5, 1.3), rot=(0, 28, 0), seg=7)
+        k.box((0.6, 0.06, 0.75), toon("#3a2a20"), loc=(0, 0.18, 0.38))
+        k.box((0.14, 0.06, 0.22), light_or("#ffb04d", "#3a3f4f"), loc=(-0.6, 0.18, 0.75))
+        gold = toon("#e0b050")
+        k.torus(0.2, 0.045, gold, loc=(0.95, -0.35, 0.06), rot=(70, 0, 20), seg=20, rseg=6)  # the fallen crown
+        for x in (-0.95, 0.95):
+            with k.at((x, -0.25, 0)):
+                self.brazier()
+        with k.at((-0.1, 1.15, 3.0)):
+            self.banner()
+
 
 SCALE = {"tree": (1.0, 1.35), "pine": (1.0, 1.4), "snowpine": (1.0, 1.4), "deadtree": (0.9, 1.3), "bush": (0.8, 1.2),
          "bush_gold": (0.8, 1.2), "rock": (0.8, 1.4), "rock_snow": (0.8, 1.4), "boulder": (1.8, 2.6), "house": (1.0, 1.2),
@@ -797,13 +883,14 @@ SCALE = {"tree": (1.0, 1.35), "pine": (1.0, 1.4), "snowpine": (1.0, 1.4), "deadt
          "ember": (1, 1), "stump": (0.9, 1.3), "bones": (0.9, 1.1), "mushroom": (0.9, 1.6), "log": (0.8, 1.1), "cart": (1.0, 1.1),
          "crystal": (1.0, 1.6), "crystal_iron": (0.9, 1.3), "crystal_gold": (0.9, 1.4), "drift": (0.8, 1.5), "snowman": (1, 1.1),
          "pillar": (1, 1.1), "statue": (1, 1.2), "cloudpuff": (1.0, 1.8), "tower": (1.0, 1.1), "banner": (1, 1),
-         "willow": (1.0, 1.4), "reeds": (0.8, 1.3), "lily": (0.9, 1.3), "lanternpost": (1.0, 1.1)}
+         "willow": (1.0, 1.4), "reeds": (0.8, 1.3), "lily": (0.9, 1.3), "lanternpost": (1.0, 1.1),
+         "gorse": (0.8, 1.2), "seastack": (0.9, 1.6), "ruinpillar": (0.9, 1.3), "brazier": (1.0, 1.2)}
 RADIUS = {"willow": 0.55, "reeds": 0.2, "lily": 0.2, "boulder": 1.0, "house": 0.6, "tower": 0.5, "cloudpuff": 0.9, "fence": 0.7, "wall": 0.8, "tree": 0.45, "pine": 0.45, "snowpine": 0.45}
 SHADOW = {"boulder": 0.42, "rock": 0.3, "rock_snow": 0.3, "house": 0.55, "tower": 0.42, "fence": 0.0, "wall": 0.0, "tree": 0.38,
           "pine": 0.36, "snowpine": 0.36, "cart": 0.3, "statue": 0.3, "pillar": 0.2}
-NO_SHADOW = {"ember", "flowers", "crater", "cloudpuff", "drift", "lily"}
+NO_SHADOW = {"ember", "flowers", "crater", "cloudpuff", "drift", "lily", "seastack"}
 ALONG_ROAD = {"fence", "wall", "banner", "lanternpost"}
-IN_WATER = {"lily"}
+IN_WATER = {"lily", "seastack"}
 
 
 def scatter(P, T, road, act, rng, view, keep_out):
@@ -873,6 +960,10 @@ def build(P, kind):
         P.tree(fol=P.rng.choice(["#3f8a46", "#4f9a4a", "#357a42"]), fol_lt="#62ad55")
     elif kind == "pine" and P.act["id"] == "iron":
         P.pine(col="#47785a")
+    elif kind == "pine" and P.act["id"] == "coast":
+        P.pine(col="#3f7150")
+    elif kind == "bush" and P.act["id"] == "citadel":
+        P.bush(col="#6f7a48", col2="#8a8f58")
     else:
         getattr(P, kind)()
 
@@ -942,6 +1033,19 @@ def render_act(index, act, style, samples, out_dir):
         w = act["water"]
         wm = patches([w["color"][0], w["color"][0], w["color"][1]], 1.4, act["id"] + "_water", detail=1.0)
         build_mesh("water", [(-8, -half_h - 3, -0.22), (8, -half_h - 3, -0.22), (8, half_h + 7, -0.22), (-8, half_h + 7, -0.22)], [(0, 1, 2, 3)], wm)
+    if act.get("water", {}).get("kind") == "coast":
+        # Surf along the cliff foot and whitecaps out on the storm sea.
+        foam = toon("#eef8fb")
+        yy = -half_h - 2.0
+        while yy < half_h + 6.0:
+            sx = float(T.shore(np.array(yy)))
+            disc(k, sx - 0.22 - rng.uniform(0, 0.15), yy, -0.2, rng.uniform(0.14, 0.26), foam, 0.5)
+            yy += 0.22
+        for _ in range(70):
+            x, y = rng.uniform(-6, 0), rng.uniform(-half_h - 2, half_h + 6)
+            if x < float(T.shore(np.array(y))) - 0.6:
+                with k.at((x, y, -0.205), rot=(0, 0, rng.uniform(-20, 20))):
+                    k.box((rng.uniform(0.25, 0.55), 0.04, 0.005), foam, outline=0)
     if "sky" in act:
         s = act["sky"]
         cm = patches([s["below"], s["below"], s["cloud_dk"]], 0.35, "clouds", detail=1.0)
