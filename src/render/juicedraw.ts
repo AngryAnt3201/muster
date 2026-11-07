@@ -18,15 +18,22 @@ const easeOutBack = (u: number) => { const c = 1.9; return 1 + (c + 1) * (u - 1)
  *  teal and red read at a glance. r in world units. */
 export function shadowRing(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, r: number, alpha: number, side: Side | null, ring = 1) {
   ctx.save();
+  const team = side !== null && ring > 0;
+  if (team) {
+    // A faint team-coloured base just wider than the shadow: the colour shows around the feet even in a crowd.
+    ctx.globalAlpha = Math.min(1, alpha * 1.6) * 0.3 * ring;
+    ctx.fillStyle = TEAM[side].main;
+    ctx.beginPath(); cam.groundPath(ctx, x, y, r * 1.32); ctx.fill();
+  }
   ctx.fillStyle = "#14202a";
   ctx.globalAlpha = alpha * 0.95;
   ctx.beginPath(); cam.groundPath(ctx, x + r * 0.07, y + r * 0.09, r * 0.98); ctx.fill();
-  if (side !== null && ring > 0) {
+  if (team) {
     const p = cam.project(x, y);
-    ctx.globalAlpha = Math.min(1, alpha * 1.6) * 0.75 * ring;
+    ctx.globalAlpha = Math.min(1, alpha * 1.6) * 0.9 * ring;
     ctx.strokeStyle = TEAM[side].main;
-    ctx.lineWidth = Math.max(1.25, p.s * 0.035);
-    ctx.beginPath(); cam.groundPath(ctx, x, y, r * 1.18); ctx.stroke();
+    ctx.lineWidth = Math.max(1.5, p.s * 0.045);
+    ctx.beginPath(); cam.groundPath(ctx, x, y, r * 1.32); ctx.stroke();
   }
   ctx.restore();
 }
