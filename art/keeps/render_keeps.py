@@ -118,7 +118,7 @@ SKINS = {
     "gilded": {"stone": "#f2eee6", "stone_dk": "#c9c0b0", "stone2": "#e6e0d4", "stone_lt": "#ffffff", "roof": "#2d48b0",
                "trim": "#ffcf3f", "trim_dk": "#c98a18", "wood": "#8a5a32", "wood_dk": "#5a3a20", "window": "#1b1820", "window_glow": False,
                "accent": ("#2d48b0", "#1b2b74", "#7f98ff"), "flame": ("#ffb347", "#fff2b0"), "halo": (255, 205, 90), "crown": True},
-    "shadow": {"stone": "#40364c", "stone_dk": "#1f1928", "stone2": "#352c40", "stone_lt": "#584a6c", "roof": "#2b1f3d",
+    "shadow": {"stone": "#40364c", "stone_dk": "#1f1928", "stone2": "#352c40", "stone_lt": "#584a6c", "roof": "#3a2a58",
                "trim": "#a98bff", "trim_dk": "#5f46a8", "wood": "#2c2430", "wood_dk": "#1a1420", "window": "#8fffd4", "window_glow": True,
                "accent": ("#5b3a8e", "#2d1d4c", "#a98bff"), "flame": ("#6fffc8", "#e2fff4"), "halo": (120, 255, 205), "torn": True},
     "blossom": {"stone": "#f1e6da", "stone_dk": "#c7b19f", "stone2": "#e4d4c4", "stone_lt": "#fff8ee", "roof": "#ec8db0",
@@ -569,6 +569,7 @@ def skin_setup(M, name):
         M.ridge = M.gold
     elif name == "shadow":
         M.ridge = K.toon("#1a1226")
+        M.gold = K.glow("#b896ff", 1.15)  # the trim glows: roof band, finials, emblems
     elif name == "blossom":
         M.ridge = K.toon("#c4618a")
 
@@ -775,7 +776,7 @@ def skin_props(k, M, s, sk, rng):
                 k.rod(wall, out, 0.014, iron, outline=0.004)
                 k.rod((wall[0], wall[1], wall[2] - 0.12), (out[0] * 0.92, out[1] * 0.92, out[2]), 0.01, iron, outline=0.003)
                 k.rod(out, (out[0], out[1], out[2] - 0.06), 0.006, iron, outline=0)
-                _lantern(k, iron, ghost, core, (out[0], out[1], out[2] - 0.15))
+                _lantern(k, iron, ghost, core, (out[0], out[1], out[2] - 0.17), 1.45)
         # tall crooked lantern posts at the plinth's front corners
         for sx in (-1, 1):
             px, py = sx * 1.04, -0.4
@@ -786,12 +787,12 @@ def skin_props(k, M, s, sk, rng):
             k.rod((px, py, 0.14), (px, py, 0.82), 0.02, iron)
             k.rod((px, py, 0.8), (px - sx * 0.16, py - 0.02, 0.84), 0.014, iron, outline=0.004)
             k.ball(0.03, violet, loc=(px, py, 0.85), outline=0)
-            _lantern(k, iron, ghost, core, (px - sx * 0.16, py - 0.02, 0.69))
+            _lantern(k, iron, ghost, core, (px - sx * 0.16, py - 0.02, 0.66), 1.4)
         # drifting wisps with fading tails
         if s < 4:
             for (x, y, z, dx) in ((-0.98, -0.75, 1.35, 1), (0.95, -0.7, 1.75, -1), (-0.45, -1.0, 0.82, 1)):
-                for j in range(4):
-                    k.ball(0.05 * (1 - j * 0.22), ghost if j == 0 else violet, loc=(x - dx * j * 0.06, y, z - j * 0.035), outline=0)
+                for j in range(5):  # a ghost-light comet: a bright head and a tight fading tail
+                    k.ball(0.065 * (1 - j * 0.17), ghost if j < 2 else violet, loc=(x - dx * j * 0.04, y, z - j * 0.022), outline=0)
         # violet runes glowing on the plinth step
         for i in range(7):
             a = -math.pi / 2 + (i - 3) * 0.42
