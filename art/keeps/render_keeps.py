@@ -343,7 +343,12 @@ def build(k, M, state, boss=False):
         else:
             fl = [(0, -0.02, pole), (L * 0.6, 0.0, pole + 0.01), (L, 0.02, pole - 0.04), (L * 0.7, 0.0, pole - fh * 0.42), (L * 0.88, 0.02, pole - fh * 0.6), (L * 0.5, 0.0, pole - fh * 0.78), (L * 0.32, 0.0, pole - fh + 0.02), (0, -0.02, pole - fh * 0.85)]
         k.sheet(fl, M.team, thick=0.014)
-        if s == 0:
+        if s == 0 and sk.get("crown"):
+            # [skins] a gold crown on the standard
+            cx, cz, q = L * 0.32, pole - fh * 0.52, 1.15
+            k.sheet([(cx - 0.08 * q, -0.016, cz - 0.06 * q), (cx + 0.08 * q, -0.016, cz - 0.06 * q), (cx + 0.08 * q, -0.016, cz + 0.05 * q), (cx + 0.04 * q, -0.016, cz + 0.005 * q),
+                     (cx, -0.016, cz + 0.08 * q), (cx - 0.04 * q, -0.016, cz + 0.005 * q), (cx - 0.08 * q, -0.016, cz + 0.05 * q)], M.gold, thick=0.01, outline=0.005)
+        elif s == 0:
             k.sheet([(L * 0.3, -0.016, pole - fh * 0.2), (L * 0.42, -0.016, pole - fh * 0.5), (L * 0.3, -0.016, pole - fh * 0.8), (L * 0.18, -0.016, pole - fh * 0.5)], M.gold, thick=0.01, outline=0.005)
     elif s == 2:
         # caved-in, charred roof: a broken cone sitting low with beams sticking out
@@ -733,6 +738,15 @@ def skin_props(k, M, s, sk, rng):
             # glints on the gold
             for (p, r) in (((0.13, -0.3, top_z + 1.08), 0.08), ((-0.5, -0.62, top_z + 0.3), 0.055), ((0.86, -0.3, base + 1.52), 0.05), ((-0.12, -0.95, base + 0.95), 0.05)):
                 _star(k, spark, p, r)
+        # a crimson carpet, gold-edged, rolled down the steps from the gate
+        if s < 3:
+            red = K.toon("#c8283c") if s < 2 else K.toon("#5a1a22")
+            for (y0, y1, z) in ((-0.8, -0.93, 0.302), (-0.93, -1.0, 0.245), (-1.0, -1.14, 0.142)):
+                k.box((0.3, abs(y1 - y0), 0.012), red, loc=(0, (y0 + y1) / 2, z), outline=0.004)
+                for sx in (-1, 1):
+                    k.box((0.022, abs(y1 - y0), 0.016), gold, loc=(sx * 0.15, (y0 + y1) / 2, z + 0.002), outline=0)
+            for (y, z0, z1) in ((-0.93, 0.245, 0.302), (-1.0, 0.142, 0.245)):
+                k.box((0.3, 0.012, z1 - z0), red, loc=(0, y - 0.006, (z0 + z1) / 2), outline=0.004)
         # gold-capped marble pillars at the back corners
         for sx in (-1, 1):
             px, py = sx * 1.08, -0.2
