@@ -123,10 +123,10 @@ export class ArenaLayers {
     const far = cam.project(0, -0.9).y, near = cam.project(0, H + 0.9).y;
     const span = r.w + 240;
     ctx.save();
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 4; i++) {
       const top = i % 2 === 0;
       const y0 = top ? r.y : near, y1 = top ? far : r.y + r.h;
-      const w = 120 + 90 * rnd(i, 9), hh = w * 0.5;
+      const w = 90 + 60 * rnd(i, 9), hh = w * 0.5;
       if (y1 - y0 < hh * 0.6) continue;
       const y = y0 + hh * 0.3 + (y1 - y0 - hh * 0.6) * rnd(i, 5) - hh / 2;
       const x = r.x - 200 + ((rnd(i, 1) * span + time * (7 + 6 * rnd(i, 3))) % span);
