@@ -56,7 +56,7 @@
 .pg-stat .next { color: #2f8f2a; }
 .pg-stat .arrow { font-style: normal; color: var(--k-muted); }
 .pg-stat.top .arrow, .pg-stat.top .next { display: none; }
-.pg-float { position: absolute; right: 74px; top: -6px; font: 400 16px/1 var(--display); font-style: normal; color: #4cd23c; text-shadow: var(--ol-s); animation: pgFloat 1.1s ease-out forwards; pointer-events: none; }
+.pg-float { position: absolute; left: 47%; top: -6px; font: 400 16px/1 var(--display); font-style: normal; color: #4cd23c; text-shadow: var(--ol-s); animation: pgFloat 1.1s ease-out forwards; pointer-events: none; }
 @keyframes pgFloat { 0% { transform: translateY(6px) scale(0.6); opacity: 0; } 20% { transform: translateY(-4px) scale(1.15); opacity: 1; } 100% { transform: translateY(-26px); opacity: 0; } }
 .pg-act { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 38px; margin-top: 2px; }
 .pg-up { display: inline-flex; align-items: center; gap: 9px; color: #fff; }

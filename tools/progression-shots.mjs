@@ -46,6 +46,10 @@ const settle = (p, ms = 900) => p.waitForTimeout(ms);
   await p.screenshot({ path: `${out}/barracks-upgrade.png` });
   await p.waitForTimeout(1600);
   await p.screenshot({ path: `${out}/barracks-after-upgrade.png` });
+  await p.locator(".pg-card.locked").first().scrollIntoViewIfNeeded();
+  await p.evaluate(() => document.querySelector(".pg-barracks").scrollBy(0, 260));
+  await settle(p, 500);
+  await p.screenshot({ path: `${out}/barracks-locked.png` });
 }
 {
   const p = await page("capped");
