@@ -3,7 +3,7 @@
 import { chromium, devices } from "playwright";
 import { mkdirSync } from "node:fs";
 
-const [, , only = ""] = process.argv;
+const [, , only = "", tag = ""] = process.argv;
 const port = process.env.PORT || 5180;
 const host = process.env.HOST || "localhost";
 const want = only ? new Set(only.split(",")) : null;
@@ -56,6 +56,24 @@ if (!skip("pop-level")) {
   await p.evaluate(() => { const g = window.__game; const pc = g.match.sides[0].pieces.find((x) => x.kind !== "mine") ?? g.match.sides[0].pieces[0]; g.selected = pc.id; g.openPop(pc); });
   await p.waitForTimeout(500);
   await shot(p, "pop-level");
+  await p.context().close();
+}
+
+// 3. The one currency pill: title, Shop and Barracks headers (and a live update after a spend in the Barracks).
+for (const [name, path] of [["pill-title", ""], ["pill-shop", "?shop"], ["pill-barracks", "?barracks"]]) {
+  if (skip(name)) continue;
+  const p = await page();
+  await p.goto(`http://${host}:${port}/${path}`);
+  await p.waitForTimeout(2200);
+  await p.screenshot({ path: `${out}/${name}${tag}.png`, clip: { x: 0, y: 0, width: 390, height: 160 } });
+  console.log("shot", name);
+  if (name === "pill-barracks" && tag === "") {
+    await p.evaluate(async () => { const w = await import("/src/economy/wallet.ts"); w.earn("coins", 1000, "shot"); });
+    await p.waitForTimeout(900);
+    const txt = await p.evaluate(() => document.querySelector(".screen-head .cur-coins b")?.textContent);
+    console.log("barracks pill after +1000:", txt);
+    await p.screenshot({ path: `${out}/pill-barracks-live.png`, clip: { x: 0, y: 0, width: 390, height: 160 } });
+  }
   await p.context().close();
 }
 

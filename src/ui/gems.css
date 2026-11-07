@@ -1,4 +1,4 @@
-/* Gems: currency pills, the Shop's gem and coin sections, the result-screen reward strip and the Gauntlet Rally.
+/* Gems: the currency pill (every coin and gem counter), the Shop's gem and coin sections, the result-screen reward strip and the Gauntlet Rally.
    Owned by the gem store (src/ui/currency.ts, src/ui/gemshop.ts); uses the kit tokens from src/styles.css. */
 :root { --gem: #c06bff; --gem-d: #7a32d9; --gem-lt: #ecd0ff; }
 
@@ -13,6 +13,7 @@
 .cur-pill .gem-ico { font-size: 22px; }
 .cur-pill .coin.icon-only { width: 22px; height: 22px; }
 .cur-pill.bump { animation: curBump 0.45s cubic-bezier(.2,1.6,.4,1); }
+.cur-pill.spend { animation: pillSpend 0.32s ease-out; }
 @keyframes curBump { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
 
 .screen.title > .cur-bar.title-cur { position: absolute; top: calc(var(--st) + 8px); right: 10px; z-index: 4; transform: scale(0.88); transform-origin: top right; }
@@ -24,8 +25,8 @@
 
 /* ---- Shop */
 .shop-screen .gem-shop { width: min(440px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
-.screen-head > .cur-bar.shop-cur { flex: none; gap: 6px; }
-.shop-cur .cur-pill { min-width: 0; height: 30px; padding-right: 10px; }
+.screen-head > .cur-bar { flex: none; gap: 6px; }
+.screen-head .cur-pill { min-width: 0; height: 30px; padding-right: 10px; }
 .gem-shop .shop-offer.owned .shop-heroes, .gem-shop .shop-offer.owned .shop-perks, .gem-shop .shop-offer.owned .shop-pitch { display: none; }
 .gem-section { margin-top: 20px; padding-top: 30px; gap: 12px; }
 .gem-section > .ribbon { margin-top: -48px; }

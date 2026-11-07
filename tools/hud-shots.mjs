@@ -174,16 +174,16 @@ await battle();
 await still("daily", "free", "?daily");
 if (tag !== "before") await still("daily-streak", "streak", "?daily");
 await still("paywall", "free", "", { click: ".menu .gauntlet-btn" });
-// The kit's currency pill (not wired to data yet): coin and gem counters on a plate, for the title and battle bars.
+// The shared currency pill (src/ui/currency.ts): coin and gem counters on a plate.
 if (!skip("currency-pill") && tag !== "before") {
   const p = await page("free");
   await p.goto(`http://${host}:${port}/?barracks`);
   await p.waitForTimeout(1800);
   await p.evaluate(async () => {
-    const kit = await import("/src/ui/kit.ts");
+    const cur = await import("/src/ui/currency.ts");
     const bar = document.createElement("div");
     bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99;display:flex;gap:10px;justify-content:center;padding:70px 12px 18px;background:#3f7d34";
-    bar.append(kit.currencyPill("coin", 12480), kit.currencyPill("gem", 320));
+    bar.append(cur.currencyPill("coins"), cur.currencyPill("gems"));
     document.body.append(bar);
   });
   await p.waitForTimeout(300);

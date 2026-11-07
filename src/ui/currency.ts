@@ -1,5 +1,5 @@
-// Coin and gem counters (title screen, Shop), the reward strip on result screens, and the "gems fly into the
-// counter" feedback. Local to the gem store; if src/ui/kit.ts grows a shared currency pill, swap pill() for it.
+// The game's one currency pill (title, Shop and Barracks counters), the reward strip on result screens, and the
+// "gems fly into the counter" feedback.
 import "./gems.css";
 import { sfx } from "../audio/sfx";
 import { GEM_NAME, type Reward } from "../economy/gems";
@@ -20,23 +20,34 @@ export const coinIcon = (cls = "") => el("span", { class: `coin icon-only ${cls}
 
 const fmt = (n: number) => n.toLocaleString("en");
 
-/** A live counter for one currency. Follows the wallet until it leaves the page. */
-export function pill(c: Currency) {
-  const value = el("b", {}, [fmt(wallet()[c])]);
-  const p = el("span", { class: `cur-pill cur-${c}`, role: "status", "aria-label": `${c === "gems" ? GEM_NAME : "Coins"}` }, [
-    c === "gems" ? gemIcon() : coinIcon(), value,
+/**
+ * The currency pill: an icon and a live count for one currency. Every pill on the page follows the wallet
+ * (one shared listener), so a pill made while its screen is still being built is never left stale.
+ */
+export function currencyPill(c: Currency, cls = "") {
+  const n = wallet()[c];
+  const p = el("span", { class: `cur-pill cur-${c} ${cls}`.trim(), role: "status", "aria-label": c === "gems" ? GEM_NAME : "Coins", "data-cur": c }, [
+    c === "gems" ? gemIcon() : coinIcon(), el("b", {}, [fmt(n)]),
   ]);
-  p.dataset.value = String(wallet()[c]);
-  const off = onWalletChange((w) => {
-    if (!p.isConnected) { off(); return; }
-    if (p.dataset.flying) return; // a fly-in is on its way; it counts up when it lands
-    countTo(p, w[c]);
-  });
+  p.dataset.value = String(n);
+  follow();
   return p;
 }
 
-/** Coins and gems side by side. */
-export const currencyBar = (cls = "") => el("div", { class: `cur-bar ${cls}` }, [pill("coins"), pill("gems")]);
+let following = false;
+function follow() {
+  if (following) return;
+  following = true;
+  onWalletChange((w) => {
+    for (const p of document.querySelectorAll<HTMLElement>(".cur-pill[data-cur]")) {
+      if (p.dataset.flying) continue; // a fly-in is on its way; it counts up when it lands
+      countTo(p, w[p.dataset.cur as Currency]);
+    }
+  });
+}
+
+/** Pills side by side (coins and gems unless told otherwise). */
+export const currencyBar = (cls = "", kinds: Currency[] = ["coins", "gems"]) => el("div", { class: `cur-bar ${cls}` }, kinds.map((c) => currencyPill(c)));
 
 function countTo(p: HTMLElement, to: number) {
   const b = p.querySelector("b")!;
@@ -50,7 +61,8 @@ function countTo(p: HTMLElement, to: number) {
     if (k < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
-  p.classList.remove("bump"); void p.offsetWidth; p.classList.add("bump");
+  // A hop when it grows, a dip when it's spent.
+  p.classList.remove("bump", "spend"); void p.offsetWidth; p.classList.add(to < from ? "spend" : "bump");
 }
 
 const center = (r: DOMRect) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });

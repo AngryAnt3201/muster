@@ -5,6 +5,7 @@ import { ACTS, rosterAt } from "../core/campaign";
 import { UNITS, UNIT_KINDS, type UnitKind } from "../core/defs";
 import { MAX_LEVEL, levelDmg, levelHp } from "../core/levels";
 import { onWalletChange, wallet } from "../economy/wallet";
+import { currencyBar } from "./currency";
 import { buzz } from "../native";
 import { unlockAudio, sfx } from "../audio/sfx";
 import type { Reward } from "../progression/economy";
@@ -12,20 +13,6 @@ import { currentCap, troopState, upgradeTroop } from "../progression/troops";
 import { abilityOf, framedPortrait, paintPortrait, ribbon, TIER_NAMES } from "./game";
 import { el, fmt } from "./dom";
 import { ROLE_FAMILY, ROLE_LABEL, icon, roleBadge } from "./kit";
-
-/** A small coin balance pill (local until the HUD kit has a shared one). Follows the wallet live. */
-export function coinPill(cls = ""): HTMLElement {
-  const n = el("b", {}, [wallet().coins.toLocaleString("en")]);
-  const pill = el("span", { class: `pg-coins ${cls}` }, [el("i", { class: "pg-coin" }), n]);
-  let shown = wallet().coins;
-  const off = onWalletChange((w) => {
-    if (!pill.isConnected) { off(); return; }
-    tick(n, shown, w.coins, 500);
-    pill.classList.remove("spend", "gain"); void pill.offsetWidth; pill.classList.add(w.coins < shown ? "spend" : "gain");
-    shown = w.coins;
-  });
-  return pill;
-}
 
 /** Counts a number element from a to b. */
 function tick(node: HTMLElement, a: number, b: number, ms: number, digits = 0, prefix = "") {
@@ -62,7 +49,7 @@ export function barracksScreen(o: BarracksOpts) {
   const head = el("div", { class: "screen-head" }, []);
   const backBtn = el("button", { class: "icon-btn back", "aria-label": "Back" }, [icon("back")]);
   backBtn.addEventListener("click", () => { unlockAudio(); sfx("tap"); o.back(); });
-  head.append(backBtn, el("h1", {}, ["Barracks"]), coinPill());
+  head.append(backBtn, el("h1", {}, ["Barracks"]), currencyBar("barracks-cur", ["coins"]));
 
   const cap = currentCap();
   const pips = el("div", { class: "pg-pips" }, Array.from({ length: MAX_LEVEL }, (_, i) => el("i", { class: i < cap ? "on" : "" })));

@@ -258,17 +258,6 @@ button { font-family: inherit; color: inherit; }
 @keyframes pillBump { 0% { transform: scale(1); } 40% { transform: scale(1.2); } 100% { transform: scale(1); } }
 @keyframes pillSpend { 0% { transform: scale(1); } 35% { transform: scale(0.88) translateY(2px); } 100% { transform: scale(1); } }
 
-/* Currency pill (coins, gems): an icon that overhangs the left end, value in the display face. currencyPill() in ui/kit.ts. */
-.cpill { position: relative; display: inline-flex; align-items: center; height: 30px; min-width: 74px; padding: 0 11px 0 26px; margin-left: 12px; border-radius: 15px;
-  border: 2.5px solid var(--k-ink); background: linear-gradient(rgba(255,255,255,0.1), rgba(0,0,0,0) 50%), rgba(30,18,10,0.72);
-  box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), 0 2px 0 rgba(0,0,0,0.4); font: 400 17px/1 var(--display); color: #fff; text-shadow: var(--ol-s); white-space: nowrap; }
-.cpill > .cpill-icon { position: absolute; left: -12px; top: 50%; width: 34px; height: 34px; margin-top: -17px; display: grid; place-items: center; }
-.cpill > .cpill-icon .coin { width: 30px; height: 30px; border-width: 2.5px; font-size: 0; }
-.cpill > .cpill-icon .gem { width: 32px; height: 32px; }
-.cpill b { font-weight: 400; }
-.cpill.gems b { color: #d6f4ff; }
-.cpill.coins b { color: var(--gold); }
-.cpill.bump { animation: pillBump 0.45s cubic-bezier(.2,1.6,.4,1); }
 .gem { display: inline-block; flex: none; line-height: 0; filter: drop-shadow(0 2px 0 var(--k-ink)); }
 .gem svg { width: 100%; height: 100%; display: block; }
 
