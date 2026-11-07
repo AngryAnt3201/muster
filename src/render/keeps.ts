@@ -26,12 +26,12 @@ const DEFAULT: KeepManifest = {
 
 /** Drawn at true scale: big enough to own the end of the board, still clear of the lanes either side (it has no
  *  collision, and it goes see-through when a body walks behind it). */
-export const KEEP_SCALE = 0.98;
+export const KEEP_SCALE = 1.08;
 /** Half-extents of the keep's plinth on the board, world units (for attacker slots and the see-through test). */
-export const KEEP_RX = 1.12;
-export const KEEP_RY = 0.68;
+export const KEEP_RX = 1.22;
+export const KEEP_RY = 0.74;
 /** How far the keep rises above its ground anchor, world units (the flag tip). */
-export const KEEP_TALL = 1.85;
+export const KEEP_TALL = 2.0;
 
 /** The keep's ground anchor (centre of its footprint) on the board. */
 export function keepAnchor(side: Side): { x: number; y: number } {

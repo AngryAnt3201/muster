@@ -1199,7 +1199,7 @@ export class BoardView {
     // [keeps polish] the winner runs its banner up over the keep
     if (k.winT >= 0) {
       const top = m.anchors.top;
-      drawVictoryBanner(ctx, base.x + (top[0] - m.anchors.ground[0]) * u, base.y + (top[1] - m.anchors.ground[1]) * u, base.s * 1.25, bannerRaise(k.winT), this.time, team(side), GOLD, INK);
+      drawVictoryBanner(ctx, base.x + (top[0] - m.anchors.ground[0]) * u, base.y + (top[1] - m.anchors.ground[1]) * u, base.s * (side === 0 ? 1.7 : 1.2), bannerRaise(k.winT), this.time, team(side), GOLD, INK);
     }
   }
 
@@ -1257,9 +1257,9 @@ export class BoardView {
           // the tower starts down (dust rolls out round the plinth), then lands in a cloud
           const big = now === "settled";
           const a = keepAnchor(side);
-          for (let i = 0; i < (big ? 14 : 9); i++) {
-            const ang = (i / (big ? 14 : 9)) * TAU;
-            this.fx.burst(a.x + Math.cos(ang) * 0.9, a.y + Math.sin(ang) * 0.55, 1, { color: "rgba(216,196,154,0.55)", speed: big ? 1.8 : 1.1, size: 0.3, max: 1.2, kind: "smoke", gravity: -0.2, drag: 1.6, z: 0.3 });
+          for (let i = 0; i < 10; i++) {
+            const ang = (i / 10) * TAU;
+            this.fx.burst(a.x + Math.cos(ang) * 1.05, a.y + Math.sin(ang) * 0.62, 1, { color: "rgba(216,196,154,0.4)", speed: big ? 1.9 : 1.2, size: big ? 0.3 : 0.24, max: big ? 1.0 : 0.8, kind: "smoke", gravity: -0.25, drag: 1.8, z: 0.3 });
           }
           puff(side, [m.anchors.ground[0], (m.anchors.ground[1] + m.anchors.top[1]) / 2], big ? 16 : 26, { color: "#8d929b", speed: 2.6, size: 0.09, max: 1, kind: "chunk", vz: 4, spin: 9 });
           snd(big ? "slam" : "boom", big ? 0.9 : 0.7);
