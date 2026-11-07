@@ -137,6 +137,22 @@ async function battle() {
     await shot(p, "pause");
     await p.context().close();
   }
+  // Defeat (after only): no rays, the dull crest.
+  if (!skip("results-lost") && tag !== "before") {
+    const p = await page("owner");
+    await p.goto(`http://${host}:${port}/?level=6`);
+    await p.waitForTimeout(2500);
+    await p.evaluate(() => {
+      const g = window.__game, m = g.match;
+      m.history.push({ round: 1, winner: 1, damage: [120, 0] }, { round: 2, winner: 0, damage: [0, 60] }, { round: 3, winner: 1, damage: [300, 0] });
+      m.sides[0].hp = 0; m.sides[1].hp = 160; m.winner = 1; m.played = 3;
+      g.destroyed = true;
+      g.o.onEnd(m);
+    });
+    await p.waitForTimeout(1600);
+    await shot(p, "results-lost");
+    await p.context().close();
+  }
   if (!skip("results")) {
     const p = await page("owner");
     await p.goto(`http://${host}:${port}/?level=6`);
@@ -155,12 +171,9 @@ async function battle() {
 }
 
 await battle();
-await still("shop", "free", "?shop");
 await still("daily", "free", "?daily");
 if (tag !== "before") await still("daily-streak", "streak", "?daily");
 await still("paywall", "free", "", { click: ".menu .gauntlet-btn" });
-await still("barracks", "owner", "?barracks");
-await still("title", "free", "");
 // The kit's currency pill (not wired to data yet): coin and gem counters on a plate, for the title and battle bars.
 if (!skip("currency-pill") && tag !== "before") {
   const p = await page("free");

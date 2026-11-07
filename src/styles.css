@@ -288,7 +288,7 @@ button { font-family: inherit; color: inherit; }
 .reroll.gone { display: none; }
 .reroll:disabled { filter: brightness(0.86); }
 .reroll:disabled .coin { background: radial-gradient(circle at 38% 30%, #ffe0d6 0 18%, rgba(255,224,214,0) 40%), radial-gradient(circle at 50% 55%, #ec4a32 0 52%, #a42414 72%); }
-.status { position: absolute; left: 0; right: 0; bottom: calc(100% + 118px); text-align: center; font: 400 17px/1.1 var(--display); color: #fff; text-shadow: var(--ol-s); opacity: 0; pointer-events: none; }
+.status { position: absolute; left: 0; right: 0; bottom: calc(100% + 138px); text-align: center; font: 400 17px/1.1 var(--display); color: #fff; text-shadow: var(--ol-s); opacity: 0; pointer-events: none; }
 .status > span { display: inline-block; padding: 5px 12px 6px; border-radius: 10px; border: 2.5px solid var(--k-ink); background: var(--gloss), var(--k-danger); }
 .status.flash { animation: flashText 1.4s ease-out; }
 @keyframes flashText { 0% { opacity: 0; transform: translateY(6px) scale(0.9); } 12%, 72% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-6px); } }
@@ -391,6 +391,7 @@ button { font-family: inherit; color: inherit; }
 .objectives li { display: flex; align-items: center; gap: 9px; padding: 8px 12px; border-radius: 11px; background: var(--k-well); font-size: 14.5px; font-weight: 700; color: var(--k-muted); }
 .objectives li .star { font-size: 20px; }
 .objectives li.met { color: var(--k-text); background: rgba(255,216,74,0.25); }
+.objectives li:not(.met) .star { color: rgba(107,68,35,0.28); filter: none; }
 
 /* results */
 .results { align-items: stretch; }
@@ -431,6 +432,7 @@ button { font-family: inherit; color: inherit; }
 .results .objectives li.met { border: 2px solid rgba(214,143,28,0.45); }
 .results .objectives li { border: 2px solid transparent; }
 .results.lost .result-crest .icon { color: #b9a07a; }
+.results.won .result-crest .icon { color: var(--gold); filter: var(--ol-f) drop-shadow(0 3px 0 var(--k-ink)); }
 
 /* Pause: the score so far, Resume, then Restart/Quit side by side and two switches. */
 .pause-sheet { gap: 10px; }
