@@ -4,6 +4,7 @@ import type { Entitlement } from "./store/entitlement";
 import type { WalletSave } from "./economy/wallet";
 import type { RewardSave } from "./economy/gems";
 import type { ProgressionSave } from "./progression/troops";
+import type { CollectionSave } from "./progression/collection";
 
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
@@ -21,6 +22,8 @@ export interface Save {
   rewards?: RewardSave;
   /** Troop levels bought with coins (src/progression/troops.ts). Older saves have none: every unit is level 1. */
   progression?: ProgressionSave;
+  /** Units found and spare cards held (src/progression/collection.ts). */
+  collection?: CollectionSave;
 }
 
 const KEY = "muster.save.v1";
