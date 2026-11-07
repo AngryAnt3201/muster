@@ -128,7 +128,7 @@ export function shopView(store: StoreController, gems: GemShop) {
 
   load();
   return el("div", { class: "gem-shop" }, [
-    fullArmyOffer(store),
+    fullArmyOffer(store, { restoreNote: `Restore Purchases brings back the Full Army. ${GEM_NAME} are consumable and can't be restored.` }),
     el("section", { class: "gem-section panel" }, [
       ribbon(GEM_NAME, "gem-ribbon"),
       el("p", { class: "gem-lead" }, [`Spend ${GEM_NAME.toLowerCase()} on coins for troop upgrades or a Gauntlet Rally. Every Daily win, boss and three-star clear earns them free.`]),
@@ -140,8 +140,7 @@ export function shopView(store: StoreController, gems: GemShop) {
       ...coinRows.map((c) => c.row),
     ]),
     el("p", { class: "gem-fine" }, [
-      `${GEM_NAME} are used up when spent, so Restore Purchases can't bring them back: it restores the Full Army only. `,
-      "Every pack lists exactly what you get. No ads, no tracking, no random rewards.",
+      `Every pack and bundle gives exactly what it says: no random rewards. ${GEM_NAME} are used up when spent and aren't restored. No ads, no tracking.`,
     ]),
   ]);
 }
