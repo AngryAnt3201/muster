@@ -171,7 +171,8 @@ describe("Acts 9-10: The Saltwind Coast and Crownfall Citadel", () => {
     expect(citadel.map((l) => l.id)).toEqual([55, 56, 57, 58, 59, 60]);
     const before = LEVELS.filter((l) => l.act < 9);
     for (const l of [...coast, ...citadel]) {
-      expect(new Set(l.roster)).toEqual(new Set(UNIT_KINDS));
+      // The whole 1.1 army, plus any legendary unlocked on or before the level (slots at 50, 53 and 57).
+      for (const k of rosterAt(48)) expect(l.roster).toContain(k);
       expect(before.map((b) => b.foe)).not.toContain(l.foe);
       expect(before.map((b) => b.name)).not.toContain(l.name);
       expect(l.hp[1]).toBe(400);

@@ -91,6 +91,7 @@ The slots are marked `// [legendary] introduce <kind> here at merge` in `src/cor
 lines `[50, "griffin"]`, `[53, "tide"]`, `[57, "lion"]`) and above each level's draft. Each foe is built so the new unit
 matters: Gull Rock (50) is a sky of harriers and outriders for the griffin, Squall Line (53) is storm casters and healers
 for the tide, Fallen Banners (57) is a healing banner line for the lion. After adding them: `tests/content.test.ts`
-expects every unit unlocked once and Acts 9-10 rosters equal to `UNIT_KINDS` (still true once they unlock there), and
-the store counts regenerate with `npm run release:config`. Re-run `LEVELS=50,53,57` at expected pace, since a new
+expects every unit unlocked once and Acts 9-10 rosters to hold the whole 1.1 army (`rosterAt(48)`), so it keeps passing;
+the older line `expect(new Set(LEVELS[47].roster)).toEqual(new Set(UNIT_KINDS))` will need `LEVELS[59]` once the
+legendaries are in `UNIT_KINDS`. The store counts regenerate with `npm run release:config`. Re-run `LEVELS=50,53,57` at expected pace, since a new
 player unit on those boards will lift the win rate.
