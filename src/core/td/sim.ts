@@ -36,6 +36,8 @@ export const LEASH = 2.2; // how far a blocker strays from its rally point
 const AIR_Z = 0.6;
 /** Defenders hit a little harder than in a duel: they face whole waves alone. */
 export const DEF_DMG = 1.5;
+/** Arrows into tanks and siege bodies. */
+export const ARROW_VS_ARMOUR = 0.55;
 
 export interface Defender {
   id: number; kind: UnitKind; pad: number; rank: number; spent: number;
@@ -183,7 +185,7 @@ export class TdRun {
     const base = isUnit ? UNITS[kind as UnitKind] : BODY_EXTRA[kind as keyof typeof BODY_EXTRA];
     const rank = boss ? 4 : w.rank;
     const air = kind === "harrier";
-    const hpMul = w.hpMul * (boss ? 5.5 : 1) * (air ? 0.8 : 1);
+    const hpMul = w.hpMul * (boss ? 4.5 : 1) * (air ? 0.8 : 1);
     const hp = Math.round(base.hp * rankHp(rank) * hpMul);
     const cost = isUnit ? UNITS[kind as UnitKind].cost : 1;
     const gate = this.map.gates[road] ?? this.map.gates[0];
@@ -494,7 +496,10 @@ export class TdRun {
       }
       const t = this.enemies.find((e) => e.id === s.target);
       if (t) {
-        this.hurtEnemy(t, s.dmg, s.slow);
+        // Armour: tanks and siege bodies shrug off arrows, so a line of archers alone isn't enough.
+        const arrow = s.kind === "ranger" || s.kind === "outrider";
+        const role = t.kind in UNITS ? UNITS[t.kind as UnitKind].role : "melee";
+        this.hurtEnemy(t, s.dmg * (arrow && (role === "tank" || role === "siege" || t.kind === "golemling") ? ARROW_VS_ARMOUR : 1), s.slow);
         if (s.slow && s.kind === "rime" && this.defenders.some((d) => d.kind === "rime" && d.rank >= 4 && d.shots % 3 === 0 && Math.hypot(d.x - s.x0, d.y - s.y0) < 0.01)) t.frozen = 1.2;
       }
     }
@@ -528,7 +533,7 @@ export class TdRun {
     this.enemies = this.enemies.filter((e) => e.hp > 0);
     if (this.keepHp <= 0) { this.phase = "lost"; return; }
     if (!this.queue.length && !this.enemies.length) {
-      this.shots = this.shots.filter((s) => !s.enemy && false);
+      this.shots = [];
       const bonus = 25 + this.wave * 4;
       this.gold += bonus;
       this.events.push({ t: "cleared", n: this.wave, bonus });

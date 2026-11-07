@@ -97,6 +97,9 @@ describe("bastion run", () => {
       expect(win.stars()).toBeLessThan(3); // three stars needs better play than the script
       const thin = playBot(id, { order: ["ranger"], upgrade: false, early: false, maxPads: 4 }, 1);
       expect(thin.phase).toBe("lost");
+      // One unit type alone falls short: archers can't break the armour, blockers can't reach the flyers.
+      expect(playBot(id, { order: ["ranger"], upgrade: true, early: false }, 1).phase).toBe("lost");
+      expect(playBot(id, { order: ["pikeman"], upgrade: true, early: false }, 1).phase).toBe("lost");
     }
   });
 

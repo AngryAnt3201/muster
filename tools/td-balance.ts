@@ -7,6 +7,9 @@ const PLANS: Record<string, BotPlan> = {
   idle: { order: ["ranger"], upgrade: false, early: false, maxPads: 0 },
   // Only a few cheap archers, no upgrades: should fall short.
   thin: { order: ["ranger"], upgrade: false, early: false, maxPads: 4 },
+  // One unit type only, with rank-ups: blockers alone can't touch flyers; archers alone get overrun.
+  rangers: { order: ["ranger"], upgrade: true, early: false },
+  pikes: { order: ["pikeman"], upgrade: true, early: false },
   // A plain mixed line with rank-ups: the "simple scripted placement" that should win.
   mixed: { order: ["pikeman", "ranger", "grenadier", "ranger", "blades", "storm", "ballista", "medic"], upgrade: true, early: false },
   // Same, calling every wave early.
