@@ -115,7 +115,10 @@
   transition: transform 0.08s; touch-action: manipulation; }
 .hm-card:active { transform: translateY(3px); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 1px 0 var(--k-ink); }
 @keyframes hm-card-in { from { transform: translateY(14px); opacity: 0; } }
-.hm-card-art { position: absolute; inset: 0; background: var(--art) center 16% / cover no-repeat; }
+.hm-card-art { position: absolute; inset: 0; background: var(--art) center var(--art-y, 16%) / cover no-repeat; }
+.hm-card .hm-card-glyph { position: absolute; z-index: 1; top: 6px; right: 14px; font-size: 28px; transform: rotate(-8deg); color: var(--g, #fff); }
+.hm-card.mode-daily { --g: #ff9a3d; } .hm-card.mode-gauntlet { --g: var(--k-accent); } .hm-card.mode-puzzles { --g: #9fe3ff; }
+.hm-card.mode-skirmish { --g: #ffd2c4; } .hm-card.mode-bastion { --g: #bff27a; }
 .hm-card-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(20, 12, 6, 0.78), rgba(20, 12, 6, 0.35) 55%, rgba(20, 12, 6, 0.05)), linear-gradient(rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 30%); }
 .hm-card-body, .hm-card-stat { position: relative; z-index: 1; }
 .hm-card-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
@@ -129,7 +132,7 @@
 .hm-flame .icon { color: #ff9a3d; font-size: 17px; }
 .hm-card-bar { display: block; width: 74px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.5); overflow: hidden; }
 .hm-card-bar > i { display: block; height: 100%; background: linear-gradient(#bff27a, #5bc24a); }
-.hm-card > .tb-dot { top: 9px; right: 9px; }
+.hm-card > .tb-dot { top: 6px; right: 8px; z-index: 2; }
 .hm-card.mode-daily { --tint: var(--k-accent); }
 @media (max-height: 700px) { .hm-card { min-height: 92px; } .hm-card-name { font-size: 27px; } }
 

@@ -75,6 +75,10 @@ export interface ModeCard {
   /** 0..1 for a progress bar under the stat, if any. */
   progress?: number;
   art: string;
+  /** Which part of the art shows (CSS background-position y), default 16%. */
+  artY?: string;
+  /** A kit icon stamped on the card's corner. */
+  glyph?: "flame" | "crown" | "star" | "sword" | "shield" | "flag";
   dot?: boolean;
   open: () => void;
 }
@@ -85,9 +89,10 @@ export function modesTab(cards: ModeCard[], settings: () => void, army?: () => v
     homeTopBar(settings, army),
     el("h1", { class: "hm-modes-h" }, ["Modes"]),
     el("div", { class: "hm-cards" }, cards.map((c, i) => tapper(el("button", {
-      class: `hm-card ${c.id}-btn mode-${c.id} ${c.dot ? "has-dot" : ""}`, style: `--art:url(${c.art});animation-delay:${i * 40}ms`, "aria-label": c.name,
+      class: `hm-card ${c.id}-btn mode-${c.id} ${c.dot ? "has-dot" : ""}`, style: `--art:url(${c.art});--art-y:${c.artY ?? "16%"};animation-delay:${i * 40}ms`, "aria-label": c.name,
     }, [
       el("span", { class: "hm-card-art" }),
+      ...(c.glyph ? [icon(c.glyph, "hm-card-glyph")] : []),
       el("span", { class: "hm-card-body" }, [
         el("b", { class: "hm-card-name" }, [c.name]),
         el("small", { class: "hm-card-line" }, [c.line]),

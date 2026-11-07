@@ -146,12 +146,12 @@ function modeCards(): ModeCard[] {
   const pz = Object.keys(s.puzzles).length, pzStars = Object.values(s.puzzles).reduce((a, b) => a + b, 0);
   const td = bastionStars();
   return [
-    { id: "daily", name: "Daily", line: fresh ? "A new board for everyone today" : `Next board in ${untilTomorrow()}`, stat: flameChip(streak), art: "/maps/sky.jpg", dot: fresh, open: daily },
-    { id: "gauntlet", name: "Gauntlet", line: "Rival after rival, one health pool", stat: s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless", art: "/maps/ash.jpg", open: gauntlet },
-    { id: "puzzles", name: "Breakpoint", line: "Win with the gold you're given", stat: starChip(pzStars, PUZZLES.length * 3), progress: pz / PUZZLES.length, art: "/maps/frozen.jpg", open: puzzles },
-    { id: "skirmish", name: "Skirmish", line: "Tune a rival AI and fight it", stat: "AI lab", art: "/arenas/act5.jpg", open: skirmish },
+    { id: "daily", name: "Daily", line: fresh ? "A new board for everyone today" : `Next board in ${untilTomorrow()}`, stat: flameChip(streak), art: "/maps/sky.jpg", artY: "4%", glyph: "flame", dot: fresh, open: daily },
+    { id: "gauntlet", name: "Gauntlet", line: "Rival after rival, one health pool", stat: s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless", art: "/maps/ash.jpg", artY: "2%", glyph: "crown", open: gauntlet },
+    { id: "puzzles", name: "Breakpoint", line: "Win with the gold you're given", stat: starChip(pzStars, PUZZLES.length * 3), progress: pz / PUZZLES.length, art: "/maps/frozen.jpg", glyph: "star", open: puzzles },
+    { id: "skirmish", name: "Skirmish", line: "Tune a rival AI and fight it", stat: "AI lab", art: "/arenas/act5.jpg", glyph: "sword", open: skirmish },
     // [td] hook: Bastion, the tower-defence mode (src/ui/td.ts). Free, like every mode.
-    { id: "bastion", name: "Bastion", line: "Hold the road, tower by tower", stat: starChip(td.got, td.of), art: "/td/fords_0.webp", open: () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); } },
+    { id: "bastion", name: "Bastion", line: "Hold the road, tower by tower", stat: starChip(td.got, td.of), art: "/td/fords_0.webp", artY: "30%", glyph: "shield", open: () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); } },
   ];
 }
 /** Bastion's stars, read from its own save (src/ui/td.ts, key muster.td.v1) so td.ts stays a lazy chunk. */
