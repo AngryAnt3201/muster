@@ -81,6 +81,22 @@ async function battle() {
     await shot(p, "battle-poor");
     await p.context().close();
   }
+  // Drag and deploy (after only): a card held over your half, then the bought card flying out of the tray.
+  if ((!skip("battle-drag") || !skip("battle-deployed")) && tag !== "before") {
+    const p = await page("owner");
+    await p.goto(`http://${host}:${port}/?level=6`);
+    await p.waitForTimeout(2600);
+    const from = await p.evaluate(() => { const c = document.querySelectorAll(".shop .card")[2]; const r = c.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    await p.mouse.move(from.x, from.y);
+    await p.mouse.down();
+    for (let i = 1; i <= 12; i++) { await p.mouse.move(from.x - i * 5, from.y - i * 32); await p.waitForTimeout(16); }
+    await p.waitForTimeout(250);
+    if (!skip("battle-drag")) await shot(p, "battle-drag");
+    await p.mouse.up();
+    await p.waitForTimeout(110);
+    if (!skip("battle-deployed")) await shot(p, "battle-deployed");
+    await p.context().close();
+  }
   if (!skip("battle-fight") || !skip("battle-shop")) {
     const p = await page("owner");
     await p.goto(`http://${host}:${port}/?level=6`);
