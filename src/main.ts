@@ -38,7 +38,7 @@ import { attachReward, barracksScreen } from "./ui/barracks";
 import { seedDemo, winChest } from "./progression/chests";
 import { chestArt, chestDemo, chestEarned } from "./ui/chests";
 // [home] the tabbed home: bottom tab bar, Battle and Modes tabs, settings sheet (src/ui/home.ts, src/ui/tabs.ts)
-import { chests, crownReady, freeBanked, gameNow, localDay, onChestsChange, stateOf } from "./progression/chests";
+import { chests, crownReady, freeBanked, gameNow, initChests, localDay, onChestsChange, stateOf } from "./progression/chests";
 import { onWalletChange } from "./economy/wallet";
 import { onCollectionChange } from "./progression/collection";
 import { readyCount } from "./progression/troops";
@@ -100,14 +100,15 @@ function title() { home(tab); }
 /** Draws tab `t` (dir: the side it slides in from after a swipe or a tap on a neighbour). */
 function home(t: Tab = tab, dir = 0) {
   clear();
+  initChests(); // the badges read the chests on every tab, not only Battle's rack
   tab = t;
   here = () => home(tab);
-  if (t === "battle") screen("home hm-screen", battleTab({ next: nextBattle(), play: () => playLevel(nextLevel()), map: () => campaign(), settings: settingsSheet }));
-  else if (t === "modes") screen("home hm-screen hm-modes-screen", modesTab(modeCards(), settingsSheet));
+  if (t === "battle") screen("home hm-screen", battleTab({ next: nextBattle(), play: () => playLevel(nextLevel()), map: () => campaign(), settings: settingsSheet, army: () => home("army", -1) }));
+  else if (t === "modes") screen("home hm-screen hm-modes-screen", modesTab(modeCards(), settingsSheet, () => home("army", -1)));
   else if (t === "shop") { markShopSeen(); screen("shop-screen", header("Shop", title, shopCounters()), shopView(starter, gemShop)); } // [store] counters, Starter Pack, chests mount, gem packs, coin bundles
   else if (t === "army") barracksScreen({ app, back: title, shop: () => home("shop", -1) }); // [progression]
   else passTab();
-  const page = app.querySelector<HTMLElement>(":scope > .screen:last-of-type");
+  const page = [...app.querySelectorAll<HTMLElement>(":scope > .screen")].pop();
   if (page) {
     page.classList.add("tabbed", `tab-${t}`);
     if (dir) page.classList.add(dir > 0 ? "tab-in-r" : "tab-in-l");

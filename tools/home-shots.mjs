@@ -49,6 +49,9 @@ await shots([
 await shots([
   ["home-375x667", ""],
   ["tab-modes-375x667", "", [tab("modes"), { wait: 700 }]],
+  ["tab-shop-375x667", "", [tab("shop"), { wait: 700 }]],
+  ["tab-army-375x667", "", [tab("army"), { wait: 700 }]],
+  ["settings-375x667", "", [{ click: ".hm-gear" }, { wait: 500 }]],
 ], { width: 375, height: 667 }, "20,0");
 console.log(JSON.stringify({ errors }));
 await browser.close();

@@ -18,16 +18,16 @@ const GEAR = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><p
 const MAP = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M2 5.5 8 3l8 2.5L22 3v15.5L16 21l-8-2.5L2 21z" opacity=".35"/><path d="M2 5.5 8 3v15.5L2 21zM16 5.5 22 3v15.5L16 21z"/><circle cx="17.5" cy="9" r="2.2" fill="#e8553d"/></svg>';
 
 /** The slim top bar: commander level with XP, coins, gems, the settings gear. */
-export function homeTopBar(onSettings: () => void): HTMLElement {
+export function homeTopBar(onSettings: () => void, onCommander?: () => void): HTMLElement {
   const b = commanderBar();
   const pct = b.span ? Math.min(100, (100 * b.into) / b.span) : 100;
   const gear = tapper(el("button", { class: "icon-btn hm-gear", "aria-label": "Settings" }), onSettings);
   gear.innerHTML = GEAR;
   return el("div", { class: "hm-top" }, [
-    el("div", { class: "hm-cmd", role: "status", "aria-label": `Commander level ${b.level}` }, [
+    tapper(el("button", { class: "hm-cmd", "aria-label": `Commander level ${b.level}: open the Army` }, [
       el("span", { class: "hm-cmd-lv" }, [String(b.level)]),
       el("span", { class: "hm-cmd-xp" }, [el("i", { style: `width:${pct}%` }), el("small", {}, [b.level >= MAX_COMMANDER ? "max" : `${b.into}/${b.span}`])]),
-    ]),
+    ]), () => onCommander?.()),
     el("div", { class: "hm-cur" }, [currencyPill("coins"), currencyPill("gems")]),
     gear,
   ]);
@@ -39,6 +39,8 @@ export interface BattleTabOpts {
   play: () => void;
   map: () => void;
   settings: () => void;
+  /** Tapping the commander plate (opens the Army). */
+  army?: () => void;
 }
 
 /** The Battle tab: the key art has the room; the Battle button, map button and chest rack sit low, over the meadow. */
@@ -53,7 +55,7 @@ export function battleTab(o: BattleTabOpts): HTMLElement {
   map.append(el("b", {}, ["Map"]));
   const rack = el("div", { class: "hm-rack" }, [chestBar()]);
   return el("div", { class: "hm-battle" }, [
-    homeTopBar(o.settings),
+    homeTopBar(o.settings, o.army),
     el("div", { class: "hm-stage" }, [
       el("div", { class: "hm-arena" }, [el("small", {}, [`Level ${n.id} of ${n.of}`]), el("b", {}, [n.actName])]),
     ]),
@@ -78,9 +80,9 @@ export interface ModeCard {
 }
 
 /** The Modes tab: a header and one big illustrated card per mode. */
-export function modesTab(cards: ModeCard[], settings: () => void): HTMLElement {
+export function modesTab(cards: ModeCard[], settings: () => void, army?: () => void): HTMLElement {
   return el("div", { class: "hm-modes" }, [
-    homeTopBar(settings),
+    homeTopBar(settings, army),
     el("h1", { class: "hm-modes-h" }, ["Modes"]),
     el("div", { class: "hm-cards" }, cards.map((c, i) => tapper(el("button", {
       class: `hm-card ${c.id}-btn mode-${c.id} ${c.dot ? "has-dot" : ""}`, style: `--art:url(${c.art});animation-delay:${i * 40}ms`, "aria-label": c.name,

@@ -32,7 +32,7 @@
   font: 400 13px/1 var(--display); color: #fff; text-shadow: var(--ol-s); font-style: normal; }
 .tb-dot { top: -3px; right: -5px; width: 13px; height: 13px; border-radius: 50%; animation: tb-pulse 1.6s ease-in-out infinite; }
 @keyframes tb-pulse { 50% { transform: scale(1.2); } }
-@media (prefers-reduced-motion: reduce) { .tb-dot, .tb-tab.hop .tb-face { animation: none; } .tab-in-r, .tab-in-l { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .tb-dot, .tb-tab.hop .tb-face { animation: none; } .tab-in-r, .tab-in-l, .btn.hm-play, .hm-card, .hm-pass-ico { animation: none !important; } }
 
 /* ---------------------------------------------------------------- tabbed screens */
 /* The bar stays on top-level screens: room at the bottom for it, no back button (the bar is the way out). */
@@ -46,12 +46,13 @@
 
 /* ---------------------------------------------------------------- top bar (Battle and Modes) */
 .hm-top { display: flex; align-items: center; gap: 6px; padding: calc(var(--st) + 6px) 10px 6px; position: relative; z-index: 3; }
-.hm-cmd { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; height: 34px; padding: 0 8px 0 0; border-radius: 17px;
+.hm-cmd { appearance: none; font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; height: 34px; padding: 0 8px 0 0; border-radius: 17px;
   border: 2.5px solid var(--k-ink); background: var(--k-plate); box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.14); }
 .hm-cmd-lv { flex: none; width: 36px; height: 40px; margin: -5px 4px -5px -6px; display: grid; place-items: center; font: 400 19px/1 var(--display); color: #fff; text-shadow: var(--ol-s);
   background: linear-gradient(rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 55%), var(--k-blue); border: 2.5px solid var(--k-ink);
   clip-path: polygon(50% 0, 100% 24%, 100% 76%, 50% 100%, 0 76%, 0 24%); }
 .hm-cmd-lv { border: 0; box-shadow: inset 0 0 0 2.5px var(--k-ink); }
+.hm-cmd:active { transform: translateY(1px); }
 .hm-cmd-xp { position: relative; flex: 1; min-width: 40px; height: 16px; border-radius: 8px; border: 2px solid var(--k-ink); background: rgba(0, 0, 0, 0.45); overflow: hidden; }
 .hm-cmd-xp > i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#9fe3ff, #3f8de0); }
 .hm-cmd-xp > small { position: relative; display: block; text-align: center; font: 400 11px/12px var(--display); color: #fff; text-shadow: var(--ol-s); white-space: nowrap; }
