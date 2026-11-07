@@ -5,6 +5,7 @@ import {
   bodyDef, isSpawn, rankDmg, rankHp,
   type BodyKind, type Mods, type Obstacle, type Piece, type Role, type Side, type UnitKind,
 } from "./defs";
+import { levelDmg, levelHp, levelOf, type Levels } from "./levels";
 import { Rng } from "./rng";
 
 export interface Body {
@@ -153,6 +154,8 @@ export interface BattleOptions {
   seed?: number;
   obstacles?: Obstacle[];
   mods?: [Mods | undefined, Mods | undefined];
+  /** Persistent troop levels per side (src/core/levels.ts). Missing = level 1, which leaves every stat unchanged. */
+  levels?: [Levels | undefined, Levels | undefined];
   limit?: number;
   /** Keep the event log (the renderer drains it; headless sims leave it off). */
   events?: boolean;
@@ -226,6 +229,7 @@ export class Battle {
   private packTarget = new Map<number, number>();
   private packRetarget = new Map<number, number>();
   private mods: [Mods, Mods];
+  private levels: [Levels | undefined, Levels | undefined];
   private index = new Map<number, Body>();
   private order: number[] = [];
   // Bodies some rule needs to find quickly (none of these kinds spawn mid-battle).
@@ -240,6 +244,7 @@ export class Battle {
     this.limit = opts.limit ?? BATTLE_LIMIT;
     this.log = opts.events ?? false;
     this.mods = [opts.mods?.[0] ?? {}, opts.mods?.[1] ?? {}];
+    this.levels = [opts.levels?.[0], opts.levels?.[1]];
     for (const p of pieces) this.addPiece(p);
     for (const b of this.bodies) if (b.kind === "hive" && this.mods[b.side].broodStart) { this.spawnMite(b); this.spawnMite(b); }
     for (const b of this.bodies) {
@@ -280,8 +285,10 @@ export class Battle {
     const unitKind: UnitKind = isSpawn(kind) ? BODY_EXTRA[kind].from : kind;
     const hpMul = (m.hpMul ?? 1) * (m.kindHp?.[unitKind] ?? 1);
     const dmgMul = (m.dmgMul ?? 1) * (m.kindDmg?.[unitKind] ?? 1);
-    const hp = Math.round(base.hp * rankHp(rank) * hpMul);
-    const dmg = base.dmg * rankDmg(rank) * dmgMul;
+    // Troop level: a multiplier of exactly 1 at level 1 (spawned bodies share their maker's level).
+    const level = levelOf(this.levels[side], unitKind);
+    const hp = Math.round(base.hp * rankHp(rank) * hpMul * levelHp(level));
+    const dmg = base.dmg * rankDmg(rank) * dmgMul * levelDmg(level);
     const b: Body = {
       id: this.nextId++, pieceId, kind, side, rank,
       x, y, px: x, py: y, vx: 0, vy: 0,
@@ -304,7 +311,7 @@ export class Battle {
       ax: 0, ay: 0, budget: 0, hits: [],
       cloak: kind === "shade" ? 3.2 : 0,
       blinkCd: 0,
-      healMul: m.healMul ?? 1,
+      healMul: (m.healMul ?? 1) * levelDmg(level),
       diedAt: -1,
       burrowed: kind === "sapper",
       flying: kind === "harrier",

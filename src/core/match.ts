@@ -5,6 +5,7 @@ import {
   clampToZone, incomeFor, inZone, roundBase, supplyFor, toWorld, upgradeCost,
   type Mods, type Obstacle, type Piece, type Side, type UnitKind,
 } from "./defs";
+import type { Levels } from "./levels";
 import { Rng, hashSeed } from "./rng";
 
 export interface StartPiece { kind: UnitKind; lx: number; depth: number; rank?: number; }
@@ -18,6 +19,8 @@ export interface MatchConfig {
   income?: [number, number];
   supply?: [number, number];
   mods?: [Mods | undefined, Mods | undefined];
+  /** Persistent troop levels per side (src/core/levels.ts). Omitted = level 1 everywhere (Daily, puzzles, tools). */
+  levels?: [Levels | undefined, Levels | undefined];
   obstacles?: Obstacle[];
   start?: [StartPiece[] | undefined, StartPiece[] | undefined];
   noReroll?: boolean;
@@ -240,6 +243,7 @@ export class Match {
       seed: this.battleSeed(),
       obstacles: this.cfg.obstacles,
       mods: [this.sides[0].mods, this.sides[1].mods],
+      levels: this.cfg.levels,
       events,
     });
   }
