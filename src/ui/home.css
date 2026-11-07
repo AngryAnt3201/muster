@@ -6,6 +6,10 @@
   padding: 6px 6px calc(var(--sb) + 4px);
   background: linear-gradient(180deg, #7b4c27, #5c3720 50%, #432616); border-top: 3px solid var(--k-ink);
   box-shadow: inset 0 2px 0 #d39a55, 0 -6px 16px rgba(0, 0, 0, 0.28); }
+/* Sheets a tabbed screen opens inside itself (the Army's unit sheet, the commander level-up) sit under the bar's layer,
+   so the bar steps down while one is open. Sheets on #app (z 20+) already cover it. */
+.tb-bar { transition: transform 0.22s cubic-bezier(.2, .9, .3, 1); }
+.screen.tabbed:has(.ar-shade, .ar-cmd-up, .overlay, .ch-overlay) ~ .tb-bar { transform: translateY(110%); }
 .tb-tab { position: relative; flex: 1 1 0; min-width: 0; height: 60px; appearance: none; border: 0; padding: 0; margin: 0; border-radius: 12px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer;
   background: rgba(0, 0, 0, 0.22); box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.35); color: #fff; font: inherit; touch-action: manipulation;

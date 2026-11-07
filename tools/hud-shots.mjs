@@ -173,7 +173,7 @@ async function battle() {
 await battle();
 await still("daily", "free", "?daily");
 if (tag !== "before") await still("daily-streak", "streak", "?daily");
-await still("paywall", "free", "", { click: ".menu .gauntlet-btn" });
+await still("paywall", "free", "?tab=modes", { click: ".gauntlet-btn" }); // [home] modes live on the Modes tab
 // The shared currency pill (src/ui/currency.ts): coin and gem counters on a plate.
 if (!skip("currency-pill") && tag !== "before") {
   const p = await page("free");

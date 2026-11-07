@@ -1,4 +1,4 @@
-// Bastion touch-path check on the dev server: title button -> map select -> run; tap a pad, build, drag to pan,
+// Bastion touch-path check on the dev server: Modes tab -> Bastion card -> map select -> run; tap a pad, build, drag to pan,
 // fling, double-tap zoom, call the wave, upgrade and sell. PORT=5297 node tools/td-e2e.mjs
 import { chromium, devices } from "playwright";
 const PORT = process.env.PORT || "5297";
@@ -10,9 +10,11 @@ page.on("pageerror", (e) => errors.push(String(e)));
 const ok = (cond, msg) => { console.log(`${cond ? "PASS" : "FAIL"} ${msg}`); if (!cond) process.exitCode = 1; };
 await page.goto(`http://localhost:${PORT}/`);
 await page.waitForTimeout(2000);
+await page.click('.tb-tab[data-tab="modes"]'); // [home] the modes live on the Modes tab
+await page.waitForTimeout(500);
 await page.click(".bastion-btn");
 await page.waitForTimeout(800);
-ok(await page.isVisible(".td-select"), "title button opens map select");
+ok(await page.isVisible(".td-select"), "Modes card opens map select");
 await page.click(".td-map-card >> nth=0");
 await page.waitForTimeout(1500);
 ok(await page.isVisible(".td-run canvas"), "map card starts a run");
