@@ -4,7 +4,7 @@
 
 /** Vertical foreshortening of the ground. */
 export const TD_SQUASH = 0.8;
-const MARGIN = 1.2; // world units of forest shown beyond the map edge
+const MARGIN = 1.5; // world units of forest shown beyond the map edge
 
 export class TdCamera {
   /** Map size, world units. */

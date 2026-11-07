@@ -80,6 +80,8 @@ function title() {
         btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big half puzzles-btn", puzzles),
         btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big half skirmish-btn", skirmish),
       ]),
+      // [td] hook: Bastion, the tower-defence mode (src/ui/td.ts). Free, no Full Army gate.
+      btn(el("span", {}, ["Bastion", el("small", {}, ["hold the road"])]), "big bastion-btn", () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); }),
     ]),
     el("div", { class: "title-foot" }, [
       btn("Barracks", "ghost small", barracks),
@@ -652,6 +654,8 @@ async function boot() {
   if (q.has("daily")) return daily();
   if (q.has("barracks")) return barracks();
   if (q.has("shop")) return shopScreen();
+  // [td] hook: ?td opens Bastion's map select, ?td=meadow|fords starts a run.
+  if (q.has("td")) return void import("./ui/td").then((m) => (q.get("td") ? m.playBastion(app, q.get("td")!, title) : m.bastionMenu(app, title)));
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));
