@@ -13,10 +13,13 @@ mkdirSync(out, { recursive: true });
 
 const cleared = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, 3]));
 const settings = { sound: false, haptics: false, speed: 1 };
+const dayKey = (off) => { const d = new Date(); d.setDate(d.getDate() + off); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const SAVES = {
   free: { settings, campaign: cleared(12), puzzles: cleared(5), gauntlet: { best: 0, runs: 0 }, seen: [] },
   owner: { settings, campaign: cleared(42), puzzles: cleared(20), gauntlet: { best: 3, runs: 2 }, seen: [] },
-  streak: { settings, campaign: cleared(12), puzzles: cleared(5), gauntlet: { best: 0, runs: 0 }, seen: [] },
+  // Played the last three days: the streak week lights up and today's slot waits.
+  streak: { settings, campaign: cleared(12), puzzles: cleared(5), gauntlet: { best: 0, runs: 0 }, seen: [],
+    daily: { last: dayKey(-1), streak: 3, bestStreak: 5, best: 1840, bestKey: dayKey(-2), played: 9, wins: 6 } },
 };
 
 const browser = await chromium.launch();
@@ -126,6 +129,7 @@ async function battle() {
 await battle();
 await still("shop", "free", "?shop");
 await still("daily", "free", "?daily");
+if (tag !== "before") await still("daily-streak", "streak", "?daily");
 await still("paywall", "free", "", { click: ".menu .gauntlet-btn" });
 await still("barracks", "owner", "?barracks");
 await still("title", "free", "");

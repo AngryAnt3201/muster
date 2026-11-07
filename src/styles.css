@@ -582,8 +582,67 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 /* Daily Challenge */
 .menu .btn.daily-btn { --b: var(--k-accent); }
 .screen.daily { display: flex; flex-direction: column; gap: 14px; }
-.daily-card { gap: 14px; }
-.daily-rule { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px 12px; border-radius: 14px; background: var(--k-well); text-align: center; font-size: 16px; font-weight: 700; color: var(--k-text); }
+.daily-card { gap: 12px; padding-top: 14px; }
+.daily-body { display: flex; flex-direction: column; gap: 12px; }
+.daily-kicker { text-align: center; }
+/* Today's board: the arena ground with the rival's opening army standing on it, and the rival's plate. */
+.daily-board { position: relative; height: 178px; margin: 0 -4px; border-radius: 16px; border: 3px solid var(--k-ink); overflow: hidden;
+  background-color: #6aab49; background-size: cover; background-position: center 12%;
+  box-shadow: inset 0 0 0 2px rgba(255,236,196,0.4), 0 4px 0 rgba(0,0,0,0.25); }
+.daily-board-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,12,6,0.25), rgba(20,12,6,0) 30%, rgba(20,12,6,0) 62%, rgba(20,12,6,0.5)); }
+.daily-chip { position: absolute; top: 8px; z-index: 1; padding: 4px 9px 5px; border-radius: 10px; border: 2px solid var(--k-ink); background: rgba(30,18,10,0.72);
+  font: 400 13px/1 var(--display); color: #fff; text-shadow: var(--ol-s); letter-spacing: 0.02em; }
+.daily-chip.num { left: 8px; color: var(--k-accent); }
+.daily-chip.arena { right: 8px; }
+.daily-army { position: absolute; left: 8px; right: 8px; top: 44px; display: flex; justify-content: center; gap: 6px; }
+.daily-piece { position: relative; }
+.daily-rank { position: absolute; right: -4px; bottom: -4px; min-width: 18px; height: 18px; display: grid; place-items: center; border-radius: 9px; border: 2px solid var(--k-ink); background: var(--gloss), var(--ember-d);
+  font: 400 11px/1 var(--display); font-style: normal; color: #fff; text-shadow: var(--ol-s); }
+.daily-token.frame { width: 44px; height: 44px; padding: 2px; border-radius: 50%; border-width: 2px;
+  box-shadow: 0 0 0 2.5px var(--ember), 0 3px 0 2.5px var(--k-ink), 0 6px 10px rgba(0,0,0,0.35); }
+.daily-token.frame > canvas { border-radius: 50%; border-width: 1px; }
+.daily-rival { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 5px 10px 6px 6px; }
+.daily-rival .crest { width: 30px; height: 34px; font-size: 30px; }
+.daily-rival .crest .glyph { width: 30px; height: 34px; }
+.daily-rival-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.daily-rival-id small { font: 400 11px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--k-accent); text-shadow: var(--ol-s); }
+.daily-rival-id b { font: 400 21px/1.05 var(--display); color: var(--ember-l); text-shadow: var(--ol-s); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.daily-rival .tag { flex: none; }
+.daily-draft { display: flex; flex-direction: column; gap: 6px; }
+.daily-draft > small, .daily-streak-stats span { font-size: 12px; font-weight: 800; color: var(--k-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.daily-draft .roster { justify-content: center; }
+.daily-draft .roster { gap: 5px; padding: 7px; }
+.daily-draft .roster-unit.frame { width: 36px; height: 36px; }
+/* Streak: a flame, the count, and the last seven days lit. */
+.daily-streak { gap: 10px; padding: 12px 14px 12px; }
+.daily-streak-top { display: flex; align-items: center; gap: 10px; }
+.daily-flame { flex: none; width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; border: 2.5px solid var(--k-ink); font-size: 28px;
+  background: radial-gradient(circle at 50% 40%, #6b5a4a, #3e2f22); color: #a89784; box-shadow: inset 0 2px 0 rgba(255,255,255,0.18), 0 3px 0 var(--k-ink); }
+.daily-flame .icon { color: inherit; }
+.daily-streak.on .daily-flame { background: radial-gradient(circle at 50% 38%, #fff3b0, #ffb02e 45%, #e5551f); color: #fff; animation: flameBob 1.6s ease-in-out infinite; }
+.daily-streak.on .daily-flame .icon { color: #fff6d0; }
+@keyframes flameBob { 0%, 100% { transform: none; } 50% { transform: translateY(-2px) scale(1.04); } }
+.daily-streak-id { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.daily-streak-id b { font: 400 34px/0.95 var(--display); color: var(--k-text); }
+.daily-streak.on .daily-streak-id b { color: #d9661c; }
+.daily-streak-id small { white-space: nowrap; font-size: 13px; font-weight: 800; color: var(--k-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.daily-streak-stats { display: flex; gap: 6px; }
+.daily-streak-stats span { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 64px; padding: 6px 6px 7px; border-radius: 10px; background: var(--k-well); font-size: 10px; text-align: center; }
+.daily-streak-stats b { font: 400 20px/1 var(--display); color: var(--k-text); }
+.daily-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.daily-day { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.daily-day > i { width: 100%; max-width: 36px; aspect-ratio: 1; display: grid; place-items: center; border-radius: 12px; font-size: 20px;
+  background: var(--k-well); border: 2px solid rgba(107,68,35,0.25); box-shadow: inset 0 2px 3px rgba(0,0,0,0.12); }
+.daily-day.lit > i { border: 2.5px solid var(--k-ink); background: var(--gloss), #ff9a2e; box-shadow: 0 3px 0 var(--k-ink); }
+.daily-day.lit > i .icon { color: #fff6d0; }
+.daily-day.due > i { border: 2.5px dashed #d9661c; background: rgba(255,207,77,0.25); }
+.daily-day.due > i .icon { color: var(--k-accent); animation: flameBob 1.2s ease-in-out infinite; }
+.daily-day small { font: 400 12px/1 var(--display); color: var(--k-muted); }
+.daily-day.today small { color: var(--k-text); }
+.daily-note { margin: -2px 6px; text-align: center; font-size: 13px; font-weight: 700; line-height: 1.35; color: #fff; text-shadow: 0 1.5px 0 rgba(0,0,0,0.45); }
+.daily-streak-pill .icon { color: #ffb02e; font-size: 18px; }
+.screen.daily .daily-today { background: rgba(255,248,230,0.92); border: 2.5px solid var(--k-ink); }
+.daily-rule { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 12px 10px; line-height: 1.25; border-radius: 14px; background: var(--k-well); text-align: center; font-size: 16px; font-weight: 700; color: var(--k-text); }
 .daily-today { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border-radius: 14px; background: var(--k-well); }
 .daily-today b { font: 400 24px/1 var(--display); color: var(--k-text); }
 .daily-today.won b { color: var(--ember-d); }
