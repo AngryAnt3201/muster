@@ -163,7 +163,7 @@ describe("special offers", () => {
     for (const [t, d] of Object.entries(OFFER_TIERS)) {
       const p = sk.products.find((x: { productID: string }) => x.productID === d.id);
       expect(p.displayPrice, t).toBe(String(d.usd));
-      expect(p.localizations[0].description).toBe("Limited-time bundle; contents shown in the game");
+      expect(p.localizations[0].description).toBe("Limited-time bundle; contents shown in game");
     }
     expect(sk.products.find((x: { productID: string }) => x.productID === PASS).displayPrice).toBe("4.99");
   });

@@ -1,7 +1,7 @@
 // [pass] Special offers: 2-3 limited-time bundles in the Shop (gems + coins + unit cards + a chest), the same for
 // everyone in a 2-day window (seeded by the window, from the War Pass epoch), each buyable once while it's up.
 // They sell through four generic consumable price tiers (co.inflect.muster.offer.t1-t4) whose App Store description
-// says only "Limited-time bundle; contents shown in the game": what a tier pays is decided here, never by the store.
+// says only "Limited-time bundle; contents shown in game": what a tier pays is decided here, never by the store.
 // Value is shown honestly: "3x value" is the bundle's worth in gems (coins at 10 a gem, cards at the daily-deal coin
 // price, the chest at its Shop gem price) over the gems the gem-pack ladder gives for the same money, rounded down.
 // The chest's contents are random with the odds its info sheet shows (the offer card links to them).

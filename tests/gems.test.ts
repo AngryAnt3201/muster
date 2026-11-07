@@ -266,8 +266,10 @@ describe("gem packs in the App Store Connect copy", () => {
     expect(md).toMatch(/No Restore Purchases/);
     expect(meta.reviewNotes).toMatch(/no non-consumables, so there is no Restore Purchases button/);
   });
-  it("still promises no ads, no tracking and no random rewards", () => {
+  it("still promises no ads and no tracking, and (with chests in offers) that every chest shows its odds", () => {
     expect(meta.description).toMatch(/no ads, no tracking/i);
-    expect(meta.description).toMatch(/no loot boxes, no random rewards/);
+    // [pass] Chests (Shop, War Pass, special offers) hold random contents, so the copy promises odds, not "no random rewards".
+    expect(meta.description).not.toMatch(/no loot boxes|no random rewards/);
+    expect(meta.description).toMatch(/every chest shows its odds/);
   });
 });

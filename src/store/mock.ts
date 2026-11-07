@@ -18,7 +18,7 @@ export const MOCK_PRODUCTS: Product[] = [
   ...GEM_PACKS.map((p) => ({ id: p.id, title: `${p.gems.toLocaleString("en")} Gems`, description: `A ${p.name.toLowerCase()} of ${p.gems.toLocaleString("en")} gems.`, displayPrice: `$${p.usd}`, price: p.usd })),
   // [pass] War Pass Premium (once a season, app-enforced) and the special-offer price tiers.
   { id: PASS, title: "War Pass Premium", description: "This season's premium reward track.", displayPrice: "$4.99", price: 4.99 },
-  ...Object.values(OFFER_TIERS).map((t) => ({ id: t.id, title: "Special Offer", description: "Limited-time bundle; contents shown in the game", displayPrice: `$${t.usd}`, price: t.usd })),
+  ...Object.values(OFFER_TIERS).map((t) => ({ id: t.id, title: "Special Offer", description: "Limited-time bundle; contents shown in game", displayPrice: `$${t.usd}`, price: t.usd })),
 ];
 /** Every product Muster sells is a consumable (gem packs, the Starter Pack, War Pass Premium, offer tiers). */
 const consumable = (id: string) => id === STARTER || id === PASS || id.startsWith("co.inflect.muster.offer.") || GEM_PACKS.some((p) => p.id === id);

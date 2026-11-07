@@ -19,9 +19,9 @@
     "Turn-based army battler"
   ],
   "promotionalText": "New: a Daily Challenge for everyone, a new act and four new units. Free to play with every level open. No ads, no tracking, offline.",
-  "description": "Muster an army. Place it. Watch it fight.\n\n{{name}} is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.\n\n{{units}} UNITS, EACH WITH A MIND OF ITS OWN\nNo grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.\n\nEVOLVE THEM. ASCEND THEM.\nRank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, {{abilities}} in all.\n\nRIVALS THAT THINK\nRivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.\n\nFIVE WAYS TO PLAY\n• Campaign: {{levels}} levels across {{actsWord}} acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.\n• Daily Challenge: one board a day, the same for every player. Win it, keep your streak going and beat your best.\n• Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.\n• Breakpoint: {{puzzles}} one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.\n• Skirmish: any rival, any settings, any starting health.\n\nFREE TO PLAY, EVERY LEVEL OPEN\nEvery act of the campaign, the Gauntlet, every Breakpoint puzzle, the Daily Challenge and Skirmish are free, for as long as you like. Nothing is locked behind a purchase.\nOptional purchases only speed you up. A one-time Starter Pack gives gems, coins and unit cards to get your army going. Gems are earned free from three-star clears, bosses, Daily wins and streaks, and spent on coins for troop upgrades or a Gauntlet Rally; gem packs in the Shop speed that up. Every purchase says exactly what you get: no subscriptions, no energy, no loot boxes, no random rewards.\n\nPLAYS YOUR WAY\n• Short rounds that fit a spare minute, with 2× and 3× battle speed\n• Fully offline: no account, no sign-in, no internet needed to play\n• No ads, no tracking, no timers\n• Your progress stays on your device",
+  "description": "Muster an army. Place it. Watch it fight.\n\n{{name}} is a turn-based army battler for one player. Each round you buy units from a shop of four and place them anywhere on your half of the field. Then you press Fight and the battle plays out on its own. Your units stay on the board and come back every round, so your army grows as the match goes on. Lose a round and your commander takes damage. First commander to zero loses.\n\n{{units}} UNITS, EACH WITH A MIND OF ITS OWN\nNo grid and no lanes: every unit steers freely and fights its own way. Blade Trios surround a target and slash as a pack. Rangers hold their distance and back off when rushed. Lancers charge straight through a line, wheel round and charge again. Shades cloak, blink behind the weakest enemy and strike. Mines lie buried until someone steps too close. Harriers fly over the melee, Sappers tunnel to the backline, Stormcallers chain lightning through tight formations. Where you place them decides the fight.\n\nEVOLVE THEM. ASCEND THEM.\nRank a unit up from Recruit to Veteran to Elite and it looks tougher and hits harder at every step. From round 5 you can Ascend it: a transformed unit with a signature ability. Whirlwind slashes, Volley arrows, a Revive, Firebombs, Trample charges, Deep Freeze, Shrapnel shells and more. One Ascended ability for every unit, {{abilities}} in all.\n\nRIVALS THAT THINK\nRivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.\n\nFIVE WAYS TO PLAY\n• Campaign: {{levels}} levels across {{actsWord}} acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.\n• Daily Challenge: one board a day, the same for every player. Win it, keep your streak going and beat your best.\n• Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.\n• Breakpoint: {{puzzles}} one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.\n• Skirmish: any rival, any settings, any starting health.\n\nFREE TO PLAY, EVERY LEVEL OPEN\nEvery act of the campaign, the Gauntlet, every Breakpoint puzzle, the Daily Challenge and Skirmish are free, for as long as you like. Nothing is locked behind a purchase.\nOptional purchases only speed you up. A one-time Starter Pack gives gems, coins and unit cards to get your army going. Gems are earned free from three-star clears, bosses, Daily wins and streaks, and spent on coins for troop upgrades or a Gauntlet Rally; gem packs in the Shop speed that up. Each season's War Pass fills as you play, with free rewards for everyone and an optional Premium track; limited-time special offers rotate in the Shop. Every purchase says exactly what you get, and every chest shows its odds before you open or buy it: no subscriptions, no energy.\n\nPLAYS YOUR WAY\n• Short rounds that fit a spare minute, with 2× and 3× battle speed\n• Fully offline: no account, no sign-in, no internet needed to play\n• No ads, no tracking, no timers\n• Your progress stays on your device",
   "keywords": "turn based,wargame,battle,tactical,fantasy,medieval,knights,soldiers,puzzle,offline,commander,war",
-  "whatsNew": "Daily Challenge: a new board every day, the same for every player, with a streak to keep. Free for everyone.\nA new act: Act 8, six new levels and a new boss.\nFour new units, each with its own Ascended ability.\nFree to play: every act, the Gauntlet and every Breakpoint puzzle are open to everyone. Optional purchases (a one-time Starter Pack and gem packs) only speed you up.\nGems: earn them free from three-star clears, bosses, Daily wins and streaks, or buy a pack in the Shop. Spend them on coins for troop upgrades or a Gauntlet Rally.\nSunlit new art across units, arenas and menus.",
+  "whatsNew": "Daily Challenge: a new board every day, the same for every player, with a streak to keep. Free for everyone.\nA new act: Act 8, six new levels and a new boss.\nFour new units, each with its own Ascended ability.\nFree to play: every act, the Gauntlet and every Breakpoint puzzle are open to everyone. Optional purchases (a one-time Starter Pack and gem packs) only speed you up.\nGems: earn them free from three-star clears, bosses, Daily wins and streaks, or buy a pack in the Shop. Spend them on coins for troop upgrades or a Gauntlet Rally.\nSunlit new art across units, arenas and menus.\nWar Pass: a 30-day season of rewards filled by three daily quests and your wins, free for everyone, with an optional Premium track. Special offers rotate in the Shop.",
   "primaryLanguage": "English (U.S.)",
   "bundleId": "co.inflect.muster",
   "sku": "co.inflect.muster",
@@ -35,7 +35,7 @@
     "secondary": null,
     "_note": "In App Store Connect: App Information > Category. Primary = Games, then pick the two Games subcategories Strategy and Casual. Leave Secondary empty (or Entertainment)."
   },
-  "price": "Free (USD 0.00), all countries and regions. Free to play, every level open. Optional consumable in-app purchases (a one-time Starter Pack and gem packs), see store/IAP.md",
+  "price": "Free (USD 0.00), all countries and regions. Free to play, every level open. Optional consumable in-app purchases (a one-time Starter Pack, gem packs, War Pass Premium once per season and special-offer tiers), see store/IAP.md",
   "copyright": "2026 Jack Wakem",
   "contentRights": "No, it does not contain, show, or access third-party content",
   "supportUrl": "https://muster-tactics.vercel.app/support.html",
@@ -135,7 +135,7 @@
   },
   "exportCompliance": "Handled in the binary: ITSAppUsesNonExemptEncryption = NO in Info.plist, so App Store Connect does not ask.",
   "signInRequired": false,
-  "reviewNotes": "{{name}} is a single-player strategy game. No account or sign-in, no ads, no tracking. The game itself never uses the network; the only network use is Apple's own purchase sheet (StoreKit 2).\n\nFree to play: every campaign act, the Gauntlet, the Daily Challenge, Skirmish (AI Lab) and every Breakpoint puzzle. Nothing is locked behind a purchase; purchases only speed progress up.\nIn-app purchases, all consumables: a one-time Starter Pack (co.inflect.muster.starter), sold once per player and hidden after it's bought, with 1,200 gems, 6,000 coins and 142 unit cards; and five gem packs (co.inflect.muster.gems.pouch, .sack, .coffer, .trove, .hoard). Gems are a premium currency spent on coin bundles (troop upgrades) and a once-per-run Gauntlet Rally. Every purchase gives fixed, stated contents; nothing in the game gives random paid rewards. Gems are also earned free by playing. There are no non-consumables, so there is no Restore Purchases button.\n\nTo test with a sandbox account: on the title screen tap Shop, then tap the Starter Pack price button (or a gem pack's) and confirm. The price shown comes from the App Store.\n\nHow to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.\nDaily Challenge and Skirmish are open from the title screen for everyone.",
+  "reviewNotes": "{{name}} is a single-player strategy game. No account or sign-in, no ads, no tracking. The game itself never uses the network; the only network use is Apple's own purchase sheet (StoreKit 2).\n\nFree to play: every campaign act, the Gauntlet, the Daily Challenge, Skirmish (AI Lab) and every Breakpoint puzzle. Nothing is locked behind a purchase; purchases only speed progress up.\nIn-app purchases, all consumables: a one-time Starter Pack (co.inflect.muster.starter), sold once per player and hidden after it's bought, with 1,200 gems, 6,000 coins and 142 unit cards; and five gem packs (co.inflect.muster.gems.pouch, .sack, .coffer, .trove, .hoard). Gems are a premium currency spent on coin bundles (troop upgrades) and a once-per-run Gauntlet Rally. Also War Pass Premium (co.inflect.muster.pass), a consumable sold once per 30-day season that adds the season's premium reward track (title screen > War Pass), and four special-offer price tiers (co.inflect.muster.offer.t1-t4) for limited-time bundles whose fixed gems, coins and cards are shown in the Shop with one chest. Every purchase states its contents; the only random part is a chest's contents, and every chest's odds are shown (Odds button) before it is bought or opened. Gems are also earned free by playing. There are no non-consumables, so there is no Restore Purchases button.\n\nTo test with a sandbox account: on the title screen tap Shop, then tap the Starter Pack price button (or a gem pack's, or a special offer's) and confirm; War Pass Premium is on the War Pass screen. The price shown comes from the App Store.\n\nHow to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.\nDaily Challenge and Skirmish are open from the title screen for everyone.",
   "reviewContact": {
     "firstName": "Jack",
     "lastName": "Wakem",
@@ -261,6 +261,61 @@
         "description": "A hoard of 6,000 gems for the Shop",
         "price": "USD 49.99",
         "gems": 6000
+      }
+    ]
+  },
+  "warPass": {
+    "_note": "War Pass Premium: a consumable the app sells once per season (30 days, app-enforced). Generated into store/IAP.md by `npm run release:config`. Rewards live in src/progression/pass.ts; the app shows StoreKit's displayPrice.",
+    "productId": "co.inflect.muster.pass",
+    "type": "Consumable",
+    "referenceName": "War Pass Premium",
+    "displayName": "War Pass Premium",
+    "description": "This season's premium reward track",
+    "price": "USD 4.99",
+    "availability": "All countries and regions (same as the app)",
+    "familySharing": "Not offered for consumables (the switch isn't shown).",
+    "taxCategory": "Match to parent app (the default)",
+    "reviewScreenshot": "outputs/review/pass/01-pass-free.png",
+    "promotionalImage": "None",
+    "reviewNotes": "War Pass Premium is a consumable the app sells once per 30-day season (the app refuses a second purchase in the same season). It adds a second reward track to the season's War Pass: gems, coins, chests, unit cards and a cosmetic keep skin, plus chests unlocking 20% faster. It is retroactive: rewards for tiers already reached become claimable at once. Every player progresses the pass for free through daily quests and wins, and the free track pays every player. Chest rewards show their odds (tap a chest). Nothing in battle changes and no content is locked: every level is free. It is credited once per transaction and only then finished. To find it: title screen > War Pass (or Pass tab), the Premium card below the daily quests."
+  },
+  "specialOffers": {
+    "_note": "Special offers: four generic consumable price tiers. Which bundle a tier pays is decided by the app (src/store/offers.ts) and shown in the game before purchase; the App Store description stays generic. Generated into store/IAP.md by `npm run release:config`.",
+    "type": "Consumable",
+    "availability": "All countries and regions (same as the app)",
+    "familySharing": "Not offered for consumables (the switch isn't shown).",
+    "taxCategory": "Match to parent app (the default)",
+    "reviewScreenshot": "outputs/review/pass/11-shop-offers.png",
+    "promotionalImage": "None",
+    "reviewNotes": "Special offers are limited-time bundles shown in the Shop: 2 or 3 at a time, rotating every 2 days, each buyable once while it is up. Each bundle's exact contents are shown before purchase: a fixed number of gems and coins, a fixed number of cards for a named unit, and one chest. The chest's contents are random; its odds are shown by the Odds button on the offer card. These four products are price tiers the bundles sell through, so their App Store description is generic. Every bundle is credited once per transaction and only then finished. No content is locked: every level is free. To find them: title screen > Shop, Special offers below the Starter Pack.",
+    "tiers": [
+      {
+        "productId": "co.inflect.muster.offer.t1",
+        "referenceName": "Special Offer Tier 1 (1.99)",
+        "displayName": "Special Offer",
+        "description": "Limited-time bundle; contents shown in game",
+        "price": "USD 1.99"
+      },
+      {
+        "productId": "co.inflect.muster.offer.t2",
+        "referenceName": "Special Offer Tier 2 (4.99)",
+        "displayName": "Special Offer",
+        "description": "Limited-time bundle; contents shown in game",
+        "price": "USD 4.99"
+      },
+      {
+        "productId": "co.inflect.muster.offer.t3",
+        "referenceName": "Special Offer Tier 3 (9.99)",
+        "displayName": "Special Offer",
+        "description": "Limited-time bundle; contents shown in game",
+        "price": "USD 9.99"
+      },
+      {
+        "productId": "co.inflect.muster.offer.t4",
+        "referenceName": "Special Offer Tier 4 (19.99)",
+        "displayName": "Special Offer",
+        "description": "Limited-time bundle; contents shown in game",
+        "price": "USD 19.99"
       }
     ]
   }

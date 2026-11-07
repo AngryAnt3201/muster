@@ -93,6 +93,7 @@ console.log(`  counts from src/core: ${Object.entries(counts).map(([k, v]) => `$
 const fill = (s) => fillCounts((s ?? "").replaceAll("{{name}}", app.storeName), counts);
 const iap = meta.inAppPurchase;
 const gems = meta.gemPacks;
+const pass = meta.warPass, offers = meta.specialOffers; // [pass]
 const fields = {
   name: [meta.name, 30],
   subtitle: [meta.subtitle, 30],
@@ -112,6 +113,13 @@ const fields = {
       [`gemPacks.${g.productId}.description`, [g.description, 45]],
     ])) : {}),
     ...(gems ? { "gemPacks.reviewNotes": [gems.reviewNotes, 4000] } : {}),
+    ...(pass ? { "warPass.referenceName": [pass.referenceName, 64], "warPass.displayName": [pass.displayName, 30], "warPass.description": [pass.description, 45], "warPass.reviewNotes": [pass.reviewNotes, 4000] } : {}),
+    ...(offers ? Object.fromEntries(offers.tiers.flatMap((t) => [
+      [`specialOffers.${t.productId}.referenceName`, [t.referenceName, 64]],
+      [`specialOffers.${t.productId}.displayName`, [t.displayName, 30]],
+      [`specialOffers.${t.productId}.description`, [t.description, 45]],
+    ])) : {}),
+    ...(offers ? { "specialOffers.reviewNotes": [offers.reviewNotes, 4000] } : {}),
   } : {}),
 };
 for (const [k, [v, max]] of Object.entries(fields)) {
@@ -224,6 +232,10 @@ Free to play, every level open: nothing is locked behind a purchase, purchases o
 **${iap.displayName}** (\`${iap.productId}\`, ${iap.type.toLowerCase()}, sold once per player), ${iap.price}. Every field to enter in App Store Connect is in \`store/IAP.md\`.
 ${gems ? `
 Plus ${gems.packs.length} consumable gem packs (\`${gems.packs[0].productId.replace(/\.[^.]+$/, ".*")}\`): ${gems.packs.map((g) => `${g.displayName} ${g.price.replace("USD ", "US$")}`).join(", ")}. Also in \`store/IAP.md\` (section 4). No Restore Purchases: there are no non-consumables.
+` : ""}${pass ? `
+Plus **${pass.displayName}** (\`${pass.productId}\`, consumable, sold once per 30-day season), ${pass.price}: the War Pass's premium track, retroactive. \`store/IAP.md\` section 5.
+` : ""}${offers ? `
+Plus ${offers.tiers.length} special-offer price tiers (\`${offers.tiers[0].productId.replace(/\.[^.]+$/, ".*")}\`, consumables): ${offers.tiers.map((t) => t.price.replace("USD ", "US$")).join(", ")}. Limited-time bundles whose contents the game shows; chest odds one tap away. \`store/IAP.md\` section 6.
 ` : ""}
 ` : ""}## App Privacy
 
@@ -310,7 +322,7 @@ Then submit the version as usual (\`store/RELEASE-CHECKLIST.md\` step 7). The pu
 
 - **Simulator, no Apple account needed:** \`npm run ios:open\`, pick an iPhone simulator, press Run. The shared App scheme already uses \`ios/App/Muster.storekit\` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and failure all work locally. Debug > StoreKit > Manage Transactions shows the Starter Pack finished once its contents are saved. The plugin's own StoreKit tests run from \`ios/MusterStore/TestHost\` (command at the top of its project.yml).
 - **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy the Starter Pack from a TestFlight or Xcode build. Sandbox purchases are free. After it's bought the Shop shows "Owned" for a moment and the offer goes away.
-${gems ? gemSection() : ""}`);
+${gems ? gemSection() : ""}${pass ? passSection() : ""}${offers ? offerSection() : ""}`);
 }
 
 function gemSection() {
@@ -352,6 +364,71 @@ ${count(gems.reviewNotes, 4000)}.
 Then on the ${meta.version} version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as the Starter Pack.
 
 Test: the simulator's \`ios/App/Muster.storekit\` already lists the five packs (US$0.99 to US$49.99), so buy, cancel, Ask to Buy and failure all work without an account. Debug > StoreKit > Manage Transactions shows each pack finished once its gems are saved.
+`;
+}
+
+// [pass] War Pass Premium and special-offer tiers
+function sameRows(b) {
+  return `| Availability | Countries or Regions | ${b.availability} |
+| Price Schedule | Base price | the price above; let Apple set the other storefronts from it |
+| Family Sharing | | ${b.familySharing} |
+| Tax Category | | ${b.taxCategory} |
+| Review Information | Screenshot | \`${b.reviewScreenshot}\` (phone review shot; any iPhone screenshot of the screen with the price showing also works). Re-shoot with \`node tools/pass-shots.mjs\` while \`npx vite --port 5594\` runs. |
+| Review Information | Review Notes | the block below |
+| Promotional Image | | ${b.promotionalImage} |`;
+}
+function passSection() {
+  return `
+## 5. War Pass Premium (one consumable, 5 min)
+
+A consumable the app sells **once per 30-day season** (the app refuses a second purchase in the same season; if one ever arrives anyway, say an old Ask to Buy approved late, it pays 450 gems instead). It adds the season's premium reward track and is retroactive: tiers already reached become claimable at once. Credited once per App Store transaction and only then finished.
+
+Apps > ${meta.name} > Monetization > **In-App Purchases** > **+** > Type **${pass.type}**.
+
+| Field | Enter | Limit |
+| --- | --- | --- |
+| Reference Name | \`${pass.referenceName}\` | ${count(pass.referenceName, 64)} |
+| Product ID | \`${pass.productId}\` | must match the app exactly |
+| Base price | ${pass.price} | |
+| Display Name | \`${pass.displayName}\` | ${count(pass.displayName, 30)} |
+| Description | \`${pass.description}\` | ${count(pass.description, 45)} |
+
+| Section | Field | Enter |
+| --- | --- | --- |
+${sameRows(pass)}
+
+Review Notes:
+
+${block(pass.reviewNotes)}
+${count(pass.reviewNotes, 4000)}.
+`;
+}
+function offerSection() {
+  return `
+## 6. Special offers (four consumable price tiers, 15 min)
+
+Limited-time bundles in the Shop (gems + coins + cards for a named unit + one chest), 2 or 3 at a time, rotating every 2 days, each buyable once while it's up. They sell through these four generic price tiers: the game decides and shows each bundle's contents (\`src/store/offers.ts\`), so the App Store description stays generic and bundles can change without touching App Store Connect. The chest inside is random with its odds one tap away (Odds button on the offer). Credited once per transaction and only then finished.
+
+For each row: **+** > Type **${offers.type}**, the Reference Name and Product ID, **Create**, then fill the page.
+
+| Product ID | Reference Name | Price (US base) | Display Name | Description |
+| --- | --- | --- | --- | --- |
+${offers.tiers.map((t) => `| \`${t.productId}\` | \`${t.referenceName}\` (${count(t.referenceName, 64)}) | ${t.price} | \`${t.displayName}\` (${count(t.displayName, 30)}) | \`${t.description}\` (${count(t.description, 45)}) |`).join("\n")}
+
+The same on every tier:
+
+| Section | Field | Enter |
+| --- | --- | --- |
+${sameRows(offers)}
+
+Review Notes (same for every tier):
+
+${block(offers.reviewNotes)}
+${count(offers.reviewNotes, 4000)}.
+
+Then on the ${meta.version} version page, **In-App Purchases and Subscriptions** > **+**: tick War Pass Premium and the four offer tiers too.
+
+Test: \`ios/App/Muster.storekit\` lists War Pass Premium (US$4.99) and the four tiers (US$1.99 to US$19.99), so buy, cancel, Ask to Buy and failure work in the simulator without an account. On the web, \`?pass\` and \`?shop\` with \`&store=pending|cancelled|failed|offline\` show each state.
 `;
 }
 

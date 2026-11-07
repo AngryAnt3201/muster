@@ -62,7 +62,7 @@ FIVE WAYS TO PLAY
 
 FREE TO PLAY, EVERY LEVEL OPEN
 Every act of the campaign, the Gauntlet, every Breakpoint puzzle, the Daily Challenge and Skirmish are free, for as long as you like. Nothing is locked behind a purchase.
-Optional purchases only speed you up. A one-time Starter Pack gives gems, coins and unit cards to get your army going. Gems are earned free from three-star clears, bosses, Daily wins and streaks, and spent on coins for troop upgrades or a Gauntlet Rally; gem packs in the Shop speed that up. Every purchase says exactly what you get: no subscriptions, no energy, no loot boxes, no random rewards.
+Optional purchases only speed you up. A one-time Starter Pack gives gems, coins and unit cards to get your army going. Gems are earned free from three-star clears, bosses, Daily wins and streaks, and spent on coins for troop upgrades or a Gauntlet Rally; gem packs in the Shop speed that up. Each season's War Pass fills as you play, with free rewards for everyone and an optional Premium track; limited-time special offers rotate in the Shop. Every purchase says exactly what you get, and every chest shows its odds before you open or buy it: no subscriptions, no energy.
 
 PLAYS YOUR WAY
 • Short rounds that fit a spare minute, with 2× and 3× battle speed
@@ -70,7 +70,7 @@ PLAYS YOUR WAY
 • No ads, no tracking, no timers
 • Your progress stays on your device
 ```
-3151/4000.
+3327/4000.
 
 ## What's New in This Version
 
@@ -81,8 +81,9 @@ Four new units, each with its own Ascended ability.
 Free to play: every act, the Gauntlet and every Breakpoint puzzle are open to everyone. Optional purchases (a one-time Starter Pack and gem packs) only speed you up.
 Gems: earn them free from three-star clears, bosses, Daily wins and streaks, or buy a pack in the Shop. Spend them on coins for troop upgrades or a Gauntlet Rally.
 Sunlit new art across units, arenas and menus.
+War Pass: a 30-day season of rewards filled by three daily quests and your wins, free for everyone, with an optional Premium track. Special offers rotate in the Shop.
 ```
-586/4000. App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.
+753/4000. App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.
 
 ## Keywords
 
@@ -100,7 +101,7 @@ turn based,wargame,battle,tactical,fantasy,medieval,knights,soldiers,puzzle,offl
 | Version | 1.1.0 (build 1) |
 | Primary language | English (U.S.) |
 | Category | Games, subcategories Strategy and Casual; no secondary category |
-| Price | Free (USD 0.00), all countries and regions. Free to play, every level open. Optional consumable in-app purchases (a one-time Starter Pack and gem packs), see store/IAP.md |
+| Price | Free (USD 0.00), all countries and regions. Free to play, every level open. Optional consumable in-app purchases (a one-time Starter Pack, gem packs, War Pass Premium once per season and special-offer tiers), see store/IAP.md |
 | Copyright | 2026 Jack Wakem |
 | Content rights | No, it does not contain, show, or access third-party content |
 | Support URL | https://muster-tactics.vercel.app/support.html |
@@ -146,6 +147,10 @@ Free to play, every level open: nothing is locked behind a purchase, purchases o
 
 Plus 5 consumable gem packs (`co.inflect.muster.gems.*`): 80 Gems US$0.99, 450 Gems US$4.99, 1,000 Gems US$9.99, 2,200 Gems US$19.99, 6,000 Gems US$49.99. Also in `store/IAP.md` (section 4). No Restore Purchases: there are no non-consumables.
 
+Plus **War Pass Premium** (`co.inflect.muster.pass`, consumable, sold once per 30-day season), USD 4.99: the War Pass's premium track, retroactive. `store/IAP.md` section 5.
+
+Plus 4 special-offer price tiers (`co.inflect.muster.offer.*`, consumables): US$1.99, US$4.99, US$9.99, US$19.99. Limited-time bundles whose contents the game shows; chest odds one tap away. `store/IAP.md` section 6.
+
 ## App Privacy
 
 **Data Not Collected.** App Privacy > Get Started > 'Do you or your third-party partners collect data from this app?' = No, we do not collect data from this app. Then Publish. Still true with the in-app purchases: Apple takes the payment outside the app, and what was bought is credited and remembered on the device only. Apple's rule: data processed only on device is not 'collected' (https://developer.apple.com/support/app-privacy-on-the-app-store/). No tracking. No third-party SDKs (StoreKit is Apple's own). No analytics, ads or crash reporting.
@@ -162,9 +167,9 @@ Notes:
 Muster: Tactics is a single-player strategy game. No account or sign-in, no ads, no tracking. The game itself never uses the network; the only network use is Apple's own purchase sheet (StoreKit 2).
 
 Free to play: every campaign act, the Gauntlet, the Daily Challenge, Skirmish (AI Lab) and every Breakpoint puzzle. Nothing is locked behind a purchase; purchases only speed progress up.
-In-app purchases, all consumables: a one-time Starter Pack (co.inflect.muster.starter), sold once per player and hidden after it's bought, with 1,200 gems, 6,000 coins and 142 unit cards; and five gem packs (co.inflect.muster.gems.pouch, .sack, .coffer, .trove, .hoard). Gems are a premium currency spent on coin bundles (troop upgrades) and a once-per-run Gauntlet Rally. Every purchase gives fixed, stated contents; nothing in the game gives random paid rewards. Gems are also earned free by playing. There are no non-consumables, so there is no Restore Purchases button.
+In-app purchases, all consumables: a one-time Starter Pack (co.inflect.muster.starter), sold once per player and hidden after it's bought, with 1,200 gems, 6,000 coins and 142 unit cards; and five gem packs (co.inflect.muster.gems.pouch, .sack, .coffer, .trove, .hoard). Gems are a premium currency spent on coin bundles (troop upgrades) and a once-per-run Gauntlet Rally. Also War Pass Premium (co.inflect.muster.pass), a consumable sold once per 30-day season that adds the season's premium reward track (title screen > War Pass), and four special-offer price tiers (co.inflect.muster.offer.t1-t4) for limited-time bundles whose fixed gems, coins and cards are shown in the Shop with one chest. Every purchase states its contents; the only random part is a chest's contents, and every chest's odds are shown (Odds button) before it is bought or opened. Gems are also earned free by playing. There are no non-consumables, so there is no Restore Purchases button.
 
-To test with a sandbox account: on the title screen tap Shop, then tap the Starter Pack price button (or a gem pack's) and confirm. The price shown comes from the App Store.
+To test with a sandbox account: on the title screen tap Shop, then tap the Starter Pack price button (or a gem pack's, or a special offer's) and confirm; War Pass Premium is on the War Pass screen. The price shown comes from the App Store.
 
 How to play: tap Campaign, then level 1. Drag a unit card from the shop at the bottom onto your (lower) half of the board and tap FIGHT; the battle plays itself, and winning rounds brings the rival's health to zero.
 Daily Challenge and Skirmish are open from the title screen for everyone.
