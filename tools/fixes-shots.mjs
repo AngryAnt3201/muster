@@ -95,5 +95,14 @@ if (!skip("shop-back")) {
   await p.context().close();
 }
 
+// 5. The Daily draft pool on one row.
+if (!skip("daily-draft")) {
+  const p = await page();
+  await p.goto(`http://${host}:${port}/?daily`);
+  await p.waitForTimeout(2200);
+  await shot(p, "daily-draft");
+  await p.context().close();
+}
+
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();

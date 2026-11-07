@@ -661,9 +661,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 .daily-rival .tag { flex: none; }
 .daily-draft { display: flex; flex-direction: column; gap: 6px; }
 .daily-draft > small, .daily-streak-stats span { font-size: 12px; font-weight: 800; color: var(--k-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.daily-draft .roster { justify-content: center; }
-.daily-draft .roster { gap: 5px; padding: 7px; }
-.daily-draft .roster-unit.frame { width: 36px; height: 36px; }
+.daily-draft .roster { display: grid; grid-template-columns: repeat(var(--n, 9), minmax(0, 44px)); justify-content: center; gap: 4px; padding: 6px; }
+.daily-draft .roster-unit.frame { width: 100%; height: auto; aspect-ratio: 1; padding: 1.5px; }
 /* Streak: a flame, the count, and the last seven days lit. */
 .daily-streak { gap: 10px; padding: 12px 14px 12px; }
 .daily-streak-top { display: flex; align-items: center; gap: 10px; }

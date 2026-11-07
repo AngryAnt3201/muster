@@ -78,7 +78,8 @@ export function dailyBody(v: DailyView) {
     el("div", { class: "daily-rule" }, [ribbon(b.rule.name, "gold small"), el("span", {}, [b.rule.text])]),
     el("div", { class: "daily-draft" }, [
       el("small", {}, ["Today's draft"]),
-      el("div", { class: "roster" }, b.roster.map((k) => framedPortrait(k, 1, "roster-unit").frame)),
+      // One row, however many units the draft has (the tiles share the width).
+      el("div", { class: "roster", style: `--n:${b.roster.length}` }, b.roster.map((k) => framedPortrait(k, 1, "roster-unit").frame)),
     ]),
   ]);
   const streak = el("div", { class: `panel daily-streak ${v.streak ? "on" : ""}` }, [
