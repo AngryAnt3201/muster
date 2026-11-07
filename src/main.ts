@@ -2,7 +2,7 @@ import "./styles.css";
 import { DEFAULT_AI, TACTICS, type AIProfile, type Tactic } from "./core/ai";
 import { ACTS, LEVELS } from "./core/campaign";
 import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type LevelDef, type PuzzleDef } from "./core/content";
-import { UNITS, UNIT_KINDS, START_HP, type UnitKind } from "./core/defs";
+import { UNITS, START_HP, type UnitKind } from "./core/defs";
 import { beginDaily, canScore, dailyBoard, dailyConfig, dailyResult, dateKey, finishDaily, streakOn } from "./core/daily";
 import { boonChoices, duelConfig, endDuel, gauntletFoe, boardValue, newRun, takeBoon, type GauntletRun } from "./core/gauntlet";
 import type { Match } from "./core/match";
@@ -18,8 +18,11 @@ import { actGateCard, fullArmyOffer } from "./ui/shop";
 import { el, stars } from "./ui/dom";
 import { MAP_SIZE } from "./ui/mapdata";
 import { mapForAct, nodeFractions, nodePositions, pathUpTo } from "./ui/maplayout";
-import { GameScreen, TIER_NAMES, abilityOf, framedPortrait, paintPortrait, ribbon, statsLine } from "./ui/game";
-import { ROLE_LABEL, applyUIStyle, coin, icon, roleBadge } from "./ui/kit";
+import { GameScreen, framedPortrait, paintPortrait, ribbon } from "./ui/game";
+import { applyUIStyle, icon } from "./ui/kit";
+// [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
+import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, withLevels } from "./progression/troops";
+import { attachReward, barracksScreen } from "./ui/barracks";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -238,7 +241,7 @@ function levelSheet(l: LevelDef) {
 function playLevel(l: LevelDef, attempt = 0) {
   clear();
   game = new GameScreen(app, {
-    cfg: levelConfig(l, attempt),
+    cfg: withLevels(levelConfig(l, attempt), "campaign", { act: l.act }), // [progression]
     foe: l.ai,
     mode: "campaign",
     title: l.name,
@@ -246,6 +249,7 @@ function playLevel(l: LevelDef, attempt = 0) {
     hint: l.id === 1 && !load().campaign[1],
     onEnd: (m) => {
       const n = starsFor(l, m);
+      const coins = awardCampaign(l, m.winner === 0, n); // [progression] before the star save, to see a first clear
       if (n > (load().campaign[l.id] ?? 0)) save((s) => { s.campaign[l.id] = n; });
       const nextL = LEVELS.find((x) => x.id === l.id + 1);
       results(m, {
@@ -257,6 +261,7 @@ function playLevel(l: LevelDef, attempt = 0) {
           : ["Retry", () => playLevel(l, attempt + 1)],
         secondary: ["Campaign", () => campaign(l.act)],
       });
+      attachReward(coins, barracks); // [progression]
     },
     onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
@@ -371,7 +376,7 @@ function duel() {
   const r = run;
   const foe = gauntletFoe(r.stage, boardValue(r.board), r.seed);
   game = new GameScreen(app, {
-    cfg: duelConfig(r, foe),
+    cfg: withLevels(duelConfig(r, foe), "gauntlet", { stage: r.stage }), // [progression]
     foe: foe.ai,
     mode: "gauntlet",
     title: `Rival ${r.stage}`,
@@ -388,7 +393,9 @@ function duel() {
         return;
       }
       if (r.wins > load().gauntlet.best) save((s) => { s.gauntlet.best = r.wins; });
+      const coins = awardGauntletRival(r.stage - 1); // [progression]
       boonPick(r);
+      attachReward(coins); // [progression]
     },
     onQuit: gauntlet,
   });
@@ -470,6 +477,7 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
       let scored = false;
       if (!practice) save((s) => { scored = finishDaily(s.daily, key, r); });
       const d = load().daily;
+      const coins = awardDaily(r.won, scored, d.streak); // [progression] scored attempt only
       results(m, {
         heading: r.won ? "Victory" : "Defeat",
         note: scored
@@ -478,6 +486,7 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
         primary: ["Daily", daily],
         secondary: ["Menu", title],
       });
+      attachReward(coins, barracks); // [progression]
     },
     onQuit: daily,
     ...(practice ? { onRestart: () => playDaily(key, true, attempt + 1) } : {}),
@@ -538,16 +547,20 @@ function skirmish() {
 function playSkirmish(lab: Lab) {
   clear();
   game = new GameScreen(app, {
-    cfg: { seed: Math.floor(Math.random() * 1e9), hp: lab.hp, names: [lab.watch ? "Blue AI" : "You", `${cap(lab.foe.tactic)} AI`] },
+    cfg: withLevels({ seed: Math.floor(Math.random() * 1e9), hp: lab.hp, names: [lab.watch ? "Blue AI" : "You", `${cap(lab.foe.tactic)} AI`] }, lab.watch ? "watch" : "skirmish"), // [progression]
     foe: { ...lab.foe },
     you: lab.watch ? { ...lab.you } : undefined,
     mode: lab.watch ? "watch" : "skirmish",
     title: "Skirmish",
-    onEnd: (m) => results(m, {
-      heading: m.winner === 0 ? (lab.watch ? "Blue wins" : "Victory") : m.winner === 1 ? (lab.watch ? "Red wins" : "Defeat") : "Draw",
-      primary: ["Again", () => playSkirmish(lab)],
-      secondary: ["AI lab", skirmish],
-    }),
+    onEnd: (m) => {
+      const coins = awardSkirmish(m.winner === 0, lab.watch, lab.foe.difficulty, lab.hp); // [progression]
+      results(m, {
+        heading: m.winner === 0 ? (lab.watch ? "Blue wins" : "Victory") : m.winner === 1 ? (lab.watch ? "Red wins" : "Defeat") : "Draw",
+        primary: ["Again", () => playSkirmish(lab)],
+        secondary: ["AI lab", skirmish],
+      });
+      attachReward(coins, barracks); // [progression]
+    },
     onQuit: skirmish,
     onRestart: () => playSkirmish(lab),
   });
@@ -569,34 +582,10 @@ function paywall() {
 }
 
 // ---------------------------------------------------------------- barracks
+// [progression] The Barracks lives in src/ui/barracks.ts: troop levels, upgrades with coins, "Get coins" to the Shop.
 function barracks() {
   clear();
-  const list = el("div", { class: "barracks" }, UNIT_KINDS.map((k: UnitKind) => {
-    const d = UNITS[k];
-    const { frame, canvas: face } = framedPortrait(k, 1, "b-portrait");
-    const tiers = el("div", { class: "b-tiers" }, TIER_NAMES.map((n, i) => {
-      const b = el("button", { class: `chip ${i === 0 ? "on" : ""}` }, [n]);
-      b.addEventListener("click", () => {
-        const tier = i + 1; sfx("tap");
-        tiers.querySelectorAll(".chip").forEach((c, j) => c.classList.toggle("on", j === i));
-        frame.classList.remove("t1", "t2", "t3", "t4"); frame.classList.add(`t${tier}`);
-        paintPortrait(face, k, tier);
-      });
-      return b;
-    }));
-    const ab = abilityOf(k);
-    return el("div", { class: "b-card" }, [
-      el("div", { class: "b-top" }, [frame, el("div", { class: "b-id" }, [
-        el("div", { class: "b-name" }, [el("b", {}, [d.name]), coin(d.cost, "b-cost")]),
-        el("span", { class: "role-line" }, [roleBadge(d.role), ROLE_LABEL[d.role]]),
-        el("div", { class: "b-short" }, [d.short]),
-        el("div", { class: "b-stats" }, [statsLine(k)]),
-      ])]),
-      tiers,
-      ...(ab ? [el("div", { class: "pop-ability" }, [el("b", {}, [`Ascended · ${ab.name}`]), " ", ab.text])] : []),
-    ]);
-  }));
-  screen("barracks-screen", header("Barracks", title, el("span", { class: "star-total" }, [`${UNIT_KINDS.length} units`])), list);
+  barracksScreen({ app, back: title, shop: shopScreen });
 }
 
 // ---------------------------------------------------------------- showcase (debug / store shots)
