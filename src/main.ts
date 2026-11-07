@@ -27,10 +27,13 @@ import { creditPurchase } from "./economy/wallet";
 import { GemShop } from "./store/gems";
 import { currencyBar } from "./ui/currency";
 import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
-// [progression] troop levels (cards + coins), commander level, rewards and the Army (src/progression, src/ui/army.ts)
-import { armyLevel, awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, migrateArmy, settleLegacyCoins, withLevels } from "./progression/troops";
-import { recommendedLevel } from "./progression/economy";
-import { armyLabel, armyScreen, attachReward, commanderChip, underLevelledHint } from "./ui/army";
+// [progression] the Army: cards + coins upgrades, commander level, recommended level, defeat hint (src/ui/army.ts)
+import { armyLevel, migrateArmy } from "./progression/troops";
+import { commanderChip, underLevelledHint } from "./ui/army";
+// [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
+import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, settleLegacyCoins, withLevels } from "./progression/troops";
+import { foeLevelForAct } from "./progression/economy";
+import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -99,7 +102,7 @@ function title() {
       btn(el("span", {}, ["Bastion", el("small", {}, ["hold the road"])]), "big bastion-btn", () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); }),
     ]),
     el("div", { class: "title-foot" }, [
-      btn(armyLabel(), "ghost small", army), // [progression] badge when a troop can level up
+      btn(barracksLabel(), "ghost small", barracks), // [progression] badge when a troop can level up
       btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, () => shopScreen()),
       btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
     ]),
@@ -240,7 +243,7 @@ function levelSheet(l: LevelDef) {
     el("span", { class: "tag" }, [cap(l.ai.tactic)]),
     el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
-    el("span", { class: `tag rec ${armyLevel(l.roster) < recommendedLevel(l.act) - 0.5 ? "low" : ""}` }, [`Recommended Lv ${recommendedLevel(l.act)}`]), // [progression]
+    el("span", { class: `tag rec ${armyLevel(l.roster) < foeLevelForAct(l.act) - 0.5 ? "low" : ""}` }, [`Recommended Lv ${foeLevelForAct(l.act)}`]), // [progression]
   ]);
   const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${(l.unlocks ?? [l.unlock]).includes(k) ? "new" : ""}`).frame));
   sheet(el("div", {}, [
@@ -264,6 +267,8 @@ function playLevel(l: LevelDef, attempt = 0) {
     hint: l.id === 1 && !load().campaign[1],
     onEnd: (m) => {
       const n = starsFor(l, m);
+      // [progression] once the result sheet is up: "your army is under-levelled" with a way to the Army
+      if (m.winner !== 0) queueMicrotask(() => underLevelledHint({ avg: armyLevel(l.roster), recommended: foeLevelForAct(l.act), openArmy: barracks }));
       const coins = awardCampaign(l, m.winner === 0, n); // [progression] before the star save, to see a first clear
       if (n > (load().campaign[l.id] ?? 0)) save((s) => { s.campaign[l.id] = n; });
       const nextL = LEVELS.find((x) => x.id === l.id + 1);
@@ -276,8 +281,7 @@ function playLevel(l: LevelDef, attempt = 0) {
           : ["Retry", () => playLevel(l, attempt + 1)],
         secondary: ["Campaign", () => campaign(l.act)],
       });
-      attachReward(coins, army); // [progression]
-      if (m.winner !== 0) underLevelledHint({ avg: armyLevel(l.roster), recommended: recommendedLevel(l.act), openArmy: army }); // [progression]
+      attachReward(coins, barracks); // [progression]
     },
     onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
@@ -491,7 +495,7 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
         primary: ["Daily", daily],
         secondary: ["Menu", title],
       });
-      attachReward(coins, army); // [progression]
+      attachReward(coins, barracks); // [progression]
     },
     onQuit: daily,
     ...(practice ? { onRestart: () => playDaily(key, true, attempt + 1) } : {}),
@@ -564,7 +568,7 @@ function playSkirmish(lab: Lab) {
         primary: ["Again", () => playSkirmish(lab)],
         secondary: ["AI lab", skirmish],
       });
-      attachReward(coins, army); // [progression]
+      attachReward(coins, barracks); // [progression]
     },
     onQuit: skirmish,
     onRestart: () => playSkirmish(lab),
@@ -588,12 +592,13 @@ function paywall() {
   } })]));
 }
 
-// ---------------------------------------------------------------- army
-// [progression] The Army lives in src/ui/army.ts: the card collection, upgrades with cards + coins, "Get coins" to the Shop.
-function army() {
+// ---------------------------------------------------------------- barracks
+// [progression] The Barracks is now the Army (src/ui/army.ts via the barracks.ts alias): the card collection, upgrades
+// with cards + coins, the commander level, "Get coins" to the Shop. The title button reads "Army".
+function barracks() {
   clear();
-  here = army;
-  armyScreen({ app, back: title, shop: () => shopScreen(army) });
+  here = barracks;
+  barracksScreen({ app, back: title, shop: () => shopScreen(barracks) });
 }
 
 // ---------------------------------------------------------------- showcase (debug / store shots)
@@ -668,7 +673,7 @@ async function boot() {
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
   if (q.has("daily")) return daily();
-  if (q.has("barracks") || q.has("army")) return army(); // [progression]
+  if (q.has("barracks") || q.has("army")) return barracks(); // [progression]
   if (q.has("shop")) return shopScreen();
   // [td] hook: ?td opens Bastion's map select, ?td=meadow|fords starts a run.
   if (q.has("td")) return void import("./ui/td").then((m) => (q.get("td") ? m.playBastion(app, q.get("td")!, title) : m.bastionMenu(app, title)));
