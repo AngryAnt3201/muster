@@ -51,8 +51,8 @@ function button(label: (Node | string)[] | string, cls: string, fn: () => void) 
 export function clock(ms: number) {
   const s = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
-  if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
-  if (m) return `${m}m ${String(x).padStart(2, "0")}s`;
+  if (h) return m ? `${h}h ${String(m).padStart(2, "0")}m` : `${h}h`;
+  if (m) return x ? `${m}m ${String(x).padStart(2, "0")}s` : `${m} min`;
   return `${x}s`;
 }
 const gemPrice = (n: number) => el("span", { class: "ch-gems" }, [gemIcon(), String(n)]);
@@ -131,19 +131,34 @@ export function chestInfo(type: ChestType, slot?: number, after?: () => void) {
 /** The title's chest bar: four slots, then the free chest and the crown chest. Ticks every second while shown. */
 export function chestBar(): HTMLElement {
   const bar = el("div", { class: "ch-bar" });
-  const draw = () => {
+  // A full redraw only when something changes state (a chest lands, starts, gets ready...); otherwise each second just
+  // updates the timer and price text, so the ready hop and other loops never restart.
+  let sig = "", live: (() => void)[] = [];
+  const view = () => {
     const c = chests(), now = gameNow(), busy = unlocking(c, now);
+    const freeN = freeBanked({ ...c } as never, now);
+    const k = c.crown.day === localDay() ? c.crown : { crowns: 0, claimed: false };
+    const cReady = crownReady({ ...c, crown: { ...c.crown } } as never, localDay());
+    return { c, now, busy, freeN, k, cReady, sig: JSON.stringify([c.slots.map((ch) => ch && [ch.id, stateOf(ch, now)]), !!busy, freeN, k, cReady]) };
+  };
+  const draw = () => {
+    const v = view();
+    if (v.sig === sig) { for (const fn of live) fn(); return; }
+    sig = v.sig; live = [];
+    const { c, now, busy, freeN, k, cReady } = v;
     const slots = c.slots.map((ch, i) => {
       if (!ch) return el("div", { class: "ch-slot empty" }, [el("span", { class: "ch-slot-empty" }, ["Win a battle"])]);
-      const st = stateOf(ch, now), cost = skipCost(c, i, now);
-      const s = el("button", { class: `ch-slot ${st} t-${ch.type}` }, [
-        chestArt(ch.type),
-        el("span", { class: "ch-slot-name" }, [SHORT[ch.type]]),
-        st === "ready" ? el("b", { class: "ch-slot-t ready" }, ["Open!"])
-          : st === "unlocking" ? el("b", { class: "ch-slot-t" }, [clock(msLeft(ch, now))])
-          : el("b", { class: "ch-slot-t" }, [busy ? clock(CHESTS[ch.type].unlockMs) : "Tap to unlock"]),
-        st !== "ready" ? el("span", { class: "ch-slot-gem" }, [gemPrice(cost)]) : el("span"),
-      ]);
+      const st = stateOf(ch, now);
+      const t = el("b", { class: `ch-slot-t ${st === "ready" ? "ready" : ""}` });
+      const gem = el("span", { class: "ch-slot-gem" });
+      const update = () => {
+        const n = gameNow();
+        t.textContent = st === "ready" ? "Open!" : st === "unlocking" ? clock(msLeft(ch, n)) : busy ? clock(CHESTS[ch.type].unlockMs) : "Tap to unlock";
+        gem.replaceChildren(...(st === "ready" ? [] : [gemPrice(skipCost(chests(), i, n))]));
+      };
+      update();
+      if (st === "unlocking") live.push(update);
+      const s = el("button", { class: `ch-slot ${st} t-${ch.type}` }, [chestArt(ch.type), el("span", { class: "ch-slot-name" }, [SHORT[ch.type]]), t, gem]);
       tap(s, () => {
         if (st === "ready") { const got = openReady(i); if (got) openChest(got); return; }
         if (st === "locked" && !busy) { startUnlock(i); sfx("buy"); return; }
@@ -152,13 +167,12 @@ export function chestBar(): HTMLElement {
       s.addEventListener("contextmenu", (e) => { e.preventDefault(); chestInfo(ch.type, i); });
       return s;
     });
-    const freeN = freeBanked({ ...c, slots: c.slots } as never, now);
-    const free = el("button", { class: `ch-mini free ${freeN ? "ready" : ""}` }, [
-      chestArt("free", "mini"), el("span", {}, [el("b", {}, ["Free chest"]), el("small", {}, [freeN ? `${freeN}/${FREE_BANK} ready` : `next in ${clock(freeNextIn({ ...c } as never, now))}`])]),
-    ]);
+    const freeT = el("small");
+    const freeUpdate = () => { freeT.textContent = freeN ? `${freeN}/${FREE_BANK} ready` : `next in ${clock(freeNextIn({ ...chests() } as never, gameNow()))}`; };
+    freeUpdate();
+    if (freeN < FREE_BANK) live.push(freeUpdate);
+    const free = el("button", { class: `ch-mini free ${freeN ? "ready" : ""}` }, [chestArt("free", "mini"), el("span", {}, [el("b", {}, ["Free chest"]), freeT])]);
     tap(free, () => { if (!freeN) return void chestInfo("free"); const got = claimFree(); if (got) openChest(got); });
-    const k = c.crown.day === localDay() ? c.crown : { crowns: 0, claimed: false };
-    const cReady = crownReady({ ...c, crown: { ...c.crown } } as never, localDay());
     const crown = el("button", { class: `ch-mini crown ${cReady ? "ready" : ""}` }, [
       chestArt("crown", "mini"), el("span", {}, [el("b", {}, ["Crown chest"]), el("small", {}, [k.claimed ? "opened · back tomorrow" : cReady ? "ready!" : `${k.crowns}/${CROWNS_FOR_CHEST} stars`])]),
       el("i", { class: "ch-crown-fill", style: `transform:scaleX(${k.claimed ? 1 : k.crowns / CROWNS_FOR_CHEST})` }),
@@ -178,8 +192,8 @@ export function chestEarned(r: WinResult, into?: HTMLElement | null) {
   const host = into ?? document.querySelector<HTMLElement>(".overlay .sheet > .results, .overlay .sheet > .boons");
   if (!host) return;
   const line = r.chest
-    ? el("div", { class: "ch-earned" }, [chestArt(r.chest.type, "pop"), el("span", {}, [el("b", {}, ["Chest earned!"]), el("small", {}, [`${CHESTS[r.chest.type].name} · ${clock(CHESTS[r.chest.type].unlockMs)} to unlock`])])])
-    : el("div", { class: "ch-earned full" }, [chestArt("wood", "dim"), el("span", {}, [el("b", {}, ["Slots full"]), el("small", {}, ["Open a chest to make room for the next one."])])]);
+    ? el("div", { class: "ch-earned" }, [chestArt(r.chest.type, "ch-pop-in"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Chest earned!"]), el("small", {}, [`${CHESTS[r.chest.type].name} · ${clock(CHESTS[r.chest.type].unlockMs)} to unlock`])])])
+    : el("div", { class: "ch-earned full" }, [chestArt("wood", "dim"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Slots full"]), el("small", {}, ["Open a chest to make room for the next one."])])]);
   if (r.crowns > 0) line.append(el("span", { class: `ch-crowns ${r.crownReady ? "ready" : ""}` }, [r.crownReady ? "Crown chest ready!" : `${r.crowns}/${CROWNS_FOR_CHEST}`]));
   const before = host.querySelector(":scope > .btn, :scope > .boon-list, :scope > .td-result-btns");
   host.insertBefore(line, before);

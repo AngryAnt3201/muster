@@ -7,7 +7,7 @@
 .ch-art.big { width: 76px; height: 66px; }
 .ch-art.offer { width: 64px; height: 56px; }
 .ch-art.dim { opacity: 0.45; filter: grayscale(0.7); }
-.ch-art.pop { width: 48px; height: 42px; animation: ch-pop 0.7s cubic-bezier(.2,1.6,.4,1) 0.5s both; }
+.ch-art.ch-pop-in { width: 48px; height: 42px; animation: ch-pop 0.7s cubic-bezier(.2,1.6,.4,1) 0.5s both; }
 @keyframes ch-pop { from { transform: scale(0.2) translateY(20px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---- chest bar (title) */
@@ -69,7 +69,7 @@
 
 /* ---- result line */
 .ch-earned { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; border: 2px solid #2b1d14; background: linear-gradient(#fff3c4, #f6d77a); color: #2b1d14; animation: rise 0.4s cubic-bezier(.2,1.2,.3,1) 0.35s both; }
-.ch-earned > span:not(.ch-crowns) { display: flex; flex-direction: column; flex: 1; line-height: 1.1; }
+.ch-earned > .ch-earned-t { display: flex; flex-direction: column; flex: 1; line-height: 1.1; }
 .ch-earned b { font: 400 18px/1 var(--display, sans-serif); }
 .ch-earned small { font-size: 12px; font-weight: 800; opacity: 0.7; }
 .ch-earned.full { background: #f3eadb; }
