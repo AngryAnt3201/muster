@@ -1,0 +1,88 @@
+/* Gems: currency pills, the Shop's gem and coin sections, the result-screen reward strip and the Gauntlet Rally.
+   Owned by the gem store (src/ui/currency.ts, src/ui/gemshop.ts); uses the kit tokens from src/styles.css. */
+:root { --gem: #c06bff; --gem-d: #7a32d9; --gem-lt: #ecd0ff; }
+
+.gem-ico { display: inline-block; width: 1em; height: 1em; line-height: 0; flex: none; color: var(--gem); filter: drop-shadow(1.2px 0 0 var(--k-ink)) drop-shadow(-1.2px 0 0 var(--k-ink)) drop-shadow(0 1.2px 0 var(--k-ink)) drop-shadow(0 -1.2px 0 var(--k-ink)) drop-shadow(0 1.5px 0 var(--k-ink)); }
+.gem-ico svg { width: 100%; height: 100%; display: block; }
+
+/* ---- counters */
+.cur-bar { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+.cur-pill { display: inline-flex; align-items: center; gap: 6px; min-width: 74px; height: 32px; padding: 0 12px 0 5px; border-radius: 16px; border: 2.5px solid var(--k-ink);
+  background: linear-gradient(180deg, rgba(0,0,0,0.38), rgba(0,0,0,0.52)); box-shadow: inset 0 2px 0 rgba(255,255,255,0.12), 0 3px 0 var(--k-ink); color: #fff; }
+.cur-pill b { font: 400 17px/1 var(--display); text-shadow: var(--ol-s); letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.cur-pill .gem-ico { font-size: 22px; }
+.cur-pill .coin.icon-only { width: 22px; height: 22px; }
+.cur-pill.bump { animation: curBump 0.45s cubic-bezier(.2,1.6,.4,1); }
+@keyframes curBump { 0% { transform: scale(1); } 35% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+.screen.title > .cur-bar.title-cur { position: absolute; top: calc(var(--st) + 8px); right: 10px; z-index: 4; transform: scale(0.88); transform-origin: top right; }
+
+/* ---- fly-in */
+.fly-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+.fly-layer > .fly { position: absolute; font-size: 26px; will-change: transform; }
+.fly-layer > .coin.fly { width: 22px; height: 22px; }
+
+/* ---- Shop */
+.shop-screen .gem-shop { width: min(440px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.gem-shop > .shop-cur { position: sticky; top: calc(var(--st) + 58px); z-index: 2; margin: -6px 0 -4px; }
+.gem-shop .shop-offer.owned .shop-heroes, .gem-shop .shop-offer.owned .shop-perks, .gem-shop .shop-offer.owned .shop-pitch { display: none; }
+.gem-section { margin-top: 20px; padding-top: 30px; gap: 12px; }
+.gem-section > .ribbon { margin-top: -48px; }
+.ribbon.gem-ribbon { --r: var(--gem-d); }
+.gem-lead { margin: 0; text-align: center; font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--k-muted); }
+
+.gem-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px 8px; padding-top: 6px; }
+.gem-grid > .gem-card { grid-column: span 2; }
+.gem-grid > .gem-card:nth-child(n+4) { grid-column: span 3; }
+.gem-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 6px 8px; border-radius: 16px; border: 2.5px solid var(--k-ink);
+  background: linear-gradient(180deg, #f6e9ff, #e3c8fb); box-shadow: inset 0 2px 0 rgba(255,255,255,0.7), 0 3px 0 var(--k-ink); }
+.gem-card.best { background: linear-gradient(180deg, #fff6d0, #ffd97a); }
+.gem-card.gem-pop { animation: curBump 0.5s cubic-bezier(.2,1.6,.4,1); }
+.gem-flag { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 8px 4px; border-radius: 8px; border: 2px solid var(--k-ink);
+  background: var(--gloss), var(--k-danger); color: #fff; font: 400 12px/1 var(--display); text-shadow: var(--ol-s); }
+.gem-pile { position: relative; height: 44px; width: 64px; display: block; }
+.gem-pile .gem-ico { position: absolute; font-size: 30px; bottom: 0; left: 50%; transform: translateX(-50%); }
+.gem-pile .g1 { font-size: 24px; transform: translateX(-108%) rotate(-12deg); }
+.gem-pile .g2 { font-size: 24px; transform: translateX(8%) rotate(12deg); }
+.gem-pile .g3 { font-size: 20px; bottom: 18px; transform: translateX(-90%) rotate(-6deg); }
+.gem-pile .g4 { font-size: 20px; bottom: 20px; transform: translateX(-10%) rotate(8deg); }
+.gem-pile .g0 { z-index: 2; }
+.gem-amount { font: 400 22px/1 var(--display); color: #fff; text-shadow: var(--ol-s); margin-top: 2px; }
+.gem-name { font-size: 12px; font-weight: 800; color: var(--k-text); opacity: 0.75; text-transform: uppercase; letter-spacing: 0.06em; }
+.gem-bonus { min-height: 15px; font-size: 12px; font-weight: 800; color: var(--gem-d); }
+.gem-card.best .gem-bonus { color: #b04a12; }
+.btn.gem-buy { width: 100%; margin-top: 4px; padding: 7px 4px 8px; font-size: 16px; border-radius: 11px; }
+.gem-status { margin: 0; min-height: 1.3em; text-align: center; font-size: 14px; font-weight: 700; color: var(--k-muted); }
+.gem-status:empty { display: none; }
+.gem-status.warn { color: var(--k-danger); }
+.gem-status.good { color: var(--gem-d); }
+
+.gem-section.coins { gap: 10px; }
+.coin-row { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 10px; border-radius: 14px; background: var(--k-well); }
+.coin-pile { display: flex; width: 54px; flex: none; }
+.coin-pile .coin { width: 24px; height: 24px; margin-right: -8px; }
+.coin-what { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.coin-what b { font: 400 18px/1.05 var(--display); color: var(--k-text); }
+.coin-what small { font-size: 12.5px; font-weight: 700; color: var(--k-muted); }
+.btn.coin-buy, .btn.gem { --b: var(--gem-d); }
+.btn.coin-buy { padding: 7px 12px 8px; font-size: 17px; border-radius: 11px; min-width: 84px; }
+.btn.coin-buy > span { display: inline-flex; align-items: center; gap: 5px; }
+.btn.coin-buy .gem-ico { font-size: 18px; color: var(--gem-lt); }
+.btn.short { filter: saturate(0.25) brightness(0.9); }
+.gem-fine { margin: -4px 4px 0; text-align: center; font-size: 12.5px; font-weight: 600; line-height: 1.4; color: var(--k-text-lt); opacity: 0.85; }
+
+/* ---- result screens */
+.reward-strip { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 14px; background: linear-gradient(180deg, #f3e2ff, #e2c4fb);
+  border: 2px solid var(--k-ink); box-shadow: inset 0 2px 0 rgba(255,255,255,0.6); animation: rise 0.4s 0.35s both cubic-bezier(.2,1.2,.3,1); }
+.reward-total { display: flex; align-items: center; gap: 6px; }
+.reward-total .gem-ico { font-size: 26px; }
+.reward-total b { font: 400 24px/1 var(--display); color: #fff; text-shadow: var(--ol-s); }
+.reward-total span { font: 400 16px/1 var(--display); color: var(--gem-d); }
+.reward-why { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; }
+.reward-chip { padding: 3px 8px 4px; border-radius: 8px; background: rgba(255,255,255,0.7); font-size: 12px; font-weight: 800; color: var(--gem-d); animation: rise 0.3s both; }
+
+/* ---- Gauntlet Rally */
+.rally { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.btn.rally-btn small { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px 5px; border-radius: 9px; background: rgba(0,0,0,0.22); }
+.btn.rally-btn .gem-ico { font-size: 17px; color: var(--gem-lt); }
+.rally-note { font-size: 13px; font-weight: 700; color: var(--k-muted); text-align: center; }
