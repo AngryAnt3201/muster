@@ -10,6 +10,7 @@ import type { Assault } from "../render/assault";
 import { drawIcon } from "../render/units";
 import { loadSprites, preload, whenPortrait } from "../render/sprites";
 import * as Defs from "../core/defs";
+import { levelDmg, levelHp, levelOf } from "../core/levels";
 
 export const TIER_NAMES = ["Recruit", "Veteran", "Elite", "Ascended"];
 /** The rank-4 signature ability, if the build has them. */
@@ -674,14 +675,16 @@ export class GameScreen {
     pop.replaceChildren();
     pop.className = `pop ${own ? "own" : "theirs"} rank-${p.rank}`;
     const face = framedPortrait(p.kind, p.rank, "pop-portrait").frame;
+    const level = levelOf(m.cfg.levels?.[p.side], p.kind);
     pop.append(el("div", { class: "pop-top" }, [
       face,
       el("div", { class: "pop-id" }, [
         el("div", { class: "pop-head" }, [el("b", {}, [def.name]), el("span", { class: "pop-rank" }, [TIER_NAMES[p.rank - 1] ?? ""])]),
-        el("span", { class: "role-line" }, [roleBadge(def.role), ROLE_LABEL[def.role]]),
+        el("span", { class: "role-line" }, [roleBadge(def.role), ROLE_LABEL[def.role], el("span", { class: "pop-lv" }, [`Lv ${level}`])]),
         el("div", { class: "pop-text" }, [def.short]),
       ]),
     ]));
+    pop.append(el("div", { class: "pop-stats" }, [statsLine(p.kind, p.rank, level, m.sides[p.side].mods)]));
     const ab = abilityOf(p.kind);
     if (ab && (p.rank >= 3 || !own)) pop.append(el("div", { class: `pop-ability ${p.rank >= 4 ? "on" : ""}` }, [el("b", {}, [ab.name]), " ", ab.text]));
     if (own && this.phase === "deploy") {
@@ -747,7 +750,7 @@ export class GameScreen {
   private showTip(kind: UnitKind, card: HTMLElement) {
     const d = UNITS[kind];
     const tip = this.h.tip;
-    tip.innerHTML = `<b>${d.name}</b><span>${d.short}</span><em>${statsLine(kind)}</em>`;
+    tip.innerHTML = `<b>${d.name}</b><span>${d.short}</span><em>${statsLine(kind, 1, levelOf(this.match.cfg.levels?.[0], kind), this.match.sides[0].mods)}</em>`;
     tip.classList.remove("hidden");
     const r = card.getBoundingClientRect(), tr = tip.getBoundingClientRect();
     tip.style.left = `${Math.max(8, Math.min(window.innerWidth - tr.width - 8, r.left + r.width / 2 - tr.width / 2))}px`;
@@ -798,10 +801,22 @@ export class GameScreen {
   }
 }
 
-export function statsLine(kind: UnitKind) {
+/** A unit's health and damage at a rank and troop level, with its side's modifiers, as the battle builds them. */
+export function unitStats(kind: UnitKind, rank = 1, level = 1, mods?: Defs.Mods) {
   const d = UNITS[kind];
-  const parts = [`${d.hp * (d.bodies ?? 1)} hp`];
-  if (d.dmg) parts.push(`${fmt(d.dmg)} dmg${d.bodies ? " each" : ""}`);
+  const hpMul = (mods?.hpMul ?? 1) * (mods?.kindHp?.[kind] ?? 1);
+  const dmgMul = (mods?.dmgMul ?? 1) * (mods?.kindDmg?.[kind] ?? 1);
+  return {
+    hp: Math.round(d.hp * Defs.rankHp(rank) * hpMul * levelHp(level)) * (d.bodies ?? 1),
+    dmg: d.dmg * Defs.rankDmg(rank) * dmgMul * levelDmg(level),
+  };
+}
+
+export function statsLine(kind: UnitKind, rank = 1, level = 1, mods?: Defs.Mods) {
+  const d = UNITS[kind];
+  const st = unitStats(kind, rank, level, mods);
+  const parts = [`${st.hp} hp`];
+  if (d.dmg) parts.push(`${fmt(Math.round(st.dmg * 10) / 10)} dmg${d.bodies ? " each" : ""}`);
   if (d.range >= 1.5) parts.push(`range ${fmt(d.range)}`);
   if (d.speed) parts.push(d.speed >= 2.2 ? "fast" : d.speed <= 1 ? "slow" : "steady");
   else parts.push("fixed");
