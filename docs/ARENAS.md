@@ -3,15 +3,16 @@
 One Blender-rendered battlefield per campaign act in the active style direction (Sunlit Meadow), built for the 3/4
 camera (`src/render/camera.ts`), plus the props that obstacles stand up as.
 
-| Act | Arena | Ground | Border and scenery | Obstacle prop |
+| Act | Arena | Ground | Border, scenery and foreground | Obstacle prop |
 |---|---|---|---|---|
-| 1 | Borderlands | meadow grass with light and dark patches, sandy path | hedges, round broadleaf trees, flowers | mossy boulder |
-| 2 | Ash Fields | dry gold grass | autumn hedges, orange broadleaf and dead trees, smouldering embers | charred stump with embers |
-| 3 | Hollow Wood | deep green grass | hedges, broadleaf and pine wood, toadstools | mossy stump with toadstools |
-| 4 | Iron Pass | highland grass, gravel strip and path | low rocks, pines and crags, pebbles | crag with an iron streak |
-| 5 | High Keep | flagstone courtyard on a plinth, red runner | low stone walls, topiary in planters | stone column with a lantern (one broken, one bannered) |
-| 6 | Frozen Reach | snow, packed-snow path | snow banks, snowy pines, ice shards | snow-capped rock with ice crystals |
-| 7 | Sky Throne | marble courtyard over a cloud sea, blue runner | gold-finial balustrade, cloud banks | crystal obelisk on a gold and marble plinth |
+| 1 | Borderlands | mown-stripe meadow, flower clumps, tufts, worn path with pebbles, cobbled road across the strip | stone-footed hedges, banners at the far gate; broadleaf canopy leaning over the sides | mossy boulder |
+| 2 | Ash Fields | dry gold grass, dry clumps with embers, cracks, cracked-mud plates across the strip | stone-footed autumn hedges, dead trees, banners; autumn canopy | charred stump with embers |
+| 3 | Hollow Wood | deep green grass, ferns, moss, roots, toadstool fairy rings, mossy flagstones across the strip | hedges, broadleaf and pine wood; green canopy | mossy stump with toadstools |
+| 4 | Iron Pass | highland grass, heather, gravel, cracks, ore-cart track (sleepers and rails) across the strip | low rocks, pines and crags, banners; pine boughs | crag with an iron streak |
+| 5 | High Keep | flagstone courtyard on a plinth, red runner, sunken lawn strip, cracks | low stone walls, topiary, banners; topiary and lanterns | stone column with a lantern (one broken, one bannered) |
+| 6 | Frozen Reach | snow, frozen stream, frost clumps with ice crystals, boot prints | snow banks, snowy pines, banners; snowy pine boughs | snow-capped rock with ice crystals |
+| 7 | Sky Throne | warm marble courtyard, lapis-and-gold rosettes and edge bands, gold sandstone strip, blue runner | gold-finial balustrade, lapis banners; banner pillars and cloud banks, drifting wisps | crystal obelisk on a gold and marble plinth |
+| 8 | Mirelight Fen | fen grass, mere with boardwalk, tussocks, puddles, glinting water | reeds and lantern posts; willow curtains | peat mound with a lantern |
 
 Every arena keeps the same layout so the board reads the same everywhere: a sandy neutral strip between the two
 deploy zones with a kerb on each zone line, a path from keep to keep, a paved plaza under each keep and a low border
