@@ -11,7 +11,7 @@ import { buzz } from "../native";
 import { RARITY } from "../progression/collection";
 import { CHESTS } from "../progression/chests";
 import {
-  PASS_EXTRA_GEMS, PREMIUM_TRACK, FREE_TRACK, TIERS, XP_PER_TIER, cardsFor, claimReward, claimable, claimed, hasPremium, intoTier,
+  PASS_EXTRA_GEMS, PREMIUM_TRACK, FREE_TRACK, TIERS, claimableCount, XP_PER_TIER, cardsFor, claimReward, claimable, claimed, hasPremium, intoTier,
   onPassChange, pass, reached, seasonLeft, skipCost, skipTier, takeChest, themeOf, tierOf, waitingChests, type Paid, type PassReward, type Track,
 } from "../progression/pass";
 import { claimQuest, onQuestsChange, questState, todaysQuests } from "../progression/quests";
@@ -243,4 +243,13 @@ export function passScreen(app: HTMLElement, opts: PassOpts = {}): HTMLElement {
   const tick = window.setInterval(() => { if (!root.isConnected) { clearInterval(tick); return; } drawHero(); }, 30_000);
   if (waitingChests().length) setTimeout(openWaiting, 400);
   return root;
+}
+
+/**
+ * For the home tab bar's Pass tab: how many things are waiting to be tapped (pass rewards plus finished quests).
+ * Subscribe with onPassChange / onQuestsChange from src/progression/pass.ts and quests.ts to refresh it.
+ */
+export function passBadge(): number {
+  const q = questState();
+  return claimableCount(pass()) + todaysQuests().filter((d, i) => q.have[i] >= d.n && !q.claimed[i]).length;
 }
