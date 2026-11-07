@@ -17,6 +17,8 @@ import { VICTORY_HOLD, bannerRaise, collapsePose, drawVictoryBanner, keepSquash 
 import { spreadOffsets, type SpreadBody } from "./spread";
 import { Juice, landSquash, popScale } from "./juice";
 import { drawBanner, drawCallout, drawFloat, drawTrail, hpBar, shadowRing } from "./juicedraw";
+import { equipped } from "../progression/cosmetics"; // [skins]
+import { keepStateDebug } from "./keeps"; // [skins]
 import { arenaLayers, sceneFigures } from "./foreground"; // polish/arenas: arena layers (see render())
 
 export type { Rect } from "./camera";
@@ -90,6 +92,8 @@ export class BoardView {
     hitT: 9, hitK: 0, fallT: -1, winT: -1 }));
   /** [keeps polish] The rival's keep is the crowned boss variant (set for campaign boss levels). */
   bossKeep = false;
+  /** [skins] The player's keep skin: undefined follows the equipped skin; a skin id or null (the default) pins it. */
+  keepSkin: string | null | undefined = undefined;
   // ---- JUICE (combat feel, src/render/juice.ts + juicedraw.ts): hit-stop, camera shake, callouts, HP lag, banner.
   /** Hit-stop, trauma shake, Ascended callouts, HP-bar lag and the round-end flourish. */
   readonly juice = new Juice();
@@ -1254,8 +1258,9 @@ export class BoardView {
 
   private drawKeep(side: Side) {
     const k = this.keeps[side];
-    const state = keepState(this.keepHp[side]);
-    const img = keepImage(side, state, this.bossKeep);
+    const state = (side === 0 && keepStateDebug()) || keepState(this.keepHp[side]); // [skins] debug override for shots
+    const skin = side === 0 ? (this.keepSkin === undefined ? equipped("keep") : this.keepSkin) : null; // [skins]
+    const img = keepImage(side, state, this.bossKeep, skin);
     if (!img) return;
     const ctx = this.ctx, m = keepManifest(), a = keepAnchor(side);
     const base = this.cam.project(a.x, a.y), u = (KEEP_SCALE / m.ppu) * base.s;
@@ -1274,7 +1279,7 @@ export class BoardView {
     const dx = base.x + ox - m.anchors.ground[0] * u, dy = base.y + oy - m.anchors.ground[1] * u, w = m.w * u, h = m.h * u;
     // [keeps polish] rubble under the falling keep; the standing keep sinks into it behind the plinth's front
     if (fall) {
-      const rubble = keepImage(side, "fallen", this.bossKeep);
+      const rubble = keepImage(side, "fallen", this.bossKeep, skin); // [skins]
       if (rubble) { ctx.globalAlpha = k.alpha * fall.rubble; ctx.drawImage(rubble, base.x - m.anchors.ground[0] * u, base.y - m.anchors.ground[1] * u, w, h); }
       ctx.globalAlpha = k.alpha * fall.alpha;
       if (fall.alpha > 0) {

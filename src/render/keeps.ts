@@ -95,12 +95,55 @@ export function keepFile(side: Side, state: KeepArt, boss = false): string {
 }
 
 /** The image for a keep state once loaded, else null (the board then draws nothing for the keep). A boss keep
- *  falls back to the plain one until its own image has loaded. */
-export function keepImage(side: Side, state: KeepArt, boss = false): HTMLImageElement | null {
+ *  falls back to the plain one until its own image has loaded. [skins] `skin` dresses the player's keep (side 0)
+ *  in a cosmetic skin; it falls back to the default keep until the skin's image has loaded, and for good if it fails. */
+export function keepImage(side: Side, state: KeepArt, boss = false, skin?: string | null): HTMLImageElement | null {
   if (typeof Image === "undefined") return null;
   if (boss && side === 1) return loadImage(keepFile(side, state, true)) ?? loadImage(keepFile(side, state));
+  const sf = side === 0 ? skinFile(skin, state) : null;
+  if (sf) {
+    preloadSkin(skin!);
+    const im = loadImage(sf);
+    if (im) return im;
+  }
   return loadImage(keepFile(side, state));
 }
+
+// ------------------------------------------------------------ [skins] cosmetic keep skins
+/** The default keep skin (the plain Sunlit Meadow keep, public/keeps/tide_*). */
+export const DEFAULT_SKIN = "keep:meadow";
+/** A skin's art folder name ("keep:frost" -> "frost"), or null for the default keep and anything unknown. */
+export function skinName(skin: string | null | undefined): string | null {
+  if (!skin || skin === DEFAULT_SKIN || !/^keep:[a-z]+$/.test(skin)) return null;
+  return skin.slice(5);
+}
+/** A skin's image for a state, relative to public/keeps (null: the default keep). Same canvas and anchors as the
+ *  default keep (art/keeps/render_keeps.py --skin), so it swaps in place. */
+export function skinFile(skin: string | null | undefined, state: KeepArt): string | null {
+  const n = skinName(skin);
+  return n ? `skins/${n}/${state}.webp` : null;
+}
+/** The URL of the player's keep in a skin and state, for the UI (the default keep for the default skin). */
+export function keepSkinUrl(skin: string | null | undefined, state: KeepArt = "intact"): string {
+  return `${base()}keeps/${skinFile(skin, state) ?? keepFile(0, state)}`;
+}
+const preloaded = new Set<string>();
+/** Starts every state of a skin loading (so the collapse's rubble is ready when the keep falls). */
+export function preloadSkin(skin: string) {
+  if (preloaded.has(skin) || typeof Image === "undefined") return;
+  preloaded.add(skin);
+  for (const st of KEEP_ARTS) { const f = skinFile(skin, st); if (f) loadImage(f); }
+}
+/** True once a skin image failed to load (the board then keeps the default keep). */
+export function skinFailed(skin: string, state: KeepArt = "intact"): boolean {
+  const f = skinFile(skin, state);
+  return !!f && failed.has(f);
+}
+const failed = new Set<string>();
+let debugState: KeepState | null = null;
+/** Debug only (?keepstate= for review shots): pins the player's keep to a damage state. */
+export function setKeepStateDebug(s: string | null) { debugState = (KEEP_STATES as string[]).includes(s ?? "") ? (s as KeepState) : null; }
+export const keepStateDebug = () => debugState;
 
 function loadImage(file: string): HTMLImageElement | null {
   const key = file;
@@ -108,6 +151,7 @@ function loadImage(file: string): HTMLImageElement | null {
   if (!i) {
     i = new Image();
     i.decoding = "async";
+    i.onerror = () => { failed.add(file); }; // [skins]
     i.src = `${base()}keeps/${file}`;
     images.set(key, i);
   }
