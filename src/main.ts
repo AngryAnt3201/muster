@@ -730,6 +730,7 @@ async function boot() {
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
+  if (q.has("skin")) await import("./ui/skins").then((m) => m.debugSkin(q.get("skin")!, q.get("keepstate")));
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }
   if (q.has("campaign")) return campaign(Number(q.get("campaign")) || undefined);
@@ -750,6 +751,8 @@ async function boot() {
   if (q.has("pass")) { const k = q.get("pass") ?? ""; if (k) { seedPassDemo(k); seedQuestDemo(); } return void import("./ui/pass").then((m) => { clear(); m.passScreen(app, { back: title }); }); }
   if (q.has("gemdemo")) return gemDemo(q.get("gemdemo") ?? ""); // [gems] review shots of the result-screen moments
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));
+  // [skins] ?skins shows the skin picker and shop standalone; ?skin=frost&keepstate=burning dresses the player's keep for shots
+  if (q.has("skins")) return void import("./ui/skins").then((m) => m.skinsDemo(app, q));
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });
   title();
 }

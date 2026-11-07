@@ -17,6 +17,8 @@ import { VICTORY_HOLD, bannerRaise, collapsePose, drawVictoryBanner, keepSquash 
 import { spreadOffsets, type SpreadBody } from "./spread";
 import { Juice, landSquash, popScale } from "./juice";
 import { drawBanner, drawCallout, drawFloat, drawTrail, hpBar, shadowRing } from "./juicedraw";
+import { equipped } from "../progression/cosmetics"; // [skins]
+import { keepStateDebug, skinMotes } from "./keeps"; // [skins]
 import { arenaLayers, sceneFigures } from "./foreground"; // polish/arenas: arena layers (see render())
 
 export type { Rect } from "./camera";
@@ -90,6 +92,11 @@ export class BoardView {
     hitT: 9, hitK: 0, fallT: -1, winT: -1 }));
   /** [keeps polish] The rival's keep is the crowned boss variant (set for campaign boss levels). */
   bossKeep = false;
+  /** [skins] The player's keep skin: undefined follows the equipped skin; a skin id or null (the default) pins it. */
+  keepSkin: string | null | undefined = undefined;
+  private skinMote = 0; // [skins] mote accumulator for the player's keep
+  /** [skins] The skin a side's keep wears (only the player's keep is skinned). */
+  private skinOf(side: Side): string | null { return side === 0 ? (this.keepSkin === undefined ? equipped("keep") : this.keepSkin) : null; }
   // ---- JUICE (combat feel, src/render/juice.ts + juicedraw.ts): hit-stop, camera shake, callouts, HP lag, banner.
   /** Hit-stop, trauma shake, Ascended callouts, HP-bar lag and the round-end flourish. */
   readonly juice = new Juice();
@@ -1254,8 +1261,9 @@ export class BoardView {
 
   private drawKeep(side: Side) {
     const k = this.keeps[side];
-    const state = keepState(this.keepHp[side]);
-    const img = keepImage(side, state, this.bossKeep);
+    const state = (side === 0 && keepStateDebug()) || keepState(this.keepHp[side]); // [skins] debug override for shots
+    const skin = this.skinOf(side); // [skins]
+    const img = keepImage(side, state, this.bossKeep, skin);
     if (!img) return;
     const ctx = this.ctx, m = keepManifest(), a = keepAnchor(side);
     const base = this.cam.project(a.x, a.y), u = (KEEP_SCALE / m.ppu) * base.s;
@@ -1274,7 +1282,7 @@ export class BoardView {
     const dx = base.x + ox - m.anchors.ground[0] * u, dy = base.y + oy - m.anchors.ground[1] * u, w = m.w * u, h = m.h * u;
     // [keeps polish] rubble under the falling keep; the standing keep sinks into it behind the plinth's front
     if (fall) {
-      const rubble = keepImage(side, "fallen", this.bossKeep);
+      const rubble = keepImage(side, "fallen", this.bossKeep, skin); // [skins]
       if (rubble) { ctx.globalAlpha = k.alpha * fall.rubble; ctx.drawImage(rubble, base.x - m.anchors.ground[0] * u, base.y - m.anchors.ground[1] * u, w, h); }
       ctx.globalAlpha = k.alpha * fall.alpha;
       if (fall.alpha > 0) {
@@ -1404,6 +1412,16 @@ export class BoardView {
         while (k.smoke >= 1) {
           k.smoke -= 1;
           puff(side, m.anchors.smoke[Math.floor(Math.random() * m.anchors.smoke.length)], 1, { color: state === "cracked" ? "rgba(150,145,140,0.18)" : "rgba(50,46,52,0.3)", speed: 0.15, size: 0.1, max: 1.6, kind: "smoke", gravity: -0.55, vz: 0.6, drag: 0.5 });
+        }
+      }
+      // [skins] the skin's own motes drift off the player's standing keep
+      const mote = side === 0 && k.fallT < 0 ? skinMotes(this.skinOf(side)) : null;
+      if (mote) {
+        this.skinMote += dt * mote.rate;
+        while (this.skinMote >= 1) {
+          this.skinMote -= 1;
+          const g = m.anchors.ground, t = m.anchors.top;
+          puff(side, [g[0] + frand(-140, 140), t[1] + frand(-50, 110)], 1, { color: mote.colors[Math.floor(Math.random() * mote.colors.length)], kind: mote.kind, size: mote.size, max: mote.max, gravity: mote.gravity, vz: mote.vz, speed: mote.speed, drag: mote.drag, spin: mote.spin });
         }
       }
     }
