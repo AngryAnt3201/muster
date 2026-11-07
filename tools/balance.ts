@@ -128,13 +128,13 @@ async function main() {
   }
   console.log(rows.join("\n"));
   console.log("\n act                 strong   mid");
-  const actMid: number[] = [];
+  const actMid: number[] = [], actIds: number[] = [];
   for (const [act, a] of [...byAct.entries()].sort((x, y) => x[0] - y[0])) {
     const avg = (v: number[]) => v.reduce((s, x) => s + x, 0) / Math.max(1, v.length);
-    actMid.push(avg(a.m));
+    actMid.push(avg(a.m)); actIds.push(act);
     console.log(` ${act} ${ACTS[act - 1].padEnd(18)} ${pct(avg(a.s))}   ${pct(avg(a.m))}`);
   }
-  for (let i = 1; i < actMid.length; i++) if (actMid[i] > actMid[i - 1] + 0.05) problems.push(`mid win rate rises from act ${i} to act ${i + 1}`);
+  for (let i = 1; i < actMid.length; i++) if (actMid[i] > actMid[i - 1] + 0.05) problems.push(`mid win rate rises from act ${actIds[i - 1]} to act ${actIds[i]}`);
   if (process.env.JSON_OUT) (await import("node:fs")).writeFileSync(process.env.JSON_OUT, JSON.stringify(results));
   console.log(`\n${results.length} matches in ${((performance.now() - t0) / 1000).toFixed(0)}s on ${procs} processes. ${problems.length ? "CHECK:\n  " + problems.join("\n  ") : "All targets met."}`);
 }
