@@ -481,7 +481,7 @@ export class TdView {
       drawFrame(ctx, fr, (s * spriteVis(baseR) * big) / fr.ppu);
       ctx.restore();
     } else drawUnit(ctx, kind, side, p.x, p.y, radius * s, face, { ...o, noShadow: true });
-    const top = p.y - (0.75 + radius * 1.6) * s * big;
+    const top = p.y - (0.75 + radius * 1.6) * s * (big > 1 ? 0.8 : 1);
     // Rank pips only once they are big enough to read (a cheap level of detail when zoomed out).
     if (rank > 1 && side === 0 && s >= 34) drawRank(ctx, p.x, top - 6, Math.max(6, s * 0.18), rank);
     if (hpFrac < 0.999) {
@@ -501,7 +501,7 @@ export class TdView {
     const X = (x: number) => x0 + (x / map.w) * w, Y = (y: number) => y0 + (y / map.h) * h;
     ctx.fillStyle = "rgba(30,50,24,0.72)";
     ctx.strokeStyle = "rgba(255,255,255,0.65)"; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.roundRect(x0 - 3, y0 - 3, w + 6, h + 6, 6); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x0 - 3, y0 - 3, w + 6, h + 6, 6); else ctx.rect(x0 - 3, y0 - 3, w + 6, h + 6); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = "#e7c78b"; ctx.lineWidth = 2.5; ctx.lineJoin = "round";
     for (const p of map.paths) { ctx.beginPath(); for (let i = 0; i < p.pts.length; i += 4) { const q = p.pts[i]; i ? ctx.lineTo(X(q.x), Y(q.y)) : ctx.moveTo(X(q.x), Y(q.y)); } ctx.stroke(); }
     ctx.fillStyle = "#57d6ff";
