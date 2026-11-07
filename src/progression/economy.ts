@@ -2,7 +2,7 @@
 // mode and the level curves foes follow.
 // Pure functions over plain data (no storage, no DOM), so tests and tools/balance.ts use them directly.
 // Shared economy anchors (keep in step with the gem store): a free player earns ~1,000 coins a day of active play,
-// maxing one common costs ~14,600 coins, and 1 gem is worth ~10 coins. See outputs/economy/coins.md and progression.md.
+// maxing one common costs ~12,800 coins, and 1 gem is worth ~10 coins. See outputs/economy/coins.md and progression.md.
 import { ACTS, rosterAt } from "../core/campaign";
 import { UNIT_KINDS, type UnitKind } from "../core/defs";
 import { MAX_LEVEL, clampLevel, uniformLevels, type Levels } from "../core/levels";
@@ -19,7 +19,7 @@ export const UPGRADE_CARDS: Record<Rarity, readonly number[]> = {
   legendary: [1, 1, 1, 2, 3, 4, 6, 8, 11, 15, 20],
 };
 /** Coins to go from level L to L+1 for a common (index L-1); rarer units cost RARITY_COINS times as much. */
-export const UPGRADE_COINS = [40, 80, 150, 300, 500, 800, 1200, 1700, 2400, 3200, 4200] as const;
+export const UPGRADE_COINS = [30, 60, 120, 240, 400, 650, 1000, 1500, 2100, 2900, 3800] as const;
 export const RARITY_COINS: Record<Rarity, number> = { common: 1, rare: 1.25, epic: 1.5, legendary: 2 };
 const top = (level: number) => clampLevel(level) >= MAX_LEVEL;
 export const upgradeCards = (level: number, r: Rarity = "common"): number => (top(level) ? Infinity : UPGRADE_CARDS[r][clampLevel(level) - 1]);
@@ -106,9 +106,15 @@ export function upgradeState(kind: UnitKind, o: { levels: Levels; found: boolean
 // ---------------------------------------------------------------- foe levels
 /** The level a free player's core units are expected to reach while playing each act (see progression.md); campaign
  * foes field their whole army at this level. It climbs steeply: an army left at level 1 stalls around Act 3-4. */
-export const EXPECTED_LEVEL_BY_ACT = [1, 2, 3, 4, 5, 6, 8, 9] as const;
+export const EXPECTED_LEVEL_BY_ACT = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 export const foeLevelForAct = (act: number) => EXPECTED_LEVEL_BY_ACT[Math.max(0, Math.min(EXPECTED_LEVEL_BY_ACT.length - 1, act - 1))];
 /** The level card's "recommended level" is the foe's. */
+export const DECK_SIZE = 8;
+/** An army's level for a level: the average of its best DECK_SIZE found units in that level's roster (what you'd field). */
+export function armyLevelOf(roster: UnitKind[], levelOf: (k: UnitKind) => number, found: (k: UnitKind) => boolean): number {
+  const lv = roster.filter(found).map(levelOf).sort((a, b) => b - a).slice(0, DECK_SIZE);
+  return lv.length ? lv.reduce((s, x) => s + x, 0) / lv.length : 1;
+}
 export const recommendedLevel = foeLevelForAct;
 /** Gauntlet rivals start at level 1 and gain one every 3 rivals, never above the player's cap. */
 export const gauntletFoeLevel = (stage: number, cap: number) => Math.max(1, Math.min(cap, 1 + Math.floor((Math.max(1, stage) - 1) / 3)));
@@ -128,7 +134,8 @@ export function campaignCards(o: { act: number; roster: UnitKind[]; unlocks: Uni
   const add = (k: UnitKind, n: number) => { if (n > 0) out.set(k, (out.get(k) ?? 0) + n); };
   if (o.first) for (const k of o.unlocks) add(k, 1 + Math.max(1, Math.round(4 * CARD_SHARE[RARITY[k]])));
   const picks = o.first ? 2 : 1;
-  const base = o.first ? 6 + 4 * o.act : 2 + o.act;
+  // Grows with the act squared: late levels need far more cards (and the roster is wider), early ones stay modest.
+  const base = o.first ? 2 + 0.75 * o.act * o.act : 1 + 0.3 * o.act * o.act;
   for (let i = 0; i < picks; i++) {
     const k = o.roster[Math.abs(o.salt * 7 + i * 13) % o.roster.length];
     add(k, Math.max(1, Math.round(base * CARD_SHARE[RARITY[k]])));

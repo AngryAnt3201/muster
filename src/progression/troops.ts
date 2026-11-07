@@ -11,7 +11,7 @@ import { load, save, type Save } from "../save";
 import { LEVELS } from "../core/campaign";
 import { cardsOf, foundKinds, grantCards, grantIn, isFound, normalizeCollection, spendCards } from "./collection";
 import {
-  FIRST_CLEAR, STARTER_KINDS, WIN_XP, actsCleared, campaignCards, campaignReward, commanderLevel, commanderProgress, dailyReward,
+  FIRST_CLEAR, STARTER_KINDS, WIN_XP, actsCleared, armyLevelOf, campaignCards, campaignReward, commanderLevel, commanderProgress, dailyReward,
   gauntletRivalReward, keepBonus, levelCap, levelsFor, skirmishReward, unlockedKinds, upgradeState, upgradeXp,
   type Mode, type Reward, type UpgradeState,
 } from "./economy";
@@ -171,8 +171,5 @@ export function awardSkirmish(won: boolean, watch: boolean, difficulty: number, 
   return r.coins > 0 ? withXp(r, WIN_XP.skirmish) : r;
 }
 
-/** The army's level for a roster: the average troop level of the units in it (the "under-levelled" check). */
-export function armyLevel(roster: UnitKind[]): number {
-  if (!roster.length) return 1;
-  return roster.reduce((s, k) => s + troopLevel(k), 0) / roster.length;
-}
+/** The army's level for a roster: the average level of its best 8 found units (the "under-levelled" check). */
+export const armyLevel = (roster: UnitKind[]): number => armyLevelOf(roster, troopLevel, isFound);

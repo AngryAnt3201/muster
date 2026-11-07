@@ -113,10 +113,10 @@ describe("costs per rarity", () => {
     for (let i = 1; i < totals.length; i++) expect(totals[i]).toBeLessThan(totals[i - 1]);
     const coins = RARITIES.map((r) => coinsBetween(1, MAX_LEVEL, r));
     for (let i = 1; i < coins.length; i++) expect(coins[i]).toBeGreaterThan(coins[i - 1]);
-    expect(COINS_TO_MAX).toBe(14570);
+    expect(COINS_TO_MAX).toBe(12800);
     expect(upgradeCards(1, "common")).toBe(2);
-    expect(upgradeCoins(1, "common")).toBe(40);
-    expect(upgradeCoins(1, "legendary")).toBe(80);
+    expect(upgradeCoins(1, "common")).toBe(30);
+    expect(upgradeCoins(1, "legendary")).toBe(60);
     expect(upgradeCards(11, "legendary")).toBe(20);
   });
 });
@@ -163,18 +163,31 @@ describe("commander level", () => {
   });
 });
 
+describe("army level (recommended level check)", () => {
+  it("averages the best 8 found units of the roster", async () => {
+    const { armyLevelOf, recommendedLevel } = await import("../src/progression/economy");
+    const lv: Partial<Record<UnitKind, number>> = { blades: 5, ranger: 5, mine: 1, medic: 3 };
+    const roster: UnitKind[] = ["blades", "ranger", "mine", "medic", "golem"];
+    expect(armyLevelOf(roster, (k) => lv[k] ?? 1, (k) => k !== "golem")).toBeCloseTo(14 / 4);
+    const ten = UNIT_KINDS.slice(0, 10);
+    expect(armyLevelOf(ten, (k) => (k === ten[0] || k === ten[1] ? 1 : 4), () => true)).toBe(4); // the two level-1s fall out
+    expect(armyLevelOf([], () => 9, () => true)).toBe(1);
+    expect(recommendedLevel(4)).toBe(foeLevelForAct(4));
+  });
+});
+
 describe("upgrade state", () => {
   it("locked, cap, cards, coins", () => {
     const c = { 1: 3, 2: 3 };
     expect(unlockedKinds(c)).toContain("bulwark"); // level 3 is reachable
-    const base = { levels: {}, found: true, cards: 2, coins: 40, commander: 1 };
+    const base = { levels: {}, found: true, cards: 2, coins: 30, commander: 1 };
     expect(upgradeState("golem", { ...base, found: false }).why).toBe("locked");
     expect(upgradeState("blades", { ...base, cards: 1 }).why).toBe("cards");
-    expect(upgradeState("blades", { ...base, coins: 39 }).why).toBe("coins");
-    expect(upgradeState("blades", base)).toMatchObject({ why: null, need: 2, cost: 40, rarity: "common" });
+    expect(upgradeState("blades", { ...base, coins: 29 }).why).toBe("coins");
+    expect(upgradeState("blades", base)).toMatchObject({ why: null, need: 2, cost: 30, rarity: "common" });
     expect(upgradeState("blades", { ...base, levels: { blades: 2 }, cards: 1e6, coins: 1e6 })).toMatchObject({ why: "cap", cap: 2 });
     expect(upgradeState("golem", { ...base, levels: { golem: MAX_LEVEL }, commander: MAX_COMMANDER }).why).toBe("max");
-    expect(upgradeState("golem", { ...base, cards: 1, coins: 80 })).toMatchObject({ why: null, need: 1, cost: 80, rarity: "legendary" });
+    expect(upgradeState("golem", { ...base, cards: 1, coins: 60 })).toMatchObject({ why: null, need: 1, cost: 60, rarity: "legendary" });
   });
 });
 
@@ -188,12 +201,12 @@ describe("upgrading on the device", () => {
     expect(upgradeTroop("blades")).toBeNull(); // no coins
     earn("coins", 100, "test");
     expect(upgradeTroop("blades")).toEqual({ level: 2, xp: upgradeXp(2), commanderUp: null });
-    expect(wallet().coins).toBe(60);
+    expect(wallet().coins).toBe(70);
     expect(cardsOf("blades")).toBe(3);
     expect(troopLevel("blades")).toBe(2);
     expect(troopState("blades").why).toBe("cap"); // commander 1: cap 2
     expect(upgradeTroop("blades")).toBeNull();
-    expect(wallet().coins).toBe(60);
+    expect(wallet().coins).toBe(70);
     addXp(COMMANDER_XP[1]);
     expect(commander()).toBe(2);
     expect(troopState("blades")).toMatchObject({ why: "cards", cards: 3, need: 4 }); // cap 3 now
