@@ -161,3 +161,4 @@
 .of-status.warn { color: var(--k-danger); }
 .of-status.good { color: var(--k-go); }
 .of-waiting { display: flex; justify-content: center; }
+.pass-premium[hidden], .offers-section[hidden] { display: none; }
