@@ -1,10 +1,11 @@
-// The 48-level campaign in eight acts of six. Each act ends with a boss: a named rival, a set-piece board and a twist.
+// The 60-level campaign in ten acts of six. Each act ends with a boss: a named rival, a set-piece board and a twist.
 // New units unlock along the way; the level that introduces one sets the foe up so the new unit matters.
 import type { AIProfile, Tactic } from "./ai";
 import type { LevelDef, Objective } from "./content";
 import type { UnitKind } from "./defs";
 
-export const ACTS = ["The Borderlands", "Ash Fields", "The Hollow Wood", "Iron Pass", "The High Keep", "The Frozen Reach", "The Sky Throne", "The Mirelight Fen"];
+export const ACTS = ["The Borderlands", "Ash Fields", "The Hollow Wood", "Iron Pass", "The High Keep", "The Frozen Reach", "The Sky Throne", "The Mirelight Fen",
+  "The Saltwind Coast", "Crownfall Citadel"];
 
 /** The level each unit first appears on (the player's roster is everything unlocked so far). */
 const UNLOCKS: [number, UnitKind][] = [
@@ -14,6 +15,10 @@ const UNLOCKS: [number, UnitKind][] = [
   [37, "bombard"], [38, "tinker"], [39, "duelist"], [40, "pikeman"], [41, "keg"], [42, "trickster"],
   // 1.1: four more join late in Act 7, alongside that level's first unlock.
   [39, "lamp"], [40, "thorn"], [41, "hook"], [42, "outrider"],
+  // Acts 9-10 introduce the three legendaries (built on another branch). Slots, one per line:
+  // [legendary] introduce griffin here at merge: [50, "griffin"],
+  // [legendary] introduce tide here at merge: [53, "tide"],
+  // [legendary] introduce lion here at merge: [57, "lion"],
 ];
 export const rosterAt = (id: number): UnitKind[] => UNLOCKS.filter(([at]) => at <= id).map(([, k]) => k);
 
@@ -192,6 +197,65 @@ const DRAFTS: Draft[] = [
       { kind: "outrider", lx: 6.5, depth: 3 }, { kind: "bulwark", lx: 3, depth: 4.4 }, { kind: "medic", lx: 6, depth: 2 }]],
     foeRoster: ["hook", "thorn", "outrider", "lamp", "bulwark", "medic", "pikeman", "bombard", "banner"],
     ai: ai(0.97, "balanced", 0.55, 0.55, 0.6, 2), stars: [WIN, hp(130), losses(5)] },
+
+  // ---------------------------------------------------------------- Act 9: The Saltwind Coast
+  // Sea cliffs, a lighthouse and a stormy shore. Each level bends one rule of the fight (the tide, the wind, the surf).
+  { name: "Landfall", foe: "Captain Wrack", line: "Wrack's boats keep coming in on the tide.", foeHp: 400, power: 0.95,
+    foeRoster: ["blades", "ravager", "keg", "hook", "banner", "medic", "harrier", "duelist"], income: [0, 1],
+    obstacles: [{ x: 2.2, y: 7.2, r: 0.55 }, { x: 6.8, y: 6.8, r: 0.55 }],
+    ai: ai(0.96, "swarm", 0.7, 0.5, 0.6, 2), stars: [WIN, hp(140), rounds(15)] },
+  // [legendary] introduce griffin here at merge: a sky full of harriers and outriders is where a griffin earns its keep.
+  { name: "Gull Rock", foe: "Fowler Hesk", line: "The sea wind puts its weight behind Hesk's arrows.", foeHp: 400, power: 0.86,
+    foeRoster: ["harrier", "outrider", "ranger", "ballista", "lamp", "bulwark", "pikeman", "shade"],
+    mods: [undefined, { kindDmg: { ranger: 1.2, outrider: 1.2, ballista: 1.2, harrier: 1.2 } }],
+    ai: ai(0.96, "artillery", 0.35, 0.5, 0.8, 2), stars: [WIN, losses(4), hp(140)] },
+  { name: "Wreckers' Beach", foe: "Mother Gannet", line: "Gannet buries powder under every dune.", foeHp: 400, power: 1,
+    foeRoster: ["mine", "sapper", "keg", "grenadier", "thorn", "bulwark", "tinker", "bombard"], mods: [undefined, { bigMines: true }],
+    obstacles: [{ x: 1.6, y: 6.6, r: 0.5 }, { x: 4.5, y: 7.6, r: 0.6 }, { x: 7.4, y: 6.6, r: 0.5 }],
+    ai: ai(0.96, "ambush", 0.5, 0.5, 0.8, 2), stars: [WIN, hp(130), rounds(16)] },
+  { name: "Undertow", foe: "Siltmaster Dree", line: "The undertow drags at your boots.", foeHp: 400, power: 0.85,
+    foeRoster: ["hook", "thorn", "rime", "pikeman", "bulwark", "storm", "medic", "ballista"], mods: [{ speedMul: 0.85 }, undefined],
+    ai: ai(0.97, "fortress", 0.3, 0.55, 0.5, 2), stars: [WIN, losses(4), hp(130)] },
+  // [legendary] introduce tide here at merge: Ysolde's storms and healers are the board the tide is built to break.
+  { name: "Squall Line", foe: "Stormcaller Ysolde", line: "Every squall quickens her casters.", foeHp: 400, power: 0.85,
+    foeRoster: ["storm", "grave", "rime", "thorn", "medic", "lamp", "bulwark", "hive"], mods: [undefined, { cooldownMul: 0.85 }],
+    ai: ai(0.97, "balanced", 0.55, 0.5, 0.6, 2), stars: [WIN, rounds(16), losses(5)] },
+  { name: "The Saltwind Light", foe: "Lightkeeper Orrin", line: "The gale is at his back. Not yours.", foeHp: 400, power: 0.74, boss: true,
+    startGold: [14, 0], supply: [2, 1], mods: [{ speedMul: 0.9 }, { speedMul: 1.2 }],
+    obstacles: [{ x: 1.2, y: 6.8, r: 0.6 }, { x: 3.4, y: 7.6, r: 0.5 }, { x: 5.6, y: 7.6, r: 0.5 }, { x: 7.8, y: 6.8, r: 0.6 }],
+    start: [undefined, [{ kind: "lamp", lx: 4.5, depth: 1.4, rank: 2 }, { kind: "ballista", lx: 2.6, depth: 0.9 }, { kind: "ballista", lx: 6.4, depth: 0.9 },
+      { kind: "outrider", lx: 2, depth: 3.4, rank: 2 }, { kind: "harrier", lx: 7, depth: 3.4 }, { kind: "hook", lx: 4.5, depth: 4.8, rank: 2 }]],
+    foeRoster: ["ballista", "outrider", "harrier", "hook", "lamp", "pikeman", "storm", "medic", "bulwark"],
+    ai: ai(0.98, "artillery", 0.45, 0.55, 0.6, 2), stars: [WIN, hp(120), losses(5)] },
+
+  // ---------------------------------------------------------------- Act 10: Crownfall Citadel
+  // The finale: a ruined high fortress at dusk. The last rival's court brings back the old bosses' tricks.
+  { name: "The Broken Gate", foe: "Gatewarden Hollis", line: "The old guard still holds the broken gate.", foeHp: 400, power: 0.86, noReroll: true,
+    foeRoster: ["bulwark", "golem", "pikeman", "hook", "medic", "ballista", "tinker", "lamp"], mods: [undefined, { kindHp: { bulwark: 1.2, golem: 1.2, pikeman: 1.2 } }],
+    obstacles: [{ x: 3, y: 7, r: 0.55 }, { x: 6, y: 7, r: 0.55 }],
+    ai: ai(0.98, "fortress", 0.3, 0.55, 0.5, 2), stars: [WIN, hp(120), rounds(16)] },
+  { name: "Ember Stair", foe: "Pyre-Sergeant Calder", line: "Calder rolls fire down every step.", foeHp: 400, power: 0.9,
+    foeRoster: ["keg", "grenadier", "bombard", "sapper", "storm", "bulwark", "medic", "ranger"], mods: [undefined, { kindDmg: { keg: 1.2, grenadier: 1.2, bombard: 1.2 } }],
+    obstacles: [{ x: 2, y: 6.5, r: 0.45 }, { x: 4.5, y: 7.3, r: 0.5 }, { x: 7, y: 6.5, r: 0.45 }],
+    ai: ai(0.98, "siege", 0.5, 0.5, 0.5, 2), stars: [WIN, losses(5), hp(120)] },
+  // [legendary] introduce lion here at merge: Isolde's banner line is the wall a lion is made to charge.
+  { name: "Fallen Banners", foe: "Banneret Isolde", line: "Her banners mend what your blades break.", foeHp: 400, power: 1.08,
+    foeRoster: ["banner", "medic", "lamp", "duelist", "blades", "ravager", "bulwark", "trickster"], mods: [undefined, { healMul: 1.4 }],
+    ai: ai(0.98, "balanced", 0.6, 0.5, 0.6, 2), stars: [WIN, rounds(17), hp(110)] },
+  { name: "Hall of Echoes", foe: "Duellist Corvane", line: "The hall falls at dusk. Finish it first.", foeHp: 400, power: 1.08, maxRounds: 14,
+    foeRoster: ["duelist", "shade", "trickster", "ravager", "outrider", "harrier", "lancer", "banner"],
+    ai: ai(0.99, "blitz", 0.85, 0.4, 0.7, 2), stars: [WIN, losses(4), hp(110)] },
+  { name: "Last Light", foe: "Chancellor Vesk", line: "Vesk spends the whole treasury on one army.", foeHp: 400, power: 0.85,
+    startGold: [0, 6],
+    foeRoster: ["golem", "bombard", "storm", "hive", "grave", "lamp", "hook", "banner", "ballista"],
+    ai: ai(0.99, "siege", 0.5, 0.6, 0.5, 2), stars: [WIN, hp(100), rounds(17)] },
+  { name: "Crownfall", foe: "King Aurel the Last", line: "Every rival you beat lent him one trick.", foeHp: 400, power: 0.8, boss: true,
+    startGold: [16, 0], supply: [2, 1], mods: [undefined, { broodStart: true, litStart: true, bigMines: true }],
+    obstacles: [{ x: 1.4, y: 7.2, r: 0.55 }, { x: 3.2, y: 6.4, r: 0.5 }, { x: 5.8, y: 6.4, r: 0.5 }, { x: 7.6, y: 7.2, r: 0.55 }],
+    start: [undefined, [{ kind: "golem", lx: 4.5, depth: 4.8, rank: 2 }, { kind: "hive", lx: 3, depth: 1.2, rank: 2 }, { kind: "lamp", lx: 4.5, depth: 2.4, rank: 2 },
+      { kind: "mine", lx: 2.4, depth: 5.6 }, { kind: "mine", lx: 6.6, depth: 5.6 }, { kind: "ravager", lx: 6.4, depth: 3.6 }, { kind: "banner", lx: 6, depth: 1.4 }]],
+    foeRoster: ["golem", "hive", "lamp", "ravager", "banner", "storm", "bombard", "hook", "medic", "mine"],
+    ai: ai(1, "balanced", 0.6, 0.55, 0.6, 2), stars: [WIN, hp(100), losses(6)] },
 ];
 
 /** Builds a level from its draft; `power` overrides the tuned foe strength (for the balance tool). */

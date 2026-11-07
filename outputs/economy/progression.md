@@ -73,11 +73,14 @@ shield, rays, "Troop cap Lv N", "Keep +8 health"); a campaign/Gauntlet win that 
 
 Campaign foes field their whole army at `EXPECTED_LEVEL_BY_ACT`:
 
-| Act | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-|---|---|---|---|---|---|---|---|---|
-| Foe level (= recommended level) | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-| Foe stat edge over a level-1 army | 0 | +8% | +16% | +24% | +32% | +40% | +48% | +56% |
-| Old curve (3%/level) | 1 (0) | 1 (0) | 2 (+3%) | 3 (+6%) | 3 | 4 | 4 | 5 (+12%) |
+| Act | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Foe level (= recommended level) | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| Foe stat edge over a level-1 army | 0 | +8% | +16% | +24% | +32% | +40% | +48% | +56% | +64% | +72% |
+| Old curve (3%/level) | 1 (0) | 1 (0) | 2 (+3%) | 3 (+6%) | 3 | 4 | 4 | 5 (+12%) | | |
+
+Acts 9-10 (The Saltwind Coast, Crownfall Citadel) continue the curve one level an act, under the level cap of 12;
+their balance at expected pace is in `acts9-10.md`.
 
 - Every level card shows **"Recommended Lv N"** (red when your army is more than half a level under it).
 - Your army's level for a level is the average of your **best 8 found units in that level's roster** (`armyLevelOf`).

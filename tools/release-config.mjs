@@ -137,6 +137,7 @@ need(!(iap && NO_IAP.test(listed)), "store copy still says there are no purchase
 if (iap) copyNeed(srcText.includes(iap.productId), `copy sells ${iap.displayName} but no source file mentions ${iap.productId} yet (the StoreKit item has not landed)`);
 if (/daily challenge/i.test(listed)) copyNeed(/daily/i.test(srcText), "copy promises a Daily Challenge but src/ has no daily mode yet");
 if (/\bact 8\b/i.test(listed)) copyNeed(counts.acts >= 8, `copy promises Act 8 but src/core/campaign.ts has ${counts.acts} acts`);
+if (/\bact 10\b/i.test(listed)) copyNeed(counts.acts >= 10, `copy promises Act 10 but src/core/campaign.ts has ${counts.acts} acts`);
 if (/four new units/i.test(listed)) copyNeed(counts.units >= 28, `copy promises four new units but src/core/defs.ts has ${counts.units}`);
 need(!/,\s/.test(meta.keywords), "keywords: no spaces after commas (they waste characters)");
 const nameWords = new Set(`${meta.name} ${meta.subtitle}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));

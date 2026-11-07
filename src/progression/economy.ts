@@ -106,7 +106,7 @@ export function upgradeState(kind: UnitKind, o: { levels: Levels; found: boolean
 // ---------------------------------------------------------------- foe levels
 /** The level a free player's core units are expected to reach while playing each act (see progression.md); campaign
  * foes field their whole army at this level. It climbs steeply: an army left at level 1 stalls around Act 3-4. */
-export const EXPECTED_LEVEL_BY_ACT = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+export const EXPECTED_LEVEL_BY_ACT = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 export const foeLevelForAct = (act: number) => EXPECTED_LEVEL_BY_ACT[Math.max(0, Math.min(EXPECTED_LEVEL_BY_ACT.length - 1, act - 1))];
 /** The level card's "recommended level" is the foe's. */
 export const DECK_SIZE = 8;

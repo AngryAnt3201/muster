@@ -33,9 +33,9 @@ Auto battler army strategy
 ## Promotional text
 
 ```
-New: a Daily Challenge for everyone, a new act and four new units. Free to play with every level open. No ads, no tracking, offline.
+New: a Daily Challenge for everyone, three new acts and four new units. Free to play with every level open. No ads, no tracking, offline.
 ```
-132/170. Can be changed any time without a new build.
+137/170. Can be changed any time without a new build.
 
 ## Description
 
@@ -54,7 +54,7 @@ RIVALS THAT THINK
 Rivals plan their own draft and formation, and the toughest ones test their plans against your board before they commit. Buried mines stay hidden from them, so a good trap still springs. In the AI Lab you can tune a rival yourself: difficulty, aggression, tactic (swarm, fortress, artillery, ambush, blitz or siege), economy, rerolls and formation width. Or set two AIs against each other and watch.
 
 FIVE WAYS TO PLAY
-• Campaign: 48 levels across eight acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.
+• Campaign: 60 levels across ten acts, each act ending in a boss fight. Unlock new units as you go and earn up to three stars on every level.
 • Daily Challenge: one board a day, the same for every player. Win it, keep your streak going and beat your best.
 • Gauntlet: one health pool against rival after rival. Your army carries over and every win brings a boon.
 • Breakpoint: 18 one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.
@@ -70,19 +70,19 @@ PLAYS YOUR WAY
 • No ads, no tracking, no timers
 • Your progress stays on your device
 ```
-3151/4000.
+3149/4000.
 
 ## What's New in This Version
 
 ```
 Daily Challenge: a new board every day, the same for every player, with a streak to keep. Free for everyone.
-A new act: Act 8, six new levels and a new boss.
+Three new acts: Act 8, the Saltwind Coast in Act 9 and the Crownfall Citadel finale in Act 10, with eighteen new levels, three new bosses and an ending.
 Four new units, each with its own Ascended ability.
 Free to play: every act, the Gauntlet and every Breakpoint puzzle are open to everyone. Optional purchases (a one-time Starter Pack and gem packs) only speed you up.
 Gems: earn them free from three-star clears, bosses, Daily wins and streaks, or buy a pack in the Shop. Spend them on coins for troop upgrades or a Gauntlet Rally.
 Sunlit new art across units, arenas and menus.
 ```
-586/4000. App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.
+690/4000. App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.
 
 ## Keywords
 

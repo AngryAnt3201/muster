@@ -52,8 +52,8 @@ export const CYCLE: SlotChest[] = [
 ];
 export const cycleAt = (i: number): SlotChest => CYCLE[((Math.floor(i) % CYCLE.length) + CYCLE.length) % CYCLE.length];
 
-/** Coins and cards grow 15% per act beyond the first (Act 8 chests hold 2.05x). */
-export const actScale = (act: number) => 1 + 0.15 * (Math.max(1, Math.min(8, Math.floor(act) || 1)) - 1);
+/** Coins and cards grow 15% per act beyond the first (Act 10 chests hold 2.35x). */
+export const actScale = (act: number) => 1 + 0.15 * (Math.max(1, Math.min(10, Math.floor(act) || 1)) - 1);
 
 /**
  * Gems to open a chest now, from the time left on its timer: ceil(10 x hours^0.8), at least 1, 0 when ready.
@@ -237,7 +237,7 @@ export const unlocking = (c: ChestSave, now: number) => c.slots.find((s) => s &&
 
 // ---------------------------------------------------------------- rules (pure)
 export interface Progress { campaign: Record<number, number>; found: UnitKind[]; }
-export const actOf = (p: Progress) => Math.min(8, actsCleared(p.campaign) + 1);
+export const actOf = (p: Progress) => Math.min(10, actsCleared(p.campaign) + 1);
 
 function make(c: ChestSave, type: ChestType, seed: number, p: Progress): Chest {
   const act = actOf(p);

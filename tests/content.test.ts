@@ -12,9 +12,9 @@ import { Battle } from "../src/core/battle";
 import { fromStart, naive, pieceCost, playPuzzle, solve } from "../tools/solver";
 
 describe("campaign", () => {
-  it("has 48 levels, ids 1..48, eight acts of six, a boss closing each act", () => {
-    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 48 }, (_, i) => i + 1));
-    expect(ACTS).toHaveLength(8);
+  it("has 60 levels, ids 1..60, ten acts of six, a boss closing each act", () => {
+    expect(LEVELS.map((l) => l.id)).toEqual(Array.from({ length: 60 }, (_, i) => i + 1));
+    expect(ACTS).toHaveLength(10);
     for (const l of LEVELS) {
       expect(l.act).toBe(Math.ceil(l.id / 6));
       expect(!!l.boss).toBe(l.id % 6 === 0);
@@ -133,8 +133,8 @@ describe("Act 8: The Mirelight Fen", () => {
     const start = new Set(boss.start![1]!.map((p) => p.kind));
     for (const k of NEW) expect(start.has(k as never), k).toBe(true);
     expect(boss.mods?.[1]?.litStart).toBe(true);
-    // Only this boss has it.
-    expect(LEVELS.filter((l) => l.mods?.[1]?.litStart).map((l) => l.id)).toEqual([48]);
+    // Only this boss has it, until the finale brings every boss's trick back.
+    expect(LEVELS.filter((l) => l.mods?.[1]?.litStart).map((l) => l.id)).toEqual([48, 60]);
   });
 
   it("litStart: each of that side's units starts warded (mines and the other side don't), and stays deterministic", () => {
@@ -157,6 +157,54 @@ describe("Act 8: The Mirelight Fen", () => {
       return c.bodies.map((x) => `${x.kind}:${x.hp.toFixed(3)}`).join(",");
     };
     expect(play()).toBe(play());
+  });
+});
+
+describe("Acts 9-10: The Saltwind Coast and Crownfall Citadel", () => {
+  const coast = LEVELS.filter((l) => l.act === 9);
+  const citadel = LEVELS.filter((l) => l.act === 10);
+
+  it("are six levels each, 49-54 and 55-60, on the full roster, with names of their own", () => {
+    expect(ACTS[8]).toBe("The Saltwind Coast");
+    expect(ACTS[9]).toBe("Crownfall Citadel");
+    expect(coast.map((l) => l.id)).toEqual([49, 50, 51, 52, 53, 54]);
+    expect(citadel.map((l) => l.id)).toEqual([55, 56, 57, 58, 59, 60]);
+    const before = LEVELS.filter((l) => l.act < 9);
+    for (const l of [...coast, ...citadel]) {
+      expect(new Set(l.roster)).toEqual(new Set(UNIT_KINDS));
+      expect(before.map((b) => b.foe)).not.toContain(l.foe);
+      expect(before.map((b) => b.name)).not.toContain(l.name);
+      expect(l.hp[1]).toBe(400);
+    }
+  });
+
+  it("gives every level its own twist: a rule bent for one side, a timer, an extra purse or a set board", () => {
+    for (const l of [...coast, ...citadel]) {
+      const [mine, foe] = l.mods ?? [];
+      const bent = [mine?.speedMul, foe?.speedMul, foe?.kindDmg, foe?.kindHp, foe?.bigMines, foe?.cooldownMul, foe?.healMul,
+        foe?.broodStart, foe?.litStart, l.noReroll, l.maxRounds, l.income?.[1], l.startGold?.[1], l.start?.[1]?.length].filter(Boolean);
+      expect(bent.length, `level ${l.id}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("ends Act 9 on Lightkeeper Orrin, the gale at his back (his army faster, yours slower)", () => {
+    const boss = coast[5];
+    expect(boss.boss).toBe(true);
+    expect(boss.foe).toBe("Lightkeeper Orrin");
+    expect(boss.mods?.[1]?.speedMul).toBeGreaterThan(1);
+    expect(boss.mods?.[0]?.speedMul).toBeLessThan(1);
+    expect(LEVELS.filter((l) => (l.mods?.[1]?.speedMul ?? 1) > 1).map((l) => l.id)).toEqual([54]);
+  });
+
+  it("ends the campaign on King Aurel the Last, who brings back earlier bosses' tricks at once", () => {
+    const boss = citadel[5];
+    expect(boss).toBe(LEVELS[LEVELS.length - 1]);
+    expect(boss.boss).toBe(true);
+    expect(boss.foe).toBe("King Aurel the Last");
+    const m = boss.mods?.[1];
+    expect(m?.broodStart && m?.litStart && m?.bigMines).toBe(true);
+    const start = new Set(boss.start![1]!.map((p) => p.kind));
+    for (const k of ["hive", "lamp", "mine", "golem"]) expect(start.has(k as never), k).toBe(true);
   });
 });
 

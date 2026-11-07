@@ -145,9 +145,13 @@ describe("commander level", () => {
     c[12] = 2; // Act 2's boss
     expect(actsCleared(c)).toBe(2);
     // A free player's commander level by act (see outputs/economy/progression.md) always covers the foe level.
-    for (let act = 1; act <= 8; act++) expect(foeLevelForAct(act)).toBeLessThanOrEqual(levelCap(act));
+    for (let act = 1; act <= 10; act++) expect(foeLevelForAct(act)).toBeLessThanOrEqual(levelCap(act));
     expect(EXPECTED_LEVEL_BY_ACT[0]).toBe(1);
     expect(EXPECTED_LEVEL_BY_ACT[7]).toBeGreaterThanOrEqual(8); // steep: an un-upgraded army stalls
+    // Acts 9-10 keep climbing one level an act, under the level cap of 12.
+    expect(EXPECTED_LEVEL_BY_ACT).toHaveLength(10);
+    expect([foeLevelForAct(9), foeLevelForAct(10)]).toEqual([9, 10]);
+    expect(foeLevelForAct(10)).toBeLessThanOrEqual(12);
     expect(gauntletFoeLevel(1, 10)).toBe(1);
     expect(gauntletFoeLevel(7, 10)).toBe(3);
     expect(gauntletFoeLevel(40, 4)).toBe(4);
