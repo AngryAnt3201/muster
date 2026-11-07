@@ -31,6 +31,9 @@ import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
 import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, settleLegacyCoins, withLevels } from "./progression/troops";
 import { foeLevelForAct } from "./progression/economy";
 import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
+// [chests] chest slots, free and crown chests, the opening moment (src/progression/chests.ts, src/ui/chests.ts)
+import { seedDemo, winChest } from "./progression/chests";
+import { chestBar, chestDemo, chestEarned } from "./ui/chests";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -83,6 +86,7 @@ function title() {
       el("span", { class: "logo-word", "data-t": "MUSTER" }, [el("span", {}, ["MUSTER"])]),
       el("div", { class: "logo-sub" }, [ribbon("build · place · clash", "small")]),
     ]),
+    chestBar(), // [chests]
     el("div", { class: "menu" }, [
       btn(el("span", {}, ["Campaign", el("small", {}, [`${camp}/${LEVELS.length}`])]), "primary big", campaign),
       // Secondary modes in pairs, so the menu stays low and the key art's clash shows above it.
@@ -276,6 +280,7 @@ function playLevel(l: LevelDef, attempt = 0) {
         secondary: ["Campaign", () => campaign(l.act)],
       });
       attachReward(coins, barracks); // [progression]
+      if (m.winner === 0) chestEarned(winChest(n)); // [chests]
     },
     onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
@@ -413,6 +418,7 @@ function duel() {
       const coins = awardGauntletRival(r.stage - 1); // [progression]
       boonPick(r);
       attachReward(coins); // [progression]
+      chestEarned(winChest(2)); // [chests] two crowns a rival
     },
     onQuit: gauntlet,
   });
@@ -563,6 +569,7 @@ function playSkirmish(lab: Lab) {
         secondary: ["AI lab", skirmish],
       });
       attachReward(coins, barracks); // [progression]
+      if (m.winner === 0 && !lab.watch) chestEarned(winChest(2)); // [chests]
     },
     onQuit: skirmish,
     onRestart: () => playSkirmish(lab),
@@ -671,6 +678,7 @@ async function boot() {
   if (q.has("td")) return void import("./ui/td").then((m) => (q.get("td") ? m.playBastion(app, q.get("td")!, title) : m.bastionMenu(app, title)));
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
+  if (q.has("chests")) { const k = q.get("chests") ?? ""; if (k !== "result") seedDemo(); if (k === "result" || k === "full") { gemDemo("reward"); return chestEarned(winChest(3)); } title(); return chestDemo(k); } // [chests] review shots: ?chests=title|result|full|info|open|shop
   if (q.has("gemdemo")) return gemDemo(q.get("gemdemo") ?? ""); // [gems] review shots of the result-screen moments
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });
