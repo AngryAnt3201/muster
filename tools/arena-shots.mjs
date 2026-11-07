@@ -5,12 +5,12 @@ import { chromium, devices } from "playwright";
 import { mkdirSync } from "node:fs";
 const port = process.env.PORT ?? "5191";
 const [, , tag = "after", only = ""] = process.argv;
-const acts = only ? only.split(",").map(Number) : [1, 2, 3, 4, 5, 6, 7, 8];
-const LEVEL = { 1: 6, 2: 10, 3: 16, 4: 22, 5: 28, 6: 34, 7: 40, 8: 48 };
+const acts = only ? only.split(",").map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const LEVEL = { 1: 6, 2: 10, 3: 16, 4: 22, 5: 28, 6: 34, 7: 40, 8: 48, 9: 50, 10: 57 };
 const out = "outputs/review/polish2/arenas";
 mkdirSync(out, { recursive: true });
 const cleared = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [i + 1, 3]));
-const save = { settings: { sound: false, haptics: false, speed: 1 }, campaign: cleared(47), puzzles: cleared(20), gauntlet: { best: 3, runs: 2 }, seen: [] };
+const save = { settings: { sound: false, haptics: false, speed: 1 }, campaign: cleared(59), puzzles: cleared(20), gauntlet: { best: 3, runs: 2 }, seen: [] };
 const browser = await chromium.launch();
 const errors = [];
 for (const act of acts) {
