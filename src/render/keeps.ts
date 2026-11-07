@@ -140,6 +140,24 @@ export function skinFailed(skin: string, state: KeepArt = "intact"): boolean {
   return !!f && failed.has(f);
 }
 const failed = new Set<string>();
+
+/** A skin's ambient motes drifting off the player's keep in battle: snow, embers, gold glints, ghost lights, petals. */
+export interface SkinMote {
+  /** Motes a second. */
+  rate: number;
+  colors: string[];
+  kind: "dot" | "spark" | "plus" | "chunk";
+  size: number; max: number; gravity: number; vz: number; speed: number; drag: number; spin?: number;
+}
+const MOTES: Record<string, SkinMote> = {
+  frost: { rate: 6, colors: ["#ffffff", "#e2f6ff", "#bfe9ff"], kind: "dot", size: 0.065, max: 2.2, gravity: 0.5, vz: 0.1, speed: 0.25, drag: 0.6 },
+  ember: { rate: 7, colors: ["#ffb347", "#ff7a1f", "#ffe08a"], kind: "spark", size: 0.05, max: 1.3, gravity: -1.3, vz: 1, speed: 0.3, drag: 1 },
+  gilded: { rate: 4, colors: ["#fff6cc", "#ffd84d"], kind: "plus", size: 0.09, max: 0.9, gravity: 0, vz: 0.15, speed: 0.08, drag: 2 },
+  shadow: { rate: 4, colors: ["#7dffd0", "#b48cff"], kind: "dot", size: 0.07, max: 2.1, gravity: -0.45, vz: 0.4, speed: 0.2, drag: 0.8 },
+  blossom: { rate: 5, colors: ["#ffc6db", "#f6a3c2", "#fff0f6"], kind: "chunk", size: 0.06, max: 2.4, gravity: 0.6, vz: 0.25, speed: 0.55, drag: 0.7, spin: 5 },
+};
+/** The motes for a skin (null for the default keep and unknown skins). */
+export const skinMotes = (skin: string | null | undefined): SkinMote | null => { const n = skinName(skin); return n ? MOTES[n] ?? null : null; };
 let debugState: KeepState | null = null;
 /** Debug only (?keepstate= for review shots): pins the player's keep to a damage state. */
 export function setKeepStateDebug(s: string | null) { debugState = (KEEP_STATES as string[]).includes(s ?? "") ? (s as KeepState) : null; }

@@ -18,7 +18,7 @@ import { spreadOffsets, type SpreadBody } from "./spread";
 import { Juice, landSquash, popScale } from "./juice";
 import { drawBanner, drawCallout, drawFloat, drawTrail, hpBar, shadowRing } from "./juicedraw";
 import { equipped } from "../progression/cosmetics"; // [skins]
-import { keepStateDebug } from "./keeps"; // [skins]
+import { keepStateDebug, skinMotes } from "./keeps"; // [skins]
 import { arenaLayers, sceneFigures } from "./foreground"; // polish/arenas: arena layers (see render())
 
 export type { Rect } from "./camera";
@@ -94,6 +94,9 @@ export class BoardView {
   bossKeep = false;
   /** [skins] The player's keep skin: undefined follows the equipped skin; a skin id or null (the default) pins it. */
   keepSkin: string | null | undefined = undefined;
+  private skinMote = 0; // [skins] mote accumulator for the player's keep
+  /** [skins] The skin a side's keep wears (only the player's keep is skinned). */
+  private skinOf(side: Side): string | null { return side === 0 ? (this.keepSkin === undefined ? equipped("keep") : this.keepSkin) : null; }
   // ---- JUICE (combat feel, src/render/juice.ts + juicedraw.ts): hit-stop, camera shake, callouts, HP lag, banner.
   /** Hit-stop, trauma shake, Ascended callouts, HP-bar lag and the round-end flourish. */
   readonly juice = new Juice();
@@ -1259,7 +1262,7 @@ export class BoardView {
   private drawKeep(side: Side) {
     const k = this.keeps[side];
     const state = (side === 0 && keepStateDebug()) || keepState(this.keepHp[side]); // [skins] debug override for shots
-    const skin = side === 0 ? (this.keepSkin === undefined ? equipped("keep") : this.keepSkin) : null; // [skins]
+    const skin = this.skinOf(side); // [skins]
     const img = keepImage(side, state, this.bossKeep, skin);
     if (!img) return;
     const ctx = this.ctx, m = keepManifest(), a = keepAnchor(side);
@@ -1409,6 +1412,16 @@ export class BoardView {
         while (k.smoke >= 1) {
           k.smoke -= 1;
           puff(side, m.anchors.smoke[Math.floor(Math.random() * m.anchors.smoke.length)], 1, { color: state === "cracked" ? "rgba(150,145,140,0.18)" : "rgba(50,46,52,0.3)", speed: 0.15, size: 0.1, max: 1.6, kind: "smoke", gravity: -0.55, vz: 0.6, drag: 0.5 });
+        }
+      }
+      // [skins] the skin's own motes drift off the player's standing keep
+      const mote = side === 0 && k.fallT < 0 ? skinMotes(this.skinOf(side)) : null;
+      if (mote) {
+        this.skinMote += dt * mote.rate;
+        while (this.skinMote >= 1) {
+          this.skinMote -= 1;
+          const g = m.anchors.ground, t = m.anchors.top;
+          puff(side, [g[0] + frand(-140, 140), t[1] + frand(-50, 110)], 1, { color: mote.colors[Math.floor(Math.random() * mote.colors.length)], kind: mote.kind, size: mote.size, max: mote.max, gravity: mote.gravity, vz: mote.vz, speed: mote.speed, drag: mote.drag, spin: mote.spin });
         }
       }
     }

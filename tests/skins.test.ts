@@ -68,6 +68,21 @@ describe("keep skin selection", () => {
     expect(k2.keepImage(0, "ruined", false, "keep:nope")!.src).toContain("keeps/tide_ruined.webp");
   });
 
+  it("gives every skin its own ambient motes, and none to the default keep", async () => {
+    const k = await freshKeeps();
+    expect(k.skinMotes(DEFAULT_KEEP)).toBeNull();
+    expect(k.skinMotes(null)).toBeNull();
+    const kinds = new Set<string>();
+    for (const id of KEEP_SKINS) {
+      if (id === DEFAULT_KEEP) continue;
+      const m = k.skinMotes(id)!;
+      expect(m.rate).toBeGreaterThan(0);
+      expect(m.rate).toBeLessThanOrEqual(8); // ambience, not noise
+      kinds.add(`${m.kind}:${m.colors[0]}`);
+    }
+    expect(kinds.size).toBe(KEEP_SKINS.length - 1);
+  });
+
   it("ships every skin's art, on the default keep's canvas", () => {
     const root = join(__dirname, "..", "public", "keeps");
     const man = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
