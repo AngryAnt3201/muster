@@ -687,8 +687,10 @@ export class GameScreen {
     if (own && this.phase === "deploy") {
       const why = m.canUpgrade(0, p.id);
       const ascend = p.rank === 3;
-      const label = p.rank >= 4 ? "Ascended" : ascend ? `Ascend · ${upgradeCost(p.kind, p.rank)}` : `Rank up · ${upgradeCost(p.kind, p.rank)}`;
-      const up = el("button", { class: `btn small up ${ascend ? "ascend" : ""}` }, [why && why !== "Need gold" && p.rank < 4 ? why : label]) as HTMLButtonElement;
+      // The price rides on a coin, which turns red when the purse is short (the button only dims a touch).
+      const label: (Node | string)[] = p.rank >= 4 ? ["Ascended"] : [ascend ? "Ascend" : "Rank up", coin(upgradeCost(p.kind, p.rank), "up-cost")];
+      const poor = why === "Need gold";
+      const up = el("button", { class: `btn small up ${ascend ? "ascend" : ""} ${poor ? "poor" : ""}` }, why && !poor && p.rank < 4 ? [why] : label) as HTMLButtonElement;
       up.disabled = !!why;
       up.addEventListener("click", () => {
         if (m.canUpgrade(0, p.id)) return;
@@ -699,7 +701,7 @@ export class GameScreen {
         this.evolve(p);
         this.refreshHud();
       });
-      const sell = el("button", { class: "btn small sell" }, [`Sell · +${m.sellValue(p)}`]) as HTMLButtonElement;
+      const sell = el("button", { class: "btn small sell" }, ["Sell", coin(`+${m.sellValue(p)}`, "up-cost sell-cost")]) as HTMLButtonElement;
       sell.addEventListener("click", () => {
         m.sell(0, p.id);
         sfx("sell");

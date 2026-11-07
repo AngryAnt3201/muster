@@ -116,6 +116,18 @@ async function battle() {
     if (!skip("battle-shop")) await shot(p, "battle-shop");
     await p.context().close();
   }
+  // A placed unit's card (upgrade / sell popover).
+  if (!skip("battle-pop")) {
+    const p = await page("owner");
+    await p.goto(`http://${host}:${port}/?level=6`);
+    await p.waitForTimeout(2500);
+    await deployAI(p);
+    await p.waitForTimeout(600);
+    await p.evaluate(() => { const g = window.__game; const pc = g.match.sides[0].pieces.find((x) => x.kind !== "mine") ?? g.match.sides[0].pieces[0]; g.selected = pc.id; g.openPop(pc); });
+    await p.waitForTimeout(500);
+    await shot(p, "battle-pop");
+    await p.context().close();
+  }
   if (!skip("pause")) {
     const p = await page("owner");
     await p.goto(`http://${host}:${port}/?level=6`);
