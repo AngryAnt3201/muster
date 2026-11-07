@@ -317,12 +317,14 @@ def main():
         placed = []
         # Short fence runs along the road's outer verge where there is room.
         nf = 0
-        for ri, r in enumerate(roads[:1]):
-            for i in range(16, len(r) - 20, 15):
+        for ri, r in enumerate(roads):
+            for i in range(16 + ri * 5, len(r) - 20, 7):
                 x, y = r[i]
                 x2, y2 = r[i + 5]
                 dx, dy = x2 - x, y2 - y
                 l = math.hypot(dx, dy) or 1
+                if abs(dx) < abs(dy) * 0.8:  # a fence running up the screen reads as a single stick; keep to the crossings
+                    continue
                 for side in (1, -1):
                     off = RH + 0.5
                     ax, ay = x - dy / l * off * side, y + dx / l * off * side
@@ -362,8 +364,16 @@ def main():
                 tree(kinds[j % len(kinds)], x, y, s, j)
                 j += 1
         ntrees = j
+        # Grass tufts over the open meadow.
+        for n in range(int(Wm * Hm * 0.35)):
+            x, y = -0.5 + rnd(n, 61) * (Wm + 1), rnd(n, 62) * Hm
+            if not free(x, y, 0.1, 0.1):
+                continue
+            for j in range(3):
+                wk.cone(0.035, 0.12 + 0.03 * (j % 2), toon("grass_dk" if j % 2 else "grass_lt"), loc=B(x + 0.05 * (j - 1), y + 0.02 * j, 0.05),
+                        rot=(12 * (j - 1), 0, 0), seg=5, outline=0.004)
         # Rocks, bushes, flowers and fences in the open grass.
-        for n in range(int(Wm * Hm * 0.2)):
+        for n in range(int(Wm * Hm * 0.28)):
             x, y = -0.5 + rnd(n, 51) * (Wm + 1), rnd(n, 52) * Hm
             kind = rnd(n, 53)
             if kind < 0.3:
