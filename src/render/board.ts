@@ -17,6 +17,7 @@ import { VICTORY_HOLD, bannerRaise, collapsePose, drawVictoryBanner, keepSquash 
 import { spreadOffsets, type SpreadBody } from "./spread";
 import { Juice, landSquash, popScale } from "./juice";
 import { drawBanner, drawCallout, drawFloat, drawTrail, hpBar, shadowRing } from "./juicedraw";
+import { arenaLayers, sceneFigures } from "./foreground"; // polish/arenas: arena layers (see render())
 
 export type { Rect } from "./camera";
 
@@ -514,8 +515,12 @@ export class BoardView {
     ctx.beginPath(); ctx.rect(this.area.x, this.area.y, this.area.w, this.area.h); ctx.clip();
     this.drawAnims("ground");
     this.airSorted = false;
+    // ---- arena layers (polish/arenas, foreground.ts): ambient ground motion under the units, border canopy over them
+    if (this.arena) arenaLayers(this).ambient(ctx, this.arena, this.cam, this.time);
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
+    if (this.arena) arenaLayers(this).foreground(ctx, this.arena, this.cam, this.time, sceneFigures(scene));
+    // ---- end arena layers
     this.drawFx();
     ctx.restore();
     if (this.fx.flash > 0) {

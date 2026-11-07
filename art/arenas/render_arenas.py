@@ -43,36 +43,48 @@ PROP_PPU = 160
 
 # Act themes: overrides on the direction's ground palette plus what grows around the board.
 ACTS = {
-    1: dict(name="Borderlands", g={}, border="hedge", trees=("broad",), scatter="flowers", obstacle="boulder"),
+    1: dict(name="Borderlands", g={}, border="hedge", trees=("broad",), scatter="flowers", obstacle="boulder", footing=True,
+            dress=dict(stripes=True, wear=True, clumps="flowers", n_clumps=32, tufts=80, cobbles=("#dcc595", "#cfb682", "#e7d3a3", "#c4a976"),
+                       banners=("#f4e6c4", "#ffcf4d")),
+            fg="canopy"),
     2: dict(name="Ash Fields", g=dict(grass="#c3b85c", grass_dk="#a89c48", grass_lt="#d9cf7a", strip="#d8b98a", strip_dk="#b99a68",
                                        foliage="#e8913c", foliage_dk="#c0612c", path="#e6c48e", path_dk="#c69b62", moss="#b2a04a"),
-            border="hedge", trees=("broad", "broad", "dead"), scatter="embers", obstacle="charstump"),
+            border="hedge", trees=("broad", "broad", "dead"), scatter="embers", obstacle="charstump", footing=True,
+            dress=dict(wear=True, clumps="dry", n_clumps=26, tufts=60, cracks=30, banners=("#e8dcc0", "#c0612c"),
+                       cobbles=("#b99a68", "#a88a5a", "#c4a675", "#9c7f52"), cobble_size=0.64, cobble_gap=0.07), fg="canopy"),
     3: dict(name="Hollow Wood", g=dict(grass="#6cb552", grass_dk="#54993f", grass_lt="#8ccb63", foliage="#46a04c", foliage_dk="#2e7a3a",
                                        strip="#c9b083", strip_dk="#a98f63"),
-            border="hedge", trees=("broad", "pine", "broad"), scatter="mushrooms", obstacle="stump"),
+            border="hedge", trees=("broad", "pine", "broad"), scatter="mushrooms", obstacle="stump",
+            dress=dict(wear=True, clumps="ferns", n_clumps=30, tufts=90, moss=16, roots=True, rings=True,
+                       cobbles=("#9fa88c", "#8e9a7c", "#aab39a", "#b5ab8c"), cobble_size=0.62, cobble_gap=0.08), fg="canopy"),
     4: dict(name="Iron Pass", g=dict(grass="#a2bd72", grass_dk="#88a35d", grass_lt="#bcd38e", path="#ddd2b8", path_dk="#b8aa8c",
                                      strip="#cfc6b2", strip_dk="#aea38c", foliage="#4f9a5e", foliage_dk="#2f6f45", rock="#b4b0a8", rock_dk="#7d7972"),
-            border="rocks", trees=("pine", "pine", "crag"), scatter="pebbles", obstacle="crag"),
+            border="rocks", trees=("pine", "pine", "crag"), scatter="pebbles", obstacle="crag",
+            dress=dict(wear=True, clumps="heather", n_clumps=26, tufts=40, gravel=18, cracks=12, banners=("#cfd8e3", "#4f6f9a"), rails=True), fg="pines"),
     5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#cf5446", path_dk="#9c3a30",
                                      strip="#86c25a", strip_dk="#6aa947", court="#dcc6a0", court_dk="#a88d68"),
             court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar",
-            relief="flagstones", stones=("#dcc6a0", "#e7d6b3", "#ccb38b", "#d5bf98"), trim="#ffcf4d"),
+            relief="flagstones", stones=("#dcc6a0", "#e7d6b3", "#ccb38b", "#d5bf98"), trim="#ffcf4d", lozenges="#b8463a",
+            dress=dict(clumps="flowers", n_clumps=0, cracks=18, banners=("#cf5446", "#ffcf4d")), fg="topiary"),
     6: dict(name="Frozen Reach", g=dict(grass="#eef5fb", grass_dk="#d3e2ef", grass_lt="#ffffff", path="#c5d7e8", path_dk="#9fb7cf",
                                         strip="#dbe7f2", strip_dk="#b9cde0", foliage="#3f8f6a", foliage_dk="#2b6b52", rock="#a9b4c2", rock_dk="#76828f",
                                         moss="#f4f9ff", edge="#8aa2bb"),
-            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock", relief="snow"),
+            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock", relief="snow", fg="snowpines",
+            dress=dict(clumps="frost", n_clumps=20, banners=("#e9f2fb", "#5b7fb0"))),
     7: dict(name="Sky Throne", g=dict(grass="#bfe0ff", grass_dk="#a6d0f7", grass_lt="#e6f3ff", path="#6f8fe0", path_dk="#4c69bd",
                                       strip="#efe3c8", strip_dk="#cdbd9a", court="#f5efe3", court_dk="#d9cdb6", rock="#f2ece0", rock_dk="#c9bfae"),
             court=True, border="rail", trees=("cloud",), scatter="none", obstacle="obelisk",
-            relief="flagstones", stones=("#f5efe3", "#fbf8f1", "#ebe1cf", "#e9eef5"), strip_stones=("#efe3c8", "#f7eedb", "#e3d3b2"),
-            inlay="#ffcf4d", trim="#ffcf4d", path_tiles=True),
+            relief="flagstones", stones=("#f3e7cf", "#fbf4e4", "#e6d6b8", "#dfe4ee", "#eadcc0"), strip_stones=("#e5c98f", "#efd9a6", "#d8b878"),
+            inlay="#ffcf4d", trim="#ffcf4d", path_tiles=True, rosettes=True, lapis="#3f63c8",
+            dress=dict(cracks=22, banners=("#3f63c8", "#ffcf4d")), fg="sky"),
     8: dict(name="Mirelight Fen", g=dict(grass="#88bd62", grass_dk="#6ea44f", grass_lt="#a6d47a", path="#d0aa78", path_dk="#9a7550",
                                          strip="#6fb9b8", strip_dk="#4f9a9c", foliage="#78b552", foliage_dk="#4f8d3e", moss="#86b852",
                                          willow="#b2d35e", willow_dk="#86ad44",
                                          rock="#a3a48c", rock_dk="#737660", edge="#5d8a49", plank="#cf9d62", plank_dk="#9a6b3d"),
             border="reeds", trees=("willow", "willow", "reedbed", "broad", "willow"), scatter="pond", obstacle="fenlamp", relief="fen",
-            water="#2f97b0", water_lt="#7fd2dc", lantern="#ffcf6b"),
+            water="#2f97b0", water_lt="#7fd2dc", lantern="#ffcf6b", fg="willows"),
 }
+FG_ROWS = 14  # foreground cells per side: each fades on its own when a unit stands under it
 
 
 def parse():
@@ -251,6 +263,13 @@ def main():
                 if i % 2:
                     wk.cyl(0.03, 0.1, K.toon("#7a4f2f"), loc=B(x, y, 0.42), seg=6, outline=0.005)
             else:
+                if th.get("footing"):
+                    # A dry-stone footing under a clipped hedge: the border reads as built, with height and a lit top.
+                    wk.box((0.64, 0.52, 0.16) if along_x else (0.52, 0.64, 0.16), toon("rock" if i % 4 else "rock_dk"), loc=B(x, y, 0.08),
+                           rot=(0, 0, (rnd(i, 5) - 0.5) * 6), bevel=0.04, outline=0.006)
+                    wk.ball(0.31, toon("foliage_dk" if i % 3 == 0 else "foliage"), loc=B(x, y, 0.36), scale=(1.1, 1.05, 0.8), subdiv=2)
+                    wk.ball(0.16, toon("grass_lt"), loc=B(x - 0.06, y - 0.08, 0.5), scale=(1.0, 0.9, 0.5), subdiv=2, outline=0.004)
+                    return
                 wk.ball(0.3, toon("foliage_dk" if i % 3 == 0 else "foliage"), loc=B(x, y, 0.22), scale=(1.1, 1.1, 0.85), subdiv=2)
 
         def scatter(x, y, i):
@@ -304,6 +323,263 @@ def main():
                     wk.box((xb - xa - gap, yb - ya - gap, FLAG_H), tone,
                            loc=B((xa + xb) / 2, (ya + yb) / 2, FLAG_H / 2 - 0.006 + (h - 0.5) * 0.014),
                            rot=((rnd(r, c + seed) - 0.5) * 1.6, (rnd(c, r + seed) - 0.5) * 1.6, 0), bevel=0.028, outline=0.007)
+
+        def keep_clear(x, y, path_w=0.95, keep_r=1.75, zone_only=True, path_x=None):
+            """Not on the path, the keep plazas or (zone_only) the neutral strip."""
+            if path_x and abs(x - path_x(y)) < path_w:
+                return False
+            if any(math.hypot(x - kx, y - ky) < keep_r for kx, ky in KEEPS):
+                return False
+            return not (zone_only and ZD - 0.35 < y < H - ZD + 0.35)
+
+        def clump(x, y, i, kind):
+            """A small ground clump in a deploy zone: low, so units stand over it."""
+            if kind == "flowers":
+                wk.ball(0.22, toon("grass_dk"), loc=B(x, y, 0.0), scale=(1.4, 1.1, 0.34), subdiv=2, outline=0.005)
+                cols = (("#fff4d6", "#ffd84d"), ("#ff8fa3", "#fff4d6"), ("#b9a2ff", "#ffd84d"), ("#ffd84d", "#ff8fa3"))[i % 4]
+                for j in range(8):
+                    aa = j * 0.8 + i
+                    rr = 0.06 + 0.07 * (j % 3)
+                    wk.sphere(0.055, K.toon(cols[j % 2]), loc=B(x + math.cos(aa) * rr * 1.4, y + math.sin(aa) * rr, 0.08), seg=8, rings=5, outline=0.006)
+            elif kind == "dry":
+                for j in range(5):
+                    aa = j * 1.3 + i
+                    wk.cone(0.035, 0.15 + 0.04 * (j % 2), toon("grass_lt" if j % 2 else "moss"), loc=B(x + math.cos(aa) * 0.09, y + math.sin(aa) * 0.06, 0.06),
+                            rot=(14 * math.cos(aa), 14 * math.sin(aa), 0), seg=5, outline=0.004)
+                if i % 3 == 0:
+                    wk.cyl(0.1, 0.03, K.toon("#4a3a30"), loc=B(x + 0.18, y + 0.05, 0.015), seg=8, outline=0.005)
+                    wk.sphere(0.035, K.glow("#ff9a3c", 2.0), loc=B(x + 0.18, y + 0.05, 0.04), seg=8, rings=5, outline=0)
+            elif kind == "ferns":
+                for j in range(5):
+                    aa = j * math.tau / 5 + i
+                    wk.box((0.28, 0.07, 0.01), toon("foliage" if j % 2 else "foliage_dk"), loc=B(x + math.cos(aa) * 0.12, y + math.sin(aa) * 0.1, 0.04),
+                           rot=(0, -18, math.degrees(aa)), bevel=0.02, outline=0.004)
+                if i % 3 == 0:
+                    wk.cyl(0.03, 0.1, K.toon("#f3ead0"), loc=B(x + 0.16, y + 0.1, 0.05), outline=0.006)
+                    wk.sphere(0.07, K.toon("#e2483a"), loc=B(x + 0.16, y + 0.1, 0.11), scale=(1, 1, 0.6), seg=12, rings=6, outline=0.006)
+            elif kind == "frost":
+                wk.ball(0.2, K.toon("#ffffff"), loc=B(x, y, 0.0), scale=(1.4, 1.1, 0.4), subdiv=2, outline=0.004)
+                for j in range(2 + i % 2):
+                    aa = j * 2.3 + i
+                    wk.crystal(0.05, 0.2 + 0.06 * j, K.toon("#bfe9ff", spec=0.6), loc=B(x + math.cos(aa) * 0.1, y + math.sin(aa) * 0.07, 0.02), rot=(14 * math.cos(aa), 14 * math.sin(aa), 0))
+                if i % 4 == 0:  # a frozen grass stalk
+                    wk.cone(0.03, 0.16, toon("foliage"), loc=B(x - 0.12, y + 0.05, 0.08), seg=5, outline=0.004)
+            elif kind == "heather":
+                wk.ball(0.15, toon("foliage_dk"), loc=B(x, y, 0.02), scale=(1.3, 1.1, 0.45), subdiv=2, outline=0.004)
+                for j in range(5):
+                    aa = j * 1.25 + i
+                    wk.sphere(0.04, K.toon("#b58ad8" if j % 2 else "#d6b4f0"), loc=B(x + math.cos(aa) * 0.1, y + math.sin(aa) * 0.07, 0.08), seg=8, rings=5, outline=0.004)
+
+        def tuft(x, y, j0=0, z0=0.0):
+            for j in range(3):
+                wk.cone(0.033, 0.11 + 0.02 * ((j + j0) % 2), toon("grass_dk" if j % 2 else "grass_lt"), loc=B(x + 0.05 * (j - 1), y + 0.02 * j, 0.05 + z0),
+                        rot=(12 * (j - 1), 0, 0), seg=5, outline=0.004)
+
+        def crack(x, y, n, col, z):
+            """A zig-zag hairline crack in ground or stone."""
+            a0 = rnd(n, 131) * 180
+            px, py = x, y
+            for k in range(3):
+                ln = 0.16 + 0.12 * rnd(n, 132 + k)
+                aa = math.radians(a0 + (rnd(n, 140 + k) - 0.5) * 80)
+                nx, ny = px + math.cos(aa) * ln, py + math.sin(aa) * ln
+                wk.box((ln, 0.022, 0.006), K.flat(col, alpha=0.75), loc=B((px + nx) / 2, (py + ny) / 2, z), rot=(0, 0, -math.degrees(aa)), outline=0)
+                px, py = nx, ny
+
+        def banner(x, y, cols, tall=1.55):
+            """A pole with a hanging pennant (neutral colours, not a team's), facing the camera."""
+            shadow(x, y, 0.16)
+            wk.cyl(0.11, 0.1, toon("rock_dk"), loc=B(x, y, 0.05), seg=10, bevel=0.02, outline=0.006)
+            wk.cyl(0.04, tall, K.toon("#8a5a35"), loc=B(x, y, tall / 2), seg=8)
+            wk.sphere(0.065, K.toon("#ffcf4d", spec=0.4), loc=B(x, y, tall + 0.04), seg=10, rings=6, outline=0.006)
+            wk.rod(B(x - 0.02, y, tall - 0.06), B(x + 0.42, y, tall - 0.06), 0.022, K.toon("#8a5a35"), seg=6)
+            top, bot = tall - 0.08, tall - 0.72
+            wk.sheet([B(x + 0.04, y, top), B(x + 0.4, y, top), B(x + 0.4, y, bot), B(x + 0.22, y, bot + 0.14), B(x + 0.04, y, bot)], K.toon(cols[0]), thick=0.025)
+            wk.sheet([B(x + 0.04, y - 0.016, top - 0.12), B(x + 0.4, y - 0.016, top - 0.12), B(x + 0.4, y - 0.016, top - 0.22), B(x + 0.04, y - 0.016, top - 0.22)],
+                     K.toon(cols[1]), thick=0.012, outline=0)
+
+        def dress(court, relief, path_x):
+            """Ground detail and small props inside the border: mown stripes, path wear, clumps, tufts, cracks, cobbles."""
+            ds = th.get("dress") or {}
+            if not ds:
+                return
+            zf = 0.062 if relief == "flagstones" else 0.0
+            if ds.get("stripes"):
+                for zy0, zy1 in ((0.0, ZD), (H - ZD, H)):
+                    y, n = zy0, 0
+                    while y < zy1 - 0.01:
+                        hh = min(0.9, zy1 - y)
+                        if n % 2 == 0:
+                            wk.box((W, hh, 0.004), K.flat(g["grass_lt"], alpha=0.2), loc=B(W / 2, y + hh / 2, 0.006), outline=0)
+                        y += 0.9
+                        n += 1
+            if ds.get("cobbles"):
+                # An old road across the neutral strip: low raised cobbles, the path crossing it.
+                flagstones(0.0, ZD + 0.08, W, H - ZD - 0.08, ds.get("cobble_size", 0.46), ds["cobbles"], 7, gap=ds.get("cobble_gap", 0.045))
+            if ds.get("rails"):
+                # An old ore-cart track across the pass: sleepers and two iron rails.
+                y = H / 2
+                wood, iron = K.toon("#7a5232"), K.toon("#8a94a2", spec=0.5)
+                xx = 0.15
+                while xx < W:
+                    wk.box((0.13, 0.95, 0.035), wood, loc=B(xx, y, 0.03), rot=(0, 0, (rnd(int(xx * 10), 231) - 0.5) * 6), bevel=0.01, outline=0.004)
+                    xx += 0.36
+                for dy in (-0.3, 0.3):
+                    wk.box((W + 0.4, 0.06, 0.05), iron, loc=B(W / 2, y + dy, 0.07), bevel=0.01, outline=0.004)
+            if ds.get("rings"):
+                # A fairy ring of toadstools in each deploy zone.
+                for (cx, cy) in ((1.7, 3.6), (7.2, H - 3.4)):
+                    for j in range(9):
+                        aa = j * math.tau / 9
+                        x, y = cx + math.cos(aa) * 0.55, cy + math.sin(aa) * 0.42
+                        wk.cyl(0.03, 0.1, K.toon("#f3ead0"), loc=B(x, y, 0.05), outline=0.006)
+                        wk.sphere(0.07 + 0.02 * (j % 2), K.toon("#e2483a" if j % 3 else "#f2a03a"), loc=B(x, y, 0.11), scale=(1, 1, 0.6), seg=12, rings=6, outline=0.006)
+                    with wk.at(B(cx, cy, 0.006), scale=(1.3, 1.0, 1)):
+                        wk.cyl(0.5, 0.004, K.flat(g["grass_lt"], alpha=0.45), seg=24, outline=0)
+            if ds.get("wear"):
+                for n in range(int((H + 1.0) / 0.22)):
+                    y = -0.4 + n * 0.22
+                    if ds.get("cobbles") and ZD < y < H - ZD:
+                        continue
+                    for side in (-1, 1):
+                        r = rnd(n, 150 + side)
+                        x = path_x(y) + side * (0.6 + 0.06 * r)
+                        with wk.at(B(x, y, 0.028), rot=(0, 0, r * 90), scale=(1.5, 0.8, 1)):
+                            wk.cyl(0.09 + 0.08 * r, 0.004, K.flat(g["path_dk"], alpha=0.55), seg=12, outline=0)
+                        if r > 0.62:
+                            wk.ball(0.045 + 0.03 * rnd(n, 160), toon("rock" if r > 0.8 else "rock_dk"), loc=B(x + side * 0.12, y + 0.05, 0.03),
+                                    scale=(1.2, 1.0, 0.6), subdiv=1, smooth=False, outline=0.004)
+                        elif r < 0.2:  # sand spilling onto the grass
+                            with wk.at(B(x + side * 0.14, y, 0.029), rot=(0, 0, r * 400), scale=(1.6, 0.7, 1)):
+                                wk.cyl(0.11, 0.004, K.flat(g["path"], alpha=0.8), seg=12, outline=0)
+            placed = 0
+            for n in range(400):
+                if placed >= ds.get("n_clumps", 0):
+                    break
+                x, y = 0.35 + rnd(n, 171) * (W - 0.7), 0.3 + rnd(n, 172) * (H - 0.6)
+                if not keep_clear(x, y, 1.0, 1.85, True, path_x):
+                    continue
+                clump(x, y, n, ds["clumps"])
+                placed += 1
+            for n in range(ds.get("tufts", 0)):
+                x, y = 0.2 + rnd(n, 181) * (W - 0.4), 0.2 + rnd(n, 182) * (H - 0.4)
+                if keep_clear(x, y, 0.9, 1.7, not ds.get("cobbles") and court is None, path_x):
+                    tuft(x, y, n, zf)
+            for n in range(ds.get("moss", 0)):  # moss patches
+                x, y = 0.4 + rnd(n, 191) * (W - 0.8), 0.4 + rnd(n, 192) * (H - 0.8)
+                if keep_clear(x, y, 1.1, 1.8, True, path_x):
+                    with wk.at(B(x, y, 0.007), rot=(0, 0, rnd(n, 193) * 180), scale=(1.5, 1.0, 1)):
+                        wk.cyl(0.24 + 0.12 * rnd(n, 194), 0.004, K.flat(g["moss"] if g["moss"] != g["grass"] else "#4f8f3d", alpha=0.6), seg=16, outline=0)
+            for n in range(ds.get("gravel", 0)):  # gravel scatters
+                x, y = 0.4 + rnd(n, 201) * (W - 0.8), 0.4 + rnd(n, 202) * (H - 0.8)
+                if keep_clear(x, y, 1.0, 1.8, True, path_x):
+                    with wk.at(B(x, y, 0.006), rot=(0, 0, rnd(n, 203) * 180), scale=(1.6, 1.0, 1)):
+                        wk.cyl(0.26, 0.004, K.flat(g["path_dk"], alpha=0.45), seg=16, outline=0)
+                    for j in range(4):
+                        wk.ball(0.04, toon("rock" if j % 2 else "rock_dk"), loc=B(x + 0.12 * math.cos(j * 1.7 + n), y + 0.08 * math.sin(j * 1.7 + n), 0.02),
+                                scale=(1.2, 1, 0.6), subdiv=1, smooth=False, outline=0.003)
+            for n in range(ds.get("cracks", 0)):
+                x, y = 0.3 + rnd(n, 211) * (W - 0.6), 0.3 + rnd(n, 212) * (H - 0.6)
+                if keep_clear(x, y, 0.9, 1.6, False, path_x):
+                    crack(x, y, n, g["court_dk"] if relief == "flagstones" else g["path_dk"], zf + 0.006)
+            if ds.get("roots"):
+                for n in range(10):  # roots creeping in from the wood at the sides
+                    side = n % 2
+                    y = 0.6 + rnd(n, 221) * (H - 1.2)
+                    if ZD - 0.4 < y < H - ZD + 0.4:
+                        continue
+                    x0 = -0.1 if side == 0 else W + 0.1
+                    x1 = x0 + (0.9 if side == 0 else -0.9) * (0.5 + rnd(n, 222))
+                    wk.rod(B(x0, y, 0.03), B(x1, y + (rnd(n, 223) - 0.5) * 0.6, 0.0), 0.045, K.toon("#7a5232"), r2=0.015, seg=6, outline=0.004)
+            if th.get("rosettes"):
+                lap = K.toon(th["lapis"], spec=0.3)
+                gold = K.toon(th["inlay"], spec=0.5)
+                for (rx, ry) in ((2.0, 3.3), (7.0, 3.3), (2.0, H - 3.3), (7.0, H - 3.3)):
+                    wk.cyl(0.62, 0.012, lap, loc=B(rx, ry, 0.062), seg=32, outline=0.004)
+                    wk.torus(0.64, 0.03, gold, loc=B(rx, ry, 0.07), scale=(1, 1, 0.4), outline=0.003)
+                    wk.cyl(0.24, 0.014, gold, loc=B(rx, ry, 0.066), seg=24, outline=0.004)
+                    for j in range(8):
+                        aa = j * math.tau / 8
+                        wk.box((0.3, 0.06, 0.012), gold, loc=B(rx + math.cos(aa) * 0.42, ry + math.sin(aa) * 0.42, 0.068), rot=(0, 0, -math.degrees(aa)), outline=0.003)
+                for zy0, zy1 in ((0.15, ZD - 0.2), (H - ZD + 0.2, H - 0.15)):  # lapis bands with gold edging down each side
+                    for xx in (0.32, W - 0.32):
+                        wk.box((0.16, zy1 - zy0, 0.012), lap, loc=B(xx, (zy0 + zy1) / 2, 0.062), outline=0.004)
+                        for dx in (-0.12, 0.12):
+                            wk.box((0.035, zy1 - zy0, 0.012), gold, loc=B(xx + dx, (zy0 + zy1) / 2, 0.064), outline=0)
+            if th.get("lozenges"):
+                # High Keep: heraldic lozenges of red stone in gold frames, set into the courtyard of each zone.
+                red, gold = K.toon(th["lozenges"], spec=0.25), K.toon(th["trim"], spec=0.5)
+                for (rx, ry) in ((2.0, 3.3), (7.0, 3.3), (2.0, H - 3.3), (7.0, H - 3.3)):
+                    wk.box((0.92, 0.92, 0.012), gold, loc=B(rx, ry, 0.062), rot=(0, 0, 45), outline=0.004)
+                    wk.box((0.76, 0.76, 0.014), red, loc=B(rx, ry, 0.066), rot=(0, 0, 45), outline=0.004)
+                    wk.box((0.3, 0.3, 0.016), gold, loc=B(rx, ry, 0.07), rot=(0, 0, 45), outline=0.003)
+            if ds.get("banners"):
+                for (bx, by) in ((3.05, -0.85), (5.55, -0.85), (-1.05, ZD + 0.6), (W + 0.6, ZD + 0.6)):  # flanking the far gate and the strip
+                    banner(bx, by, ds["banners"])
+
+        fg_objs = []
+
+        def fg_build():
+            """The foreground: canopy, boughs and banners that overhang the board edge. Built into the backdrop too (so
+            the scene is whole), then rendered again alone as act<n>_fg.webp, drawn over units and faded per cell."""
+            kind = th.get("fg")
+            if not kind:
+                return
+            before = set(coll.objects.keys())
+            n = 0
+            y = -0.2
+            while y < H + 1.0:
+                for side in (0, 1):
+                    jit = rnd(n, 301 + side)
+                    if rnd(n, 311 + side) < 0.22 and 1.0 < y < H - 0.5:
+                        n += 1
+                        continue  # a gap now and then, so the frame breathes
+                    x = -0.62 - 0.12 * jit if side == 0 else W + 0.62 + 0.12 * jit
+                    inw = 1 if side == 0 else -1
+                    s_ = 0.85 + 0.3 * rnd(n, 321)
+                    if kind == "canopy":
+                        # A broadleaf leaning in over the edge: trunk outside the border, crown overhanging the board.
+                        wk.rod(B(x - inw * 0.1, y, 0.0), B(x + inw * 0.18, y, 1.1 * s_), 0.08 * s_, toon("trunk"), r2=0.055 * s_, seg=8)
+                        for j in range(5):
+                            aa = j * 1.4 + n
+                            wk.ball(0.34 * s_, toon("foliage" if j % 2 else "foliage_dk"),
+                                    loc=B(x + inw * (0.25 + 0.2 * (j % 3)) + math.cos(aa) * 0.12, y + math.sin(aa) * 0.2, (1.25 + 0.14 * (j % 2)) * s_), subdiv=2)
+                        wk.ball(0.22 * s_, toon("grass_lt"), loc=B(x + inw * 0.4, y - 0.14, 1.55 * s_), scale=(1, 0.9, 0.6), subdiv=2, outline=0.005)
+                    elif kind in ("pines", "snowpines"):
+                        for j, (rr, zz) in enumerate(((0.42, 1.0), (0.32, 1.32))):
+                            wk.cone(rr * s_, 0.5 * s_, toon("foliage" if j % 2 == 0 else "foliage_dk"), loc=B(x + inw * 0.05, y, zz * s_), seg=9)
+                            if kind == "snowpines":
+                                wk.cone(rr * 0.62 * s_, 0.28 * s_, K.toon("#ffffff"), loc=B(x + inw * 0.05, y, zz * s_ + 0.14 * s_), seg=9)
+                    elif kind == "willows":
+                        wk.ball(0.4 * s_, toon("willow"), loc=B(x, y, 1.35 * s_), scale=(1.1, 1.0, 0.55), subdiv=2)
+                        for j in range(6):
+                            aa = j * 0.55 - 1.4 if side == 0 else math.pi + j * 0.55 - 1.4
+                            wk.cone(0.1 * s_, 0.7 * s_, toon("willow_dk" if j % 2 else "willow"), loc=B(x + math.cos(aa) * 0.45 * s_, y + math.sin(aa) * 0.35 * s_, 0.95 * s_),
+                                    rot=(180 + 10 * math.sin(aa), -10 * math.cos(aa), 0), seg=6)
+                    elif kind == "topiary":
+                        if n % 2 == 0:
+                            wk.cyl(0.05, 0.9, toon("trunk"), loc=B(x, y, 0.45))
+                            wk.ball(0.34 * s_, toon("foliage"), loc=B(x + inw * 0.08, y, 1.05), subdiv=2)
+                            wk.ball(0.2 * s_, toon("grass_lt"), loc=B(x + inw * 0.04, y - 0.08, 1.2), scale=(1, 0.9, 0.6), subdiv=2, outline=0.005)
+                        else:
+                            wk.sphere(0.08, K.glow(g["lantern"], 2.2), loc=B(x + inw * 0.18, y, 1.0), seg=10, rings=6, outline=0.006)
+                            wk.cyl(0.03, 1.0, K.toon("#3a2a20"), loc=B(x, y, 0.5), seg=6)
+                            wk.rod(B(x, y, 1.0), B(x + inw * 0.18, y, 1.12), 0.02, K.toon("#3a2a20"), seg=5)
+                    elif kind == "sky":
+                        if n % 3 == 0:  # a tall pillar with a lapis banner
+                            wk.cyl(0.11, 1.4, toon("court"), loc=B(x, y, 0.7), seg=12)
+                            wk.cyl(0.15, 0.08, K.toon("#ffcf4d", spec=0.4), loc=B(x, y, 1.42), seg=12)
+                            wk.sphere(0.09, K.toon("#ffcf4d", spec=0.5), loc=B(x, y, 1.55), seg=10, rings=6)
+                            bx = x + inw * 0.12
+                            wk.sheet([B(bx, y - 0.13, 1.32), B(bx, y + 0.13, 1.32), B(bx, y + 0.13, 0.62), B(bx, y, 0.72), B(bx, y - 0.13, 0.62)], K.toon(th["lapis"]), thick=0.025)
+                        else:  # a cloud bank rolling over the edge
+                            for j in range(3):
+                                aa = j * 2.1 + n
+                                wk.ball(0.3 * s_, K.toon("#ffffff"), loc=B(x + inw * (0.05 + 0.12 * j) + math.cos(aa) * 0.08, y + math.sin(aa) * 0.15, (0.85 + 0.12 * (j % 2)) * s_),
+                                        scale=(1.2, 1.0, 0.7), subdiv=2)
+                    n += 1
+                y += 0.78
+            fg_objs.extend(o for o in coll.objects if o.name not in before)
 
         if not a.no_ground:
             # ---------------- the ground
@@ -369,8 +645,8 @@ def main():
                 wk.box((W, H - 2 * ZD - 0.5, 0.02), ice, loc=B(W / 2, H / 2, 0.014), outline=0.005)
                 for n in range(9):  # cracks and glints on the ice
                     x, y = 0.4 + rnd(n, 51) * (W - 0.8), ZD + 0.45 + rnd(n, 52) * (H - 2 * ZD - 0.9)
-                    a = rnd(n, 53) * 180
-                    wk.box((0.5 + rnd(n, 54) * 0.6, 0.025, 0.01), K.flat("#8fb8d6"), loc=B(x, y, 0.026), rot=(0, 0, a), outline=0)
+                    ang = rnd(n, 53) * 180
+                    wk.box((0.5 + rnd(n, 54) * 0.6, 0.025, 0.01), K.flat("#8fb8d6"), loc=B(x, y, 0.026), rot=(0, 0, ang), outline=0)
                     wk.box((0.22, 0.05, 0.01), K.flat("#ffffff"), loc=B(x + 0.3, y - 0.2, 0.027), rot=(0, 0, 35), outline=0)
                 for yy in (ZD, H - ZD):  # snow banks on the zone lines (low, so they read as ground, not walls)
                     x = -0.1
@@ -494,6 +770,7 @@ def main():
                 for kx, ky in KEEPS:
                     wk.cyl(1.5, 0.02, K.flat(g["path_dk"]), loc=B(kx, ky, 0.036), seg=40, outline=0)
                     wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.04), seg=40, outline=0)
+            dress(court, relief, path_x)
             # ---------------- the border around the board
             i = 0
             yy = -0.3
@@ -533,6 +810,7 @@ def main():
                 x = (-0.95 if side == 0 else W + 0.95) + (rnd(n, 2) - 0.5) * 0.4
                 y = -0.8 + rnd(n, 3) * (H + 1.8)
                 scatter(x, y, n)
+            fg_build()
 
             # ---------------- backdrop through the game camera
             cam = stage.cam
@@ -561,10 +839,40 @@ def main():
             print(f"ARENA {act} camera check: max error {err:.2f}px at {rx}x{ry}", flush=True)
             img = render(os.path.join(BUILD, f"act{act}_raw.png"))
             img = S.downsample(img, ss)
-            img = S.grade(img, st, vignette=False)
+            img = sunlight(S.grade(img, st, vignette=False))
             png = os.path.join(BUILD, f"act{act}.png")
             S.write_png(png, img)
             to_jpeg(png, os.path.join(OUT, f"act{act}.jpg"))
+            fg_info = None
+            if fg_objs:
+                # The same camera, only the foreground: hide everything else.
+                keep = {o.name for o in fg_objs}
+                for o in coll.objects:
+                    o.hide_render = o.name not in keep
+                fim = render(os.path.join(BUILD, f"act{act}_fg_raw.png"))
+                fim = sunlight(S.grade(S.downsample(fim, ss), st, vignette=False))
+                al = fim[..., 3]
+                hh, ww = al.shape
+                # Cells: each side split into FG_ROWS bands; each cell's tight box of covered pixels, as backdrop fractions.
+                cells = []
+                for side in (0, 1):
+                    xa, xb = (0, ww // 2) if side == 0 else (ww // 2, ww)
+                    for rI in range(FG_ROWS):
+                        ya, yb = hh * rI // FG_ROWS, hh * (rI + 1) // FG_ROWS
+                        m = al[ya:yb, xa:xb] > 0.02
+                        if not m.any():
+                            continue
+                        rows, cols = np.where(m.any(1))[0], np.where(m.any(0))[0]
+                        x0, x1 = xa + cols[0], xa + cols[-1] + 1
+                        y0, y1 = ya + rows[0], ya + rows[-1] + 1
+                        cells.append([round(x0 / ww, 5), round(y0 / hh, 5), round((x1 - x0) / ww, 5), round((y1 - y0) / hh, 5)])
+                fpng = os.path.join(BUILD, f"act{act}_fg.png")
+                S.write_png(fpng, fim)
+                subprocess.run(["cwebp", "-quiet", "-q", "86", "-alpha_q", "90", fpng, "-o", os.path.join(OUT, f"act{act}_fg.webp")], capture_output=True)
+                fg_info = {"file": f"act{act}_fg.webp", "cells": cells}
+                for o in coll.objects:
+                    o.hide_render = False
+                fg_objs.clear()
 
         # ---------------- obstacle props
         wk.clear()
@@ -591,11 +899,30 @@ def main():
             man["size"] = [rx // ss, ry // ss]
         if a.no_props:
             props = man["acts"].get(str(act), {}).get("props", [])
-        man["acts"][str(act)] = {"name": th["name"], "edge": g["grass"], "obstacle": th["obstacle"], "ground": f"act{act}.jpg", "props": props}
+        entry = {"name": th["name"], "edge": g["grass"], "obstacle": th["obstacle"], "ground": f"act{act}.jpg", "props": props}
+        if a.no_ground:
+            if man["acts"].get(str(act), {}).get("fg"):
+                entry["fg"] = man["acts"][str(act)]["fg"]
+        elif fg_info:
+            entry["fg"] = fg_info
+        man["acts"][str(act)] = entry
         with open(man_path, "w") as f:
             json.dump(man, f, indent=1)
         print(f"ARENA {act} {th['name']} done in {time.time() - t0:.0f}s", flush=True)
     print("ARENAS_DONE", flush=True)
+
+
+def sunlight(img, strength=0.06):
+    """A warm afternoon key from the top-left over the whole frame (backdrop and foreground alike, so they match):
+    a few percent brighter and warmer up-left, cooler and softer down-right. img: premultiplied float HxWx4."""
+    import numpy as np
+    h, w = img.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    k = 0.5 - (xx / w * 0.6 + yy / h) / 1.6  # +0.5 top-left .. -0.5 bottom-right
+    gain = (1 + strength * 2 * k)[..., None] * np.stack([1 + 0.05 * k, 1 + 0.012 * k, 1 - 0.05 * k], -1)
+    out = img.copy()
+    out[..., :3] = np.minimum(img[..., :3] * gain, img[..., 3:4])
+    return out
 
 
 def cam_uv(x, y):
