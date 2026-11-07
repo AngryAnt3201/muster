@@ -54,6 +54,7 @@ describe("Griffin Knight", () => {
     pin(wall, med);
     expect(g.flying).toBe(true);
     expect(g.z).toBeGreaterThan(1.4);
+    expect(events(b, "soar")).toEqual([{ t: "soar", id: g.id, x: g.x, y: g.y, side: 0, second: false }]);
     // Melee can't touch it.
     expect(b.nearestEnemy(wall, {})).toBeUndefined();
     expect(runUntil(b, 6, () => events(b, "swoop").length > 0)).toBe(true);
@@ -95,7 +96,7 @@ describe("Griffin Knight", () => {
     run(b, 1);
     expect(events(b, "soar").filter((e) => e.second)).toHaveLength(1);
     const low = mk(3);
-    expect(events(low.b, "soar")).toHaveLength(0);
+    expect(events(low.b, "soar").filter((e) => e.second)).toHaveLength(0);
     expect(low.g.state).toBe("fight");
   });
 });

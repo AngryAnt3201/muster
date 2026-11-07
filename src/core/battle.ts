@@ -277,6 +277,7 @@ export class Battle {
       if (b.kind === "grave") this.graves.push(b);
       if (b.kind === "medic" && b.rank >= 4) this.medics.push(b);
       if (b.burrowed) this.emit({ t: "burrow", id: b.id, x: b.x, y: b.y, side: b.side });
+      if (b.kind === "griffin") this.emit({ t: "soar", id: b.id, x: b.x, y: b.y, side: b.side, second: false });
     }
     if (!this.sideAlive(0) || !this.sideAlive(1)) this.finish();
   }
