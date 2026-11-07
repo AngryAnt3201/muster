@@ -1287,6 +1287,148 @@ def lamplighter(k, P, tier, pose):
             k.torus(0.2 + 0.02 * tier, 0.007, P.glow_soft if tier == 4 else P.fire, loc=c, rot=(90, 0, 0), outline=0)
 
 
+# ================================================================== 29 griffin knight (flying, legendary)
+@unit("griffin", 0.34)
+def griffin(k, P, tier, pose):
+    S = T(tier, 0.92, 1.02, 1.1, 1.18)
+    dive = pose == "attack"
+    hide = T(tier, P.gold_dk, P.gold_dk, P.bronze, P.pearl)
+    head_f = T(tier, P.feather_lt, P.feather_lt, P.fur, P.pearl)
+    with k.at(scale=S):
+        span = T(tier, 0.42, 0.46, 0.5, 0.54) * (0.8 if dive else 1.0)
+        flap = 0.0 if H.gait() is None else 30.0 * math.cos(2 * math.pi * H.gait())
+        for s in (1, -1):
+            with k.at((0.02, 0, 0.04)):
+                wing(k, P, tier, s, 40 if dive else -4, span, flap=flap)
+        # lion body
+        k.sphere(1.0, hide, loc=(-0.04, 0, 0.47), scale=(0.24, 0.12, 0.11))
+        # back legs (paws) tucked, front legs eagle talons
+        for s in (1, -1):
+            k.rod(V((-0.18, s * 0.07, 0.42)), V((-0.26, s * 0.07, 0.32)), 0.03, hide)
+            k.sphere(0.03, hide, loc=(-0.27, s * 0.07, 0.31))
+            fr = V((0.24, s * 0.06, 0.3)) if dive else V((0.12, s * 0.07, 0.33))
+            k.rod(V((0.1, s * 0.06, 0.42)), fr, 0.022, P.gold)
+            for j in (-1, 0, 1):
+                k.spike(fr, fr + V((0.05, j * 0.025, -0.03)), 0.009, P.darker)
+        # tufted lion tail
+        k.tube([V((-0.26, 0, 0.48)), V((-0.38, 0, 0.5)), V((-0.46, 0, 0.58))], 0.018, hide, r_end=0.01, smooth_n=2)
+        k.sphere(0.035, T(tier, P.team, P.team, P.team, P.glow), loc=(-0.47, 0, 0.6))
+        # eagle neck + head
+        hp = V((0.26, 0, 0.56)) if not dive else V((0.3, 0, 0.5))
+        k.tube([V((0.14, 0, 0.5)), hp + V((-0.03, 0, -0.02))], 0.07, head_f, r_end=0.06)
+        k.sphere(0.075, head_f, loc=hp)
+        k.cone(0.032, 0.09, P.gold, loc=hp + V((0.07, 0, -0.01)), rot=(0, 100, 0))
+        for s in (1, -1):
+            k.sphere(0.014, P.eye if tier < 4 else P.glow_lt, loc=hp + V((0.05, s * 0.045, 0.02)), outline=0)
+            k.crystal_at(hp + V((-0.03, s * 0.03, 0.04)), hp + V((-0.1, s * 0.05, 0.1)), 0.015, head_f, sides=4, mid=0.4)
+        # saddle cloth in team colour
+        k.sphere(1.0, P.team, loc=(-0.04, 0, 0.55), scale=(0.13, 0.13, 0.04))
+        if tier >= 2:
+            k.torus(1.0, 0.012, T(tier, None, P.iron, P.gold, P.gold), loc=(-0.04, 0, 0.555), scale=(0.13, 0.13, 1.0))
+            k.sphere(0.078, P.iron if tier == 2 else (P.gold if tier == 3 else P.pearl), loc=hp + V((-0.005, 0, 0.012)), scale=(1.05, 0.95, 0.75))
+        # the knight riding it
+        lk = look_for(tier, head="helm", crest=T(tier, None, "team", "plume", "plume"), cape=T(tier, None, "short", "long", "energy"),
+                      pads=T(tier, "leather", "steel", "gold", "crystal"), chest=T(tier, "leather", "steel", "steel", "pearl"))
+        with k.at((-0.06, 0, 0.42), scale=0.62, rot=(0, 18 if dive else 0, 0)):
+            hand = V((0.34, -0.12, 0.42)) if dive else V((0.16, -0.18, 0.4))
+            humanoid(k, P, tier, {"R": hand, "L": V((0.18, 0.12, 0.34))}, lk)
+            d = V((1, 0, -0.35)).normalized() if dive else V((0.6, 0, 0.8)).normalized()
+            H.sword(k, P, hand, d, T(tier, 0.3, 0.34, 0.38, 0.42), tier)
+            if tier == 4:
+                H.halo(k, P, H.HEAD + V((0, 0, 0.18)), R=0.09)
+        if tier == 4:
+            for i, a in enumerate((-30, 0, 30)):
+                dd = V((-math.cos(math.radians(a)), math.sin(math.radians(a)), 0.5)).normalized()
+                k.crystal_at(hp + V((-0.03, 0, 0.06)), hp + V((-0.03, 0, 0.06)) + dd * 0.14, 0.022, P.glow_lt, sides=4, mid=0.5)
+
+
+# ================================================================== 30 tidecaller (caster, legendary)
+def wave_curl(k, P, c, R, mat, tier, rot=(0, 0, 0)):
+    """A curling crest of water: an arc of tube with a foam lip."""
+    with k.at(V(c), rot=rot):
+        pts = [V((math.cos(math.radians(a)) * R, 0, math.sin(math.radians(a)) * R + R)) for a in (-80, -30, 20, 70, 120, 160)]
+        k.tube(pts, R * 0.28, mat, r_end=R * 0.08, smooth_n=3, outline=0.005)
+        k.ball(R * 0.18, P.white if tier < 4 else P.glow_lt, loc=pts[-2], outline=0)
+
+
+@unit("tide", 0.27)
+def tidecaller(k, P, tier, pose):
+    from . import kit as K
+    S = hum_scale(0.27, tier)
+    atk = pose == "attack"
+    sea = K.toon("#2f9fc4")
+    sea_dk = K.toon("#1f6f93")
+    foam = K.glow("#bff3ff", 1.25) if tier == 4 else K.toon("#dff7ff")
+    lk = look_for(tier, head="hood", torso="team", pads=T(tier, None, "cloth", "gold", "crystal"),
+                  chest=T(tier, None, "cloth", "pearl", "pearl"), cape=T(tier, None, "short", "long", "energy"), legs="team_dk", belt="leather_dk")
+    hand = V((0.36, -0.1, 0.5)) if atk else V((0.15, -0.2, 0.3))
+    top = V((0.52, -0.12, 0.66)) if atk else V((0.2, -0.24, 0.78))
+    off = V((0.3, 0.16, 0.5)) if atk else V((0.12, 0.19, 0.32))
+    with k.at(scale=S):
+        humanoid(k, P, tier, {"R": hand, "L": off}, lk)
+        # shell collar
+        for i in range(5):
+            a = math.radians(-60 + 30 * i)
+            k.cone(0.03, 0.05, T(tier, P.bone, P.bone, P.gold, P.pearl), loc=(math.cos(a) * 0.06 + 0.04, math.sin(a) * 0.12, 0.45), rot=(0, -60, 0))
+        # trident staff
+        H.staff(k, P, hand, top, tier, shaft=T(tier, P.wood, P.wood_dk, sea_dk, P.pearl))
+        d = (top - hand).normalized()
+        prong = T(tier, P.iron, P.steel, P.gold, P.glow_lt)
+        side = V((0, 1, 0)).cross(d).normalized() if abs(d.y) < 0.9 else V((1, 0, 0))
+        side = d.cross(V((0, 0, 1))).normalized()
+        for s in (-1, 0, 1):
+            base = top + side * s * 0.04
+            k.spike(base, base + d * (0.12 if s == 0 else 0.09) + side * s * 0.015, 0.012, prong)
+        k.box((0.02, 0.1, 0.02), prong, loc=top, bevel=0.005)
+        # a water orb or a curl at the off hand
+        k.ball(T(tier, 0.04, 0.045, 0.05, 0.055), sea, loc=off + V((0.04, 0.02, 0.06)), outline=0.004)
+        if tier >= 2:
+            k.torus(0.09, 0.014, sea, loc=(0, 0, 0.12), scale=(1.4, 1.4, 1.0), outline=0.004)
+        if tier >= 3:
+            wave_curl(k, P, V((-0.1, 0.0, 0.0)), 0.12, sea, tier, rot=(0, 0, 180))
+        if tier == 4:
+            H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
+            H.orbit_shards(k, P, V((0, 0, 0.3)), 0.28, n=5, h=0.08, mat=foam)
+        if atk:
+            o = top + d * 0.1
+            wave_curl(k, P, o + V((0.12, 0, -0.32)), 0.14, sea, tier)
+            k.ball(0.05, foam, loc=o + V((0.12, 0, 0.0)), outline=0)
+
+
+# ================================================================== 31 lionheart (melee champion, legendary)
+@unit("lion", 0.3)
+def lionheart(k, P, tier, pose):
+    S = hum_scale(0.3, tier) * 0.88
+    atk = pose == "attack"
+    mane_m = T(tier, P.gold_dk, P.bronze, P.gold, P.glow)
+    lk = look_for(tier, head="helm", crest=None, pads=T(tier, "steel", "steel", "gold", "crystal"),
+                  chest=T(tier, "steel", "steel", "gold", "pearl"), cape=T(tier, "short", "long", "long", "energy"),
+                  legs=T(tier, "iron", "iron", "iron", "pearl"), gloves=T(tier, "leather", "iron", "gold", "gold"))
+    if atk:
+        hand, d, off = V((0.4, -0.08, 0.46)), H.dir2(-4, -0.15), V((0.2, 0.2, 0.4))
+    else:
+        hand, d, off = V((0.18, -0.2, 0.32)), H.dir2(20, 0.75), V((0.16, 0.2, 0.34))
+    with k.at(scale=S):
+        humanoid(k, P, tier, {"R": hand, "L": off}, lk, bulk=1.1, lean=12 if atk else 0)
+        # lion mane crest: a ring of tufts around the helm
+        n = T(tier, 10, 11, 12, 13)
+        for i in range(n):
+            a = math.radians(55 + 250 * i / (n - 1))
+            p = H.HEAD + V((math.cos(a) * 0.1 - 0.01, math.sin(a) * 0.11, -0.01))
+            k.crystal_at(p, p + V((math.cos(a) * 0.08 - 0.01, math.sin(a) * 0.08, 0.03 + 0.01 * tier)), 0.034, mane_m, sides=5, mid=0.4)
+        # broadsword
+        H.sword(k, P, hand, d, T(tier, 0.4, 0.44, 0.48, 0.54), tier, width=0.06)
+        # kite shield with the lion emblem
+        H.round_shield(k, P, off + V((0.05, 0.05, 0.02)), V((0.7, 0.6, 0.3)), T(tier, 0.09, 0.1, 0.11, 0.12), tier)
+        if tier >= 3:
+            H.crown(k, P, H.HEAD + V((0, 0, 0.11)), R=0.07, n=5, mat=P.gold if tier == 3 else P.glow_lt)
+        if tier == 4:
+            H.halo(k, P, H.HEAD + V((0, 0, 0.22)), R=0.11)
+            H.orbit_shards(k, P, V((0, 0, 0.32)), 0.26, n=5, h=0.07, mat=P.glow_lt)
+        if atk:
+            arc_fx(k, P, tier, 0.42, -60, 40, 0.42)
+
+
 # ================================================================== spawned bodies
 def bug(k, P, tier, open_jaw, queen=False):
     shell = P.team

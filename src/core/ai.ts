@@ -49,6 +49,7 @@ export const POWER: Record<UnitKind, number> = {
   sapper: 4.0, harrier: 4.0, banner: 2.8, rime: 4.0, ravager: 4.0, grave: 3.8,
   bombard: 3.8, tinker: 2.9, duelist: 3.0, pikeman: 3.0, keg: 2.8, trickster: 3.9,
   hook: 4.0, thorn: 4.0, outrider: 4.0, lamp: 2.9,
+  griffin: 5.0, tide: 5.0, lion: 5.0,
 };
 /** Shoots or casts at flyers itself, or builds something that does. */
 const antiAir = (k: UnitKind) => canHitAir(k) || k === "tinker";

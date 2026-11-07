@@ -606,8 +606,10 @@ function showcase(n: number) {
     [["lancer", 2.0, 3.6, 4], ["keg", 4.5, 4.9, 3], ["harrier", 6.5, 3.4, 4], ["sapper", 7.6, 4.2, 3], ["trickster", 3.4, 2.4, 4], ["bombard", 4.5, 0.8, 3]],
     // 1.1: the four late-Act-7 units, Ascended and not.
     [["hook", 3.2, 4.6, 4], ["hook", 6.2, 4.4, 2], ["outrider", 1.2, 3.0, 4], ["thorn", 4.5, 1.6, 4], ["lamp", 6.6, 1.4, 4], ["outrider", 7.8, 2.6, 1]],
+    // The three legendaries, Ascended and not.
+    [["lion", 3.4, 4.6, 4], ["lion", 6.0, 4.6, 1], ["griffin", 1.4, 3.0, 4], ["griffin", 7.6, 3.0, 2], ["tide", 4.5, 1.4, 4], ["tide", 6.8, 1.6, 3]],
   ];
-  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : n === 3 ? [sets[2], sets[0]] : sets;
+  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : n === 3 ? [sets[2], sets[0]] : n === 4 ? [sets[3], sets[0]] : sets;
   const start = (list: [string, number, number, number][]) => list.map(([kind, lx, depth, rank]) => ({ kind: kind as UnitKind, lx, depth, rank }));
   const ai = (t: Tactic): AIProfile => ({ ...DEFAULT_AI, difficulty: 0.6, tactic: t, economy: 1 });
   game = new GameScreen(app, {

@@ -355,6 +355,40 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
       snd("blink", 0.35);
       break;
     }
+    case "soar":
+      // The griffin climbs for a dive: wind and feathers, and a Second Dive flares gold.
+      fx.anim("streak", e.x, e.y, { size: 0.4, max: 0.35, a: e.side === 0 ? -Math.PI / 2 : Math.PI / 2, tint: e.second ? GOLD : "#ffffff", z: 1.0, alpha: 0.85 });
+      fx.burst(e.x, e.y, 8, { color: "#f3e6c8", speed: 1.6, size: 0.05, max: 0.6, kind: "chunk", vz: 2, spin: 5 });
+      if (e.second) fx.ring(e.x, e.y, 0.2, 0.9, 0.35, GOLD, 0.05);
+      snd("blink", 0.45);
+      break;
+    case "swoop":
+      fx.anim("flash", e.x, e.y, { size: e.r * 1.6, max: 0.18, tint: "#fff6d6", z: 0.2 });
+      fx.ring(e.x, e.y, 0.15, e.r * 1.1, 0.3, e.second ? GOLD : "#fff2d6", 0.07);
+      fx.burst(e.x, e.y, 10, { color: "#f3e6c8", speed: 3, size: 0.05, max: 0.5, kind: "chunk", vz: 3, spin: 6 });
+      fx.float(e.x, e.y - 0.6, "SWOOP", "#fff2d6", 0.26, 0.6);
+      snd("slam", 0.8);
+      break;
+    case "wave": {
+      const mid = (e.y0 + e.y1) / 2;
+      fx.anim("dust", e.x, e.y0, { size: e.w * 1.4, max: 0.45, tint: "#9fd8f0", layer: "ground", alpha: 0.7 });
+      fx.burst(e.x, e.y0, 12, { color: "#dff6ff", speed: 2.2, size: 0.05, max: 0.5, kind: "spark", gravity: 1, dir: e.y1 > e.y0 ? Math.PI / 2 : -Math.PI / 2, spread: 0.7 });
+      fx.float(e.x, mid, e.surf ? "RIPTIDE" : "WAVE", "#bfeaff", 0.24, 0.6);
+      snd("throw", 0.6);
+      break;
+    }
+    case "rally":
+      fx.anim("aura", e.x, e.y, { size: 2 * e.r, max: 0.6, tint: GOLD, grow: [0.25, 1], fadeOut: 0.4, alpha: 0.7, layer: "ground", spin: 1.2 });
+      fx.anim("rally", e.x, e.y, { size: 1.1, max: 0.7, tint: GOLD });
+      fx.float(e.x, e.y - 0.6, "RALLY", GOLD, 0.26, 0.7);
+      snd("upgrade", 0.4);
+      break;
+    case "laststand":
+      fx.anim("pillar", e.x, e.y, { size: 1.6, max: 0.7, tint: GOLD });
+      fx.anim("flash", e.x, e.y, { size: 1.4, max: 0.2, tint: "#fff2b8", z: 0.3 });
+      fx.burst(e.x, e.y, 14, { color: "#ffe2a0", speed: 3, size: 0.05, max: 0.5, kind: "spark", gravity: 0 });
+      snd("clank", 0.9);
+      break;
     case "chill":
       fx.anim("frost", e.x, e.y, { size: 0.95, max: 0.4, z: 0.1 });
       break;
@@ -447,6 +481,11 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
       break;
     }
     case "zone":
+      if (e.kind === "surf") {
+        fx.anim("dust", e.x, e.y, { size: e.r * 1.6, max: 0.4, tint: "#bfeaff", layer: "ground", alpha: 0.6 });
+        fx.burst(e.x, e.y, 5, { color: "#dff6ff", speed: 1.2, size: 0.04, max: 0.4, kind: "spark", gravity: 1 });
+        break;
+      }
       if (e.kind === "thorn") {
         // Brambles burst out of the ground; an Ascended crown seizes whatever is standing there.
         fx.anim("dirt", e.x, e.y, { size: e.r * 1.6, max: 0.5 });
@@ -540,7 +579,7 @@ export function playBoom(fx: Fx, x: number, y: number, r: number, kind: string, 
   const snd = (n: string, g = 0.5) => env.sound?.(n, g);
   const fiery = ["mine", "grenade", "shell", "keg", "bomblet", "shrapnel"].includes(kind);
   const big = kind === "mine" || kind === "keg" || kind === "shell" || kind === "quake";
-  if (kind === "quake" || kind === "slam" || kind === "talon" || kind === "erupt") {
+  if (kind === "quake" || kind === "slam" || kind === "talon" || kind === "erupt" || kind === "swoop") {
     const q = kind === "quake";
     const tint = q ? "#e8d3a8" : "#c9b79c";
     fx.anim("shock", x, y, { size: (2 * r) / 0.94, max: q ? 0.55 : 0.36, tint, layer: "ground" });
@@ -550,7 +589,7 @@ export function playBoom(fx: Fx, x: number, y: number, r: number, kind: string, 
       fx.anim("crack", x, y, { size: r * 2, max: 2.6, fadeOut: 1, layer: "ground", a: frand(0, 6.28) });
     }
     if (kind === "erupt") fx.anim("dirt", x, y, { size: r * 2.2, max: 0.6 });
-    if (kind === "talon") fx.anim("impact", x, y, { size: r * 1.6, max: 0.3, tint: "#fff2d6", a: frand(0, 6.28) });
+    if (kind === "talon" || kind === "swoop") fx.anim("impact", x, y, { size: r * 1.6, max: 0.3, tint: "#fff2d6", a: frand(0, 6.28) });
     if (kind === "slam") fx.anim("crack", x, y, { size: r * 1.4, max: 1.4, fadeOut: 0.7, layer: "ground", a: frand(0, 6.28), alpha: 0.7 });
     if (!env.textured) {
       fx.ring(x, y, 0.1, r, q ? 0.55 : 0.32, tint, q ? 0.14 : 0.07, q ? "rgba(200,170,120,0.22)" : undefined);

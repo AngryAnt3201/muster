@@ -2,7 +2,7 @@
 // Every unit kind has its own behaviour; the renderer only reads bodies, projectiles, zones, fuses and events.
 import {
   BATTLE_LIMIT, BODY_EXTRA, DT, H, UNITS, W,
-  bodyDef, isSpawn, rankDmg, rankHp,
+  bodyDef, isSpawn, rankDmg, rankHp, toLocal,
   type BodyKind, type Mods, type Obstacle, type Piece, type Role, type Side, type UnitKind,
 } from "./defs";
 import { levelDmg, levelHp, levelOf, type Levels } from "./levels";
@@ -102,10 +102,12 @@ export interface Proj {
   fx: string;
 }
 
-export type BoomKind = "mine" | "grenade" | "slam" | "quake" | "erupt" | "shell" | "shrapnel" | "bomblet" | "keg" | "pop" | "talon" | "mirror";
+export type BoomKind = "mine" | "grenade" | "slam" | "quake" | "erupt" | "shell" | "shrapnel" | "bomblet" | "keg" | "pop" | "talon" | "mirror" | "swoop";
 /** Ground that hurts the other side's ground bodies inside it: a Firebomb's flames, or a Thornweaver's brambles (which also snare). */
-export type ZoneKind = "fire" | "thorn";
+export type ZoneKind = "fire" | "thorn" | "surf";
 export interface Zone { id: number; kind: ZoneKind; x: number; y: number; r: number; side: Side; until: number; dps: number; tick: number; }
+/** A Tidecaller wave rolling down a lane: its front is at y, moving `dir` toward y1; each foe it reaches is hit once. */
+export interface Wave { id: number; side: Side; x: number; y: number; y0: number; y1: number; dir: number; w: number; speed: number; dmg: number; hits: number[]; surf: boolean; nextSurf: number; done: boolean; }
 /** A blast waiting to go off (Cluster bomblets, Shrapnel, Chain Keg). */
 export interface Fuse { x: number; y: number; at: number; r: number; dmg: number; side: Side; kind: BoomKind; knock: number; stun: number; }
 
@@ -145,6 +147,11 @@ export type BattleEvent =
   | { t: "ward"; id: number; from: number; x: number; y: number; amt: number }
   | { t: "wardbreak"; id: number; x: number; y: number; side: Side; burst: boolean }
   | { t: "revive"; id: number; from: number; x: number; y: number }
+  | { t: "soar"; id: number; x: number; y: number; side: Side; second: boolean }
+  | { t: "swoop"; id: number; x: number; y: number; r: number; side: Side; second: boolean }
+  | { t: "wave"; id: number; from: number; x: number; y0: number; y1: number; w: number; dur: number; side: Side; surf: boolean }
+  | { t: "rally"; id: number; x: number; y: number; r: number; side: Side; n: number }
+  | { t: "laststand"; id: number; x: number; y: number; until: number }
   | { t: "volley"; id: number; x: number; y: number; a: number }
   | { t: "twin"; id: number; x: number; y: number; a: number }
   | { t: "reset"; id: number; x: number; y: number }
@@ -189,7 +196,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 const ROLE_BACKLINE = new Set<BodyKind>(["ranger", "medic", "grenadier", "storm", "ballista", "hive", "rime", "bombard", "banner", "tinker", "grave", "turret", "thorn", "lamp"]);
 /** Bodies whose attacks can reach a flyer. */
-export const AIR_HITTERS = new Set<BodyKind>(["ranger", "ballista", "storm", "rime", "turret", "harrier", "outrider"]);
+export const AIR_HITTERS = new Set<BodyKind>(["ranger", "ballista", "storm", "rime", "turret", "harrier", "outrider", "griffin"]);
 export const canHitAir = (k: BodyKind) => AIR_HITTERS.has(k);
 const MELEE_ROLES = new Set<Role>(["melee", "tank", "cavalry", "siege", "assassin"]);
 /** Fights hand to hand (what a Duelist hunts and a Hedgehog throws damage back at). */
@@ -209,6 +216,16 @@ const REEL_SPEED = 8;
 const WARD_HP = 55; // Lamplighter ward at rank 1 (scaled like damage by rank)
 const WARD_TIME = 6;
 const SNARE = 0.45; // speed kept inside brambles
+const SWOOP_R = 1.0; // Griffin Knight landing reach
+const SWOOP_STUN = 0.6;
+const WAVE_W = 1.5; // Tidecaller wave: lane width, length, speed, shove
+const WAVE_LEN = 6;
+const WAVE_SPEED = 5.5;
+const WAVE_PUSH = 4.2;
+const SURF_TIME = 3;
+const RALLY_R = 2.2; // Lionheart rally reach and haste time
+const RALLY_TIME = 3;
+const LAST_STAND = 2.5;
 
 export class Battle {
   bodies: Body[] = [];
@@ -218,6 +235,8 @@ export class Battle {
   zones: Zone[] = [];
   /** Blasts still to go off. */
   fuses: Fuse[] = [];
+  /** Tidecaller waves rolling now. */
+  waves: Wave[] = [];
   time = 0;
   done = false;
   winner: -1 | 0 | 1 = -1;
@@ -306,7 +325,7 @@ export class Battle {
       taunt: kind === "bulwark",
       stun: 0, flash: 0,
       state: kind === "mine" ? "armed" : kind === "lancer" ? "aim" : kind === "shade" ? "flank" : kind === "sapper" ? "burrow"
-        : kind === "harrier" ? "circle" : kind === "keg" ? "run" : "idle",
+        : kind === "harrier" ? "circle" : kind === "keg" ? "run" : kind === "griffin" ? "soar" : "idle",
       t: 0, target: -1, pack: -1, slot: 0, owner: -1,
       ax: 0, ay: 0, budget: 0, hits: [],
       cloak: kind === "shade" ? 3.2 : 0,
@@ -314,8 +333,8 @@ export class Battle {
       healMul: (m.healMul ?? 1) * levelDmg(level),
       diedAt: -1,
       burrowed: kind === "sapper",
-      flying: kind === "harrier",
-      z: kind === "harrier" ? 1.2 : 0,
+      flying: kind === "harrier" || kind === "griffin",
+      z: kind === "harrier" ? 1.2 : kind === "griffin" ? 1.5 : 0,
       slow: 0, frozen: 0, braced: false, buff: 0, rally: 0, parryCd: 0, strikes: 0, aux: 0, once: false,
       ward: 0, wardT: 0, wardBurst: false, snare: 0,
       hand: (x <= W / 2 ? 1 : -1) * -fwd(side),
@@ -436,6 +455,17 @@ export class Battle {
       shielded = true;
     }
     target.hp -= amount;
+    if (target.hp <= 0 && target.kind === "lion" && target.rank >= 4) {
+      // Last Stand: once a battle a killing blow leaves him standing at 1, and nothing kills him for a moment.
+      if (this.time < target.budget) target.hp = 1;
+      else if (!target.once) {
+        target.once = true;
+        target.budget = this.time + LAST_STAND;
+        target.hp = 1;
+        target.stun = 0; target.frozen = 0;
+        this.emit({ t: "laststand", id: target.id, x: target.x, y: target.y, until: target.budget });
+      }
+    }
     target.flash = 0.12;
     if (target.kind === "shade" && target.cloak > 0) { target.cloak = 0; target.hidden = false; }
     this.emit({ t: "hit", id: target.id, x: target.x, y: target.y, dmg: Math.round(amount), side, shielded, big });
@@ -449,6 +479,7 @@ export class Battle {
         by.blinkCd = 0; // Shadow Step
         this.emit({ t: "reset", id: by.id, x: by.x, y: by.y });
       }
+      if (!target.alive && by && by.kind === "lion" && by.alive && target.kind !== "decoy") this.lionRally(by, isSpawn(target.kind));
     }
     return amount;
   }
@@ -693,6 +724,7 @@ export class Battle {
     }
     this.collide();
     this.stepProjectiles(dt);
+    if (this.waves.length) this.stepWaves(dt);
     if (this.fuses.length) this.stepFuses();
     if (this.zones.length) this.stepZones(dt);
     if (!this.sideAlive(0) || !this.sideAlive(1) || this.time >= this.limit) this.finish();
@@ -711,7 +743,7 @@ export class Battle {
       for (const a of this.bodies) {
         if (!a.alive || a.side !== f.side || a === f || a.kind === "mine" || a.kind === "decoy" || a.burrowed) continue;
         if (this.dist(a, f) > AURA_R + a.radius) continue;
-        a.buff = 0.2;
+        a.buff = Math.max(a.buff, 0.2);
         if (rally) {
           a.rally = 0.2;
           if (pulse) this.heal(f, a, a.maxHp * 0.01 * f.healMul);
@@ -767,6 +799,7 @@ export class Battle {
       if (z.tick > 0) continue;
       z.tick += 0.25;
       for (const e of this.enemiesNear(z.side, z.x, z.y, z.r)) {
+        if (z.kind === "surf") { e.slow = Math.max(e.slow, 0.4); continue; }
         if (z.kind === "thorn") e.snare = Math.max(e.snare, 0.35);
         this.damage(e, z.dps * 0.25, null, z.side);
       }
@@ -843,6 +876,9 @@ export class Battle {
       case "thorn": return this.actThorn(b);
       case "outrider": return this.actOutrider(b);
       case "lamp": return this.actLamp(b);
+      case "griffin": return this.actGriffin(b, dt);
+      case "tide": return this.actTide(b);
+      case "lion": return this.actLion(b);
     }
   }
 
@@ -1945,6 +1981,148 @@ export class Battle {
       if (p.t > p.life || p.x < 0 || p.x > W || p.y < 0 || p.y > H) p.alive = false;
     }
     if (this.projs.length > 64) this.projs = this.projs.filter((p) => p.alive);
+  }
+
+  // ------------------------------------------------------------ legendaries
+  /**
+   * Griffin Knight: soars over the fight onto their back line, lands with a stunning swoop, then fights low in the air.
+   * Second Dive (Ascended): the first time it drops below half health it climbs and dives again.
+   */
+  private actGriffin(b: Body, dt: number): [number, number] {
+    if (b.rank >= 4 && !b.once && b.state === "fight" && b.hp < b.maxHp * 0.5) {
+      b.once = true;
+      b.state = "soar"; b.t = 0; b.target = -1;
+      this.emit({ t: "soar", id: b.id, x: b.x, y: b.y, side: b.side, second: true });
+    }
+    if (b.state === "soar") {
+      let t = this.byId(b.target);
+      if (!t || !this.targetable(b, t) || t.flying) { t = this.diveMark(b); b.target = t ? t.id : -1; }
+      if (!t) { b.state = "fight"; b.t = 0; return [0, 0]; }
+      const d = this.dist(b, t);
+      // High over the fight, then down onto the mark over the last stretch.
+      b.z = Math.max(0.2, Math.min(Math.min(1.5, b.z + dt * 2.5), (d - t.radius) * 0.6 + 0.2));
+      if (d <= b.radius + t.radius + 0.15 || b.t > 7) { this.swoop(b, t); return [b.vx * 0.3, b.vy * 0.3]; }
+      return this.seek(b, t.x, t.y, 1.35, 0.05);
+    }
+    b.z += Math.sign(0.6 - b.z) * Math.min(Math.abs(0.6 - b.z), dt * 2);
+    let t = this.byId(b.target);
+    if (!t || !this.targetable(b, t) || b.aux <= 0) {
+      b.aux = 1.0;
+      t = this.nearestEnemy(b, { taunt: false });
+      b.target = t ? t.id : -1;
+    }
+    if (!t) return [0, 0];
+    if (this.gap(b, t) <= b.range + 0.05 && b.cd <= 0) { b.cd = b.cooldown; this.melee(b, t, b.dmg); }
+    // Hover at the foe's edge (flyers don't collide, so it keeps its own spot rather than sitting on top).
+    const d = this.dist(b, t) || 0.001;
+    const r = b.radius + t.radius + 0.05;
+    return this.seek(b, t.x + ((b.x - t.x) / d) * r, t.y + ((b.y - t.y) / d) * r, 1, 0.3);
+  }
+  /** The ground foe deepest in their back line, weighted to support and shooters and to where they bunch. */
+  private diveMark(b: Body): Body | undefined {
+    let best: Body | undefined, bs = -Infinity;
+    for (const e of this.bodies) {
+      if (!this.targetable(b, e) || e.flying || e.kind === "mine" || e.kind === "decoy") continue;
+      let near = 0;
+      for (const o of this.bodies) if (o !== e && this.targetable(b, o) && !o.flying && hyp(o.x - e.x, o.y - e.y) <= SWOOP_R) near++;
+      const s = (ROLE_BACKLINE.has(e.kind) ? 2 : 0) - toLocal(e.side, e.x, e.y).depth * 0.35 + near * 0.4 - this.dist(b, e) * 0.05;
+      if (s > bs) { bs = s; best = e; }
+    }
+    return best;
+  }
+  private swoop(b: Body, t: Body) {
+    const second = b.once;
+    this.emit({ t: "swoop", id: b.id, x: t.x, y: t.y, r: SWOOP_R, side: b.side, second });
+    this.emit({ t: "boom", x: t.x, y: t.y, r: SWOOP_R, kind: "swoop", side: b.side });
+    b.swing = this.time; b.swingA = Math.atan2(t.y - b.y, t.x - b.x);
+    for (const e of this.enemiesNear(b.side, t.x, t.y, SWOOP_R)) {
+      this.damage(e, e === t ? b.dmg * 1.6 : b.dmg * 0.6, { x: t.x, y: t.y }, b.side, true);
+      if (e.alive && !e.structure) e.stun = Math.max(e.stun, SWOOP_STUN);
+    }
+    b.state = "fight"; b.t = 0; b.cd = b.cooldown; b.aux = 1.0;
+    b.target = t.alive ? t.id : -1;
+  }
+
+  /** Tidecaller: from behind the line, rolls a wave down the most crowded lane ahead, shoving foes back (Riptide: slowing surf). */
+  private actTide(b: Body): [number, number] {
+    const near = this.nearestEnemy(b, { taunt: false });
+    if (!near) return [0, 0];
+    const dir = fwd(b.side);
+    if (b.cd <= 0) {
+      let bx = -1, bs = 0.99;
+      for (let cx = 0.9; cx <= W - 0.9 + 1e-6; cx += 0.45) {
+        let s = 0;
+        for (const e of this.bodies) {
+          if (!this.targetable(b, e) || e.flying || e.kind === "mine") continue;
+          const ahead = (e.y - b.y) * dir;
+          if (ahead < -0.3 || ahead > WAVE_LEN || Math.abs(e.x - cx) > WAVE_W / 2 + e.radius * 0.5) continue;
+          s += isSpawn(e.kind) ? 0.5 : 1;
+        }
+        s -= Math.abs(cx - b.x) * 0.04;
+        if (s > bs) { bs = s; bx = cx; }
+      }
+      if (bx >= 0) {
+        b.cd = b.cooldown;
+        b.face = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+        b.swing = this.time; b.swingA = b.face;
+        const y1 = clamp(b.y + dir * WAVE_LEN, 0.2, H - 0.2);
+        const w: Wave = { id: this.nextId++, side: b.side, x: bx, y: b.y, y0: b.y, y1, dir, w: WAVE_W, speed: WAVE_SPEED, dmg: b.dmg, hits: [], surf: b.rank >= 4, nextSurf: b.y + dir * 0.8, done: false };
+        this.waves.push(w);
+        this.emit({ t: "wave", id: w.id, from: b.id, x: w.x, y0: w.y0, y1: w.y1, w: w.w, dur: Math.abs(y1 - b.y) / WAVE_SPEED, side: b.side, surf: w.surf });
+      }
+    }
+    const dn = this.gap(b, near);
+    if (dn < 1.6) return this.flee(b, near, 0.9);
+    if (dn > 3.6) return this.seek(b, near.x, near.y, 0.9, 0.4);
+    return [0, 0];
+  }
+  private stepWaves(dt: number) {
+    for (const w of this.waves) {
+      const y0 = w.y;
+      w.y += w.dir * w.speed * dt;
+      if ((w.y1 - w.y) * w.dir <= 0) { w.y = w.y1; w.done = true; }
+      const span = (w.y - y0) * w.dir;
+      for (const e of this.bodies) {
+        if (!e.alive || e.side === w.side || e.kind === "mine" || e.burrowed || e.flying || w.hits.includes(e.id)) continue;
+        if (Math.abs(e.x - w.x) > w.w / 2 + e.radius * 0.5) continue;
+        const a = (e.y - y0) * w.dir;
+        if (a < -e.radius - 0.3 || a > span + e.radius) continue;
+        w.hits.push(e.id);
+        this.damage(e, w.dmg, { x: e.x, y: e.y - w.dir }, w.side, true);
+        this.push(e, 0, w.dir, WAVE_PUSH, 0.35);
+      }
+      if (w.surf) while ((w.y - w.nextSurf) * w.dir >= 0) {
+        const z: Zone = { id: this.nextId++, kind: "surf", x: w.x, y: w.nextSurf, r: 0.8, side: w.side, until: this.time + SURF_TIME, dps: 0, tick: 0 };
+        this.zones.push(z);
+        this.emit({ t: "zone", id: z.id, x: z.x, y: z.y, r: z.r, until: z.until, side: z.side, kind: "surf" });
+        w.nextSurf += w.dir * 1.2;
+      }
+    }
+    this.waves = this.waves.filter((w) => !w.done);
+  }
+
+  /** Lionheart: a front-line hero. Each kill rallies allies close by (attacks 25% faster) and heals him. */
+  private actLion(b: Body): [number, number] {
+    let t = this.byId(b.target);
+    if (!t || !this.targetable(b, t) || b.aux <= 0) {
+      b.aux = 1.0;
+      t = this.nearestEnemy(b);
+      b.target = t ? t.id : -1;
+    }
+    if (!t) return [0, 0];
+    const hit = this.gap(b, t) <= b.range ? t : this.nearestEnemy(b, { max: b.range + b.radius, taunt: false });
+    if (hit && b.cd <= 0) { b.cd = b.cooldown; this.melee(b, hit, b.dmg); }
+    return this.seek(b, t.x, t.y, 1, 0.3);
+  }
+  private lionRally(b: Body, small: boolean) {
+    this.heal(b, b, b.maxHp * (small ? 0.04 : 0.1) * b.healMul);
+    let n = 0;
+    for (const a of this.bodies) {
+      if (!a.alive || a.side !== b.side || a.kind === "mine" || a.kind === "decoy" || a.burrowed || this.dist(a, b) > RALLY_R + a.radius) continue;
+      a.buff = Math.max(a.buff, RALLY_TIME);
+      n++;
+    }
+    this.emit({ t: "rally", id: b.id, x: b.x, y: b.y, r: RALLY_R, side: b.side, n });
   }
 }
 
