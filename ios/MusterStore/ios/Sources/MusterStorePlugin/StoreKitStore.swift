@@ -12,7 +12,7 @@ public struct StoreProduct: Equatable {
     public let price: Double
 }
 
-/// A paid consumable (gem pack) that hasn't been finished: the game credits it, saves, then calls `finish`.
+/// A paid consumable (Starter Pack or gem pack) that hasn't been finished: the game credits it, saves, then calls `finish`.
 public struct UnfinishedPurchase: Equatable {
     public let txId: String
     public let productId: String

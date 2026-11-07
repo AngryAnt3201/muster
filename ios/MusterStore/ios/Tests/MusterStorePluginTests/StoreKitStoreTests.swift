@@ -7,7 +7,8 @@ import UIKit
 /// Runs the plugin's StoreKit code against ios/App/Muster.storekit, the same file the App scheme uses.
 /// Purchases need a window scene, so these run inside the TestHost app (see ios/MusterStore/TestHost/project.yml).
 final class StoreKitStoreTests: XCTestCase {
-    static let fullArmy = "co.inflect.muster.fullarmy"
+    /// The one-time Starter Pack: a consumable the game sells once (it hides the offer after the credit is saved).
+    static let starter = "co.inflect.muster.starter"
     static let pouch = "co.inflect.muster.gems.pouch"
     var session: SKTestSession!
     var store: StoreKitStore!
@@ -28,7 +29,7 @@ final class StoreKitStoreTests: XCTestCase {
     }
 
     /// The host app's window scene, like the plugin passes the Capacitor view's scene.
-    func buy(_ id: String = StoreKitStoreTests.fullArmy) async -> BuyOutcome {
+    func buy(_ id: String = StoreKitStoreTests.starter) async -> BuyOutcome {
         let scene = await MainActor.run { UIApplication.shared.connectedScenes.first }
         return await store.buy(id, in: scene)
     }
@@ -39,21 +40,28 @@ final class StoreKitStoreTests: XCTestCase {
     }
 
     func testProductComesFromTheStoreKitFile() async throws {
-        let products = try await store.products([Self.fullArmy, "co.inflect.muster.nope"])
-        XCTAssertEqual(products.map(\.id), [Self.fullArmy])
-        XCTAssertEqual(products.first?.title, "Full Army")
+        let products = try await store.products([Self.starter, "co.inflect.muster.fullarmy", "co.inflect.muster.nope"])
+        XCTAssertEqual(products.map(\.id), [Self.starter], "the old Full Army is gone from the StoreKit file")
+        XCTAssertEqual(products.first?.title, "Starter Pack")
         XCTAssertTrue(products.first?.displayPrice.contains("4.99") ?? false, products.first?.displayPrice ?? "no price")
     }
 
-    func testBuyThenOwnedThenRestore() async throws {
-        let before = await store.owned()
-        XCTAssertEqual(before, [])
+    /// The Starter Pack is paid but left unfinished until the game has saved the credit, then finished by id.
+    /// It is a consumable, so it is never owned and Restore has nothing to bring back.
+    func testStarterPackStaysUnfinishedUntilTheGameFinishesIt() async throws {
         let outcome = await buy()
-        XCTAssertEqual(outcome, .purchased)
-        let after = await store.owned()
-        XCTAssertEqual(after, [Self.fullArmy])
+        guard case .purchasedUnfinished(let p) = outcome else { return XCTFail("expected an unfinished purchase, got \(outcome)") }
+        XCTAssertEqual(p.productId, Self.starter)
+        let open = await store.unfinishedConsumables()
+        XCTAssertEqual(open, [p])
+        let owned = await store.owned()
+        XCTAssertEqual(owned, [])
         let restored = try await store.restore()
-        XCTAssertEqual(restored, [Self.fullArmy])
+        XCTAssertEqual(restored, [], "nothing Muster sells is restorable")
+        let finished = await store.finish(p.txId)
+        XCTAssertTrue(finished)
+        let after = await store.unfinishedConsumables()
+        XCTAssertEqual(after, [])
     }
 
     func testUnknownProductFails() async {
@@ -61,17 +69,19 @@ final class StoreKitStoreTests: XCTestCase {
         XCTAssertEqual(outcome.status, "failed")
     }
 
-    func testAskToBuyIsPendingThenApprovalArrivesAsAnUpdate() async throws {
+    func testAskToBuyStarterPackIsPendingThenArrivesUnfinishedThroughUpdates() async throws {
         session.askToBuyEnabled = true
-        let changed = expectation(description: "ownedChanged after approval")
-        store.listen { owned in if owned.contains(Self.fullArmy) { changed.fulfill() } }
+        let arrived = expectation(description: "Starter Pack from Transaction.updates")
+        store.listen({ _ in }, consumable: { p in if p.productId == Self.starter { arrived.fulfill() } })
         let outcome = await buy()
         XCTAssertEqual(outcome, .pending)
-        let notYet = await store.owned()
+        let notYet = await store.unfinishedConsumables()
         XCTAssertEqual(notYet, [])
         let pending = try XCTUnwrap(session.allTransactions().first)
         try session.approveAskToBuyTransaction(identifier: pending.identifier)
-        await fulfillment(of: [changed], timeout: 10)
+        await fulfillment(of: [arrived], timeout: 10)
+        let open = await store.unfinishedConsumables()
+        XCTAssertEqual(open.map(\.productId), [Self.starter])
     }
 
     func testFailedTransactionIsFailed() async {
@@ -79,18 +89,8 @@ final class StoreKitStoreTests: XCTestCase {
         let outcome = await buy()
         XCTAssertEqual(outcome.status, "failed")
         XCTAssertNotNil(outcome.message)
-        let owned = await store.owned()
-        XCTAssertEqual(owned, [])
-    }
-
-    func testRefundTakesItBack() async throws {
-        let outcome = await buy()
-        XCTAssertEqual(outcome, .purchased)
-        let gone = expectation(description: "ownedChanged after refund")
-        store.listen { owned in if owned.isEmpty { gone.fulfill() } }
-        let bought = try XCTUnwrap(session.allTransactions().first)
-        try session.refundTransaction(identifier: bought.identifier)
-        await fulfillment(of: [gone], timeout: 10)
+        let open = await store.unfinishedConsumables()
+        XCTAssertEqual(open, [], "a failed purchase leaves nothing to credit")
     }
 
     func testGemPacksComeFromTheStoreKitFileWithPrices() async throws {
