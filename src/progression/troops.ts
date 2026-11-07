@@ -10,6 +10,7 @@ import { earn, spend, wallet } from "../economy/wallet";
 import { load, save, type Save } from "../save";
 import { LEVELS } from "../core/campaign";
 import { cardsOf, foundKinds, grantCards, grantIn, isFound, normalizeCollection, spendCards } from "./collection";
+import { passEvent } from "./passEvents"; // [pass]
 import {
   DECK_SIZE, FIRST_CLEAR, STARTER_KINDS, WIN_XP, actsCleared, armyLevelOf, deckRoster, campaignCards, campaignReward, commanderLevel, commanderProgress, dailyReward,
   gauntletRivalReward, keepBonus, levelCap, levelsFor, skirmishReward, unlockedKinds, upgradeState, upgradeXp,
@@ -117,6 +118,7 @@ export function upgradeTroop(k: UnitKind): UpgradeResult | null {
   const level = Math.min(MAX_LEVEL, st.level + 1);
   save((s) => { s.progression = normalizeProgression(s.progression); s.progression.levels[k] = level; });
   const xp = upgradeXp(level);
+  passEvent({ kind: "upgrade" }); // [pass] "upgrade a unit" quest
   return { level, xp, commanderUp: addXp(xp) };
 }
 

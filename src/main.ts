@@ -37,6 +37,10 @@ import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
 // [chests] chest slots, free and crown chests, the opening moment (src/progression/chests.ts, src/ui/chests.ts)
 import { seedDemo, winChest } from "./progression/chests";
 import { chestBar, chestDemo, chestEarned } from "./ui/chests";
+// [pass] daily quests, the War Pass and special offers (src/progression/pass.ts, quests.ts, src/store/pass.ts, offers.ts)
+import { startPass } from "./progression/pass";
+import { passEvent } from "./progression/passEvents";
+import { settleQuests } from "./progression/quests";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -491,6 +495,7 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
       if (!practice) save((s) => { scored = finishDaily(s.daily, key, r); });
       const d = load().daily;
       const coins = awardDaily(r.won, scored, d.streak); // [progression] scored attempt only
+      passEvent({ kind: "play", mode: "daily" }); // [pass] "play the Daily" quest
       results(m, {
         heading: r.won ? "Victory" : "Defeat",
         note: scored
@@ -660,6 +665,7 @@ async function boot() {
   void starter.start();
   void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
   settleRewards(); // [gems] pay free gems for progress made before gems existed
+  startPass(); settleQuests(); // [pass] quest + pass XP listeners, Premium's chest perk, yesterday's unclaimed quests
   migrateArmy(); // [progression] once: old saves move to the card collection (found units, new-scale levels)
   settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);

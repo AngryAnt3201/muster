@@ -9,6 +9,7 @@ import { load, save, type Save } from "../save";
 import { RARITIES, RARITY, grantCards, foundKinds, type Rarity } from "./collection";
 import { actsCleared, unlockedKinds } from "./economy";
 import { earn, spend, canAfford } from "../economy/wallet";
+import { chestUnlockFactor, passEvent } from "./passEvents"; // [pass]
 
 // ---------------------------------------------------------------- types and tables
 export type SlotChest = "wood" | "iron" | "gilded" | "royal" | "legend";
@@ -232,7 +233,9 @@ export function stateOf(ch: Chest, now: number): SlotState {
   if (ch.readyAt === undefined) return "locked";
   return now >= ch.readyAt ? "ready" : "unlocking";
 }
-export const msLeft = (ch: Chest, now: number) => (ch.readyAt === undefined ? CHESTS[ch.type].unlockMs : Math.max(0, ch.readyAt - now));
+/** [pass] A chest's unlock time with War Pass Premium's perk applied (chests unlock 20% faster; 1x without it). */
+export const unlockMsOf = (type: ChestType) => Math.round(CHESTS[type].unlockMs * chestUnlockFactor());
+export const msLeft = (ch: Chest, now: number) => (ch.readyAt === undefined ? unlockMsOf(ch.type) : Math.max(0, ch.readyAt - now)); // [pass]
 export const unlocking = (c: ChestSave, now: number) => c.slots.find((s) => s && stateOf(s, now) === "unlocking") ?? null;
 
 // ---------------------------------------------------------------- rules (pure)
@@ -260,7 +263,7 @@ export function startIn(c: ChestSave, slot: number, now: number): boolean {
   const ch = c.slots[slot];
   if (!ch || ch.readyAt !== undefined || unlocking(c, now)) return false;
   ch.startedAt = now;
-  ch.readyAt = now + CHESTS[ch.type].unlockMs;
+  ch.readyAt = now + unlockMsOf(ch.type); // [pass] Premium perk
   return true;
 }
 
@@ -383,11 +386,13 @@ export function onChestsChange(fn: Listener): () => void {
 export interface WinResult extends Drop { crowns: number; crownReady: boolean; }
 /** Call once per win: drops the next chest (if a slot is free) and adds today's crowns. */
 export function winChest(crowns: number): WinResult {
-  return commit((c, s) => {
+  const r = commit((c, s) => {
     const d = dropIn(c, progress(s), seed());
     const k = addCrownsIn(c, localDay(), crowns);
     return { ...d, crowns: k.crowns, crownReady: !k.claimed && k.crowns >= CROWNS_FOR_CHEST };
   });
+  passEvent({ kind: "win", stars: crowns }); // [pass] quests + pass XP: every win drops through here
+  return r;
 }
 /** Starts the free-chest clock for a new player (one ready now), so the bank fills even before the first claim. */
 export const initChests = () => { if (current().freeFrom < 0) commit((c) => freeBanked(c, c.seen)); };
@@ -419,10 +424,13 @@ export interface Granted { coins: number; gems: number; cards: (CardStack & { is
 /** Pays a chest out: coins and gems into the wallet, cards into the collection (noting which units are new). */
 export function grantChest(ch: Chest): Granted {
   const { coins, gems, cards } = ch.contents;
+  passEvent({ kind: "chest" }); // [pass] "open a chest" quest
   if (coins > 0) earn("coins", coins, `chest ${ch.type}`);
   if (gems > 0) earn("gems", gems, `chest ${ch.type}`);
   return { coins, gems, cards: cards.map((s) => ({ ...s, ...grantCards(s.kind, s.n, `chest ${ch.type}`) })) };
 }
+/** [pass] A chest from a War Pass reward or a special offer: rolled now, opened by the caller (never takes a slot). */
+export const makeChest = (type: SlotChest) => commit((c, s) => shopChestIn(c, type, progress(s), seed()));
 /** Debug and review shots: fill the slots with one of each state. */
 export function seedDemo() {
   commit((c, s) => {

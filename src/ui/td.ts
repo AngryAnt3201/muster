@@ -13,6 +13,7 @@ import { el, stars } from "./dom";
 import { ROLE_LABEL, coin, icon, roleBadge } from "./kit";
 import { attachReward } from "./barracks";
 import { winChest } from "../progression/chests"; // [chests]
+import { passEvent } from "../progression/passEvents"; // [pass]
 import { chestEarned } from "./chests"; // [chests]
 
 const KEY = "muster.td.v1";
@@ -358,6 +359,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
     const waveCoins = coins;
     if (won) { const c = coinsForWin(st); coins += c; earn("coins", c, `bastion ${mapId} win ${st}`); }
     const chest = won ? winChest(st) : null; // [chests] a win drops the next chest in the cycle
+    passEvent({ kind: "play", mode: "bastion" }); // [pass] "play Bastion" quest
     // The same coin line as the other modes' result screens (paid already: per wave during the run, the win here).
     const winCoins = won ? coinsForWin(st) : 0;
     const parts: [string, number][] = ([["Waves held", waveCoins], ["Victory", won ? coinsForWin(0) : 0], [`${st} star${st === 1 ? "" : "s"}`, winCoins - coinsForWin(0)]] as [string, number][])
