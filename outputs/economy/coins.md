@@ -140,7 +140,7 @@ What the table shows:
 - Campaign replays aren't capped. A replay pays the win and that match's stars again (Act 8, 3 stars: 139 coins), so someone grinding three hours makes about 3,500. If that turns out too generous, the lever is a daily replay cap like Skirmish's 300 (`skirmishReward` shows the pattern).
 
 - The in-match unit popover (`statsLine` in `src/ui/game.ts`) still shows level 1 base stats. Health bars in battle use the real levelled values.
-- Gauntlet rival levels haven't been run through `tools/gauntlet.ts` yet. The rule is mild (+1 every 4 rivals, capped at your cap), but it does make deep runs harder for a player who never upgrades.
+- Gauntlet rival levels, checked with `tools/gauntlet.ts` (6 runs, strong AI, player at level 1, so the worst case): rivals beaten were 0 0 3 6 15 16 (mean 6.7) without rival levels and 0 0 3 6 14 15 (mean 6.3) with them. The median is 6 both ways, so the effect is mild. That's only 6 runs, so it's a sanity check, not tuning.
 - The coin pill in the Barracks header is local (`coinPill()` in `src/ui/barracks.ts`). Swap it for the HUD kit's pill once that lands.
 - This was already there before my change: on the Gauntlet boon sheet, the "Rival N beaten · health left" kicker sits under the ribbon (the shared `.results .ribbon` negative margin). My coin line goes under the ribbon and isn't affected. Left alone because it's shared CSS.
 
