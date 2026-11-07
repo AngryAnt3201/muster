@@ -227,7 +227,7 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
         if (e.big) fx.anim("impact", e.x, e.y, { size: 0.9, max: 0.3, tint: GOLD, a: frand(0, 6.28), z: 0.2 });
       }
       fx.burst(e.x, e.y, e.big ? 7 : 3, { color: col, speed: 2.2, size: 0.05, max: 0.3, gravity: 0, kind: "spark" });
-      if (e.big) fx.float(e.x, e.y - 0.45, `${e.dmg}!`, GOLD, 0.42, 0.95, "crit");
+      if (e.big) fx.float(e.x, e.y - 0.45, `${e.dmg}!`, GOLD, 0.34, 0.9, "crit");
       else if (e.dmg >= 18) fx.float(e.x, e.y - 0.45, String(e.dmg), e.shielded ? "#b9c6d4" : "#ffffff", 0.27, 0.75, "dmg");
       snd(e.shielded ? "clank" : "hit", e.big ? 0.6 : 0.25);
       break;

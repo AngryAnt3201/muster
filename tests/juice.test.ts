@@ -142,10 +142,20 @@ describe("HP bar lag", () => {
 });
 
 describe("damage numbers", () => {
+  it("merge hits on one spot into a running total, a crit upgrading the number", () => {
+    const fx = new Fx();
+    fx.float(4, 7, "20", "#fff", 0.27, 0.75, "dmg");
+    fx.float(4.2, 7.1, "30", "#fff", 0.27, 0.75, "dmg");
+    fx.float(4.1, 7, "50!", "#ffd166", 0.34, 0.9, "crit");
+    fx.float(4, 7, "+12", "#7dff9a", 0.25, 0.8, "heal");
+    fx.float(8, 2, "9", "#fff", 0.27, 0.75, "dmg");
+    expect(fx.floats.map((f) => [f.text, f.kind])).toEqual([["100!", "crit"], ["+12", "heal"], ["9", "dmg"]]);
+  });
+
   it("cap how many are on screen, dropping the oldest plain number first", () => {
     const fx = new Fx();
     fx.float(4, 7, "PARRY", "#fff", 0.3, 0.8, "text");
-    for (let i = 0; i < MAX_FLOATS + 5; i++) fx.float(4, 7, String(i), "#fff", 0.3, 0.8, "dmg");
+    for (let i = 0; i < MAX_FLOATS + 5; i++) fx.float(i * 2, 7, String(i), "#fff", 0.3, 0.8, "dmg");
     expect(fx.floats.length).toBe(MAX_FLOATS);
     expect(fx.floats.some((f) => f.text === "PARRY")).toBe(true);
   });

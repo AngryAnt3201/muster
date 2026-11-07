@@ -70,7 +70,7 @@ export function drawFloat(ctx: CanvasRenderingContext2D, f: Float, x: number, y:
   const u = 1 - f.life / f.max;
   const kind = f.kind ?? "text";
   const crit = kind === "crit";
-  const pop = u < 0.14 ? 1 + (crit ? 0.7 : 0.4) * (1 - u / 0.14) : 1;
+  const pop = u < 0.12 ? 1 + (crit ? 0.5 : 0.3) * (1 - u / 0.12) : 1;
   const rise = (1 - (1 - Math.min(1, u * 1.6)) ** 3) * s * (crit ? 0.32 : 0.24);
   const size = Math.max(7, Math.round(f.size * s * pop));
   ctx.save();
@@ -100,7 +100,7 @@ export function drawCallout(ctx: CanvasRenderingContext2D, cam: Camera, c: Callo
   if (u < 0.5) {
     const k = u / 0.5, R = s * (0.5 + 1.1 * Math.sqrt(k));
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = (1 - k) * 0.85;
+    ctx.globalAlpha = (1 - k) * 0.5;
     ctx.fillStyle = GOLD;
     const n = 10, rot = now * 1.5 + c.x;
     ctx.beginPath();
@@ -174,7 +174,7 @@ export function drawBanner(ctx: CanvasRenderingContext2D, b: Banner, area: { x: 
       // Rays: long thin wedges turning slowly behind the ribbon.
       const R = Math.max(area.w, area.h) * (0.45 + 0.35 * fadeIn);
       ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = 0.22 * k;
+      ctx.globalAlpha = 0.16 * k;
       ctx.fillStyle = "#ffe7a3";
       ctx.beginPath();
       const n = 14, rot = t * 0.35;

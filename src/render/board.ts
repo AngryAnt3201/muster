@@ -978,10 +978,15 @@ export class BoardView {
 
   /** Ascended ability callouts over their units (after the bodies, before the numbers). */
   private drawCallouts(b: Battle | null) {
+    let prev: { x: number; y: number } | null = null;
     for (const c of this.juice.callouts) {
       const bd = c.id >= 0 && b ? b.bodies.find((o) => o.id === c.id) : undefined;
       if (bd && bd.alive) { c.x = bd.x; c.y = bd.y; }
-      const head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, bd.flying ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : null;
+      let head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, bd.flying ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : this.cam.project(c.x, c.y, 0.6).y - this.cam.scaleAt(c.y) * 0.9;
+      // Two ribbons near each other stack instead of overlapping.
+      const px = this.cam.project(c.x, c.y).x;
+      if (prev && Math.abs(px - prev.x) < 130 && Math.abs(head - prev.y) < 26) head = prev.y - 26;
+      prev = { x: px, y: head };
       drawCallout(this.ctx, this.cam, c, head, this.juice.time);
     }
   }

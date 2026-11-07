@@ -13,8 +13,10 @@ export const STOP_COOLDOWN = 0.22;
 /** How long an Ascended callout stays up, and how long before the same unit may call out again. */
 export const CALLOUT_LIFE = 1.15;
 export const CALLOUT_REPEAT = 9;
+/** Least time between two callouts anywhere on the board. */
+export const CALLOUT_GAP = 0.45;
 /** Seconds the round-end flourish plays (the HUD's ribbon lands ~0.9 s in, see game.ts showRound). */
-export const BANNER_LIFE = 2.6;
+export const BANNER_LIFE = 2.4;
 /** HP bar: the light "lost" segment holds this long after a hit, then drains at DRAIN of the bar per second. */
 export const HP_HOLD = 0.32;
 export const HP_DRAIN = 0.9;
@@ -129,6 +131,7 @@ export class Juice {
   callouts: Callout[] = [];
   banner: Banner | null = null;
   private lastCall = new Map<string, number>();
+  private lastAny = -Infinity;
   private hp = new Map<number, HpShown>();
   /** Body id -> board time it was summoned (pop-in). */
   spawned = new Map<number, number>();
@@ -167,9 +170,12 @@ export class Juice {
     const k = kickFor(e, find);
     if (k.callout) {
       const last = this.lastCall.get(k.callout.key);
-      if (last === undefined || this.time - last >= CALLOUT_REPEAT) {
+      // At most two on screen, and a beat between them; a callout skipped for room can show next time it fires.
+      const room = this.callouts.length < 2 && this.time - this.lastAny >= CALLOUT_GAP;
+      if (!room) { if (k.stop === MAX_STOP_FRAMES) k.stop = 0; }
+      else if (last === undefined || this.time - last >= CALLOUT_REPEAT) {
+        this.lastAny = this.time;
         this.lastCall.set(k.callout.key, this.time);
-        if (this.callouts.length >= 3) this.callouts.shift();
         const c = k.callout;
         this.callouts.push({ id: c.id, x: c.x, y: c.y, side: c.side, text: c.text, life: CALLOUT_LIFE, max: CALLOUT_LIFE });
       } else if (k.stop === MAX_STOP_FRAMES && e.t !== "end") k.stop = 0; // a repeat: no freeze either
@@ -210,7 +216,7 @@ export class Juice {
 
   /** A new battle (or deploy): forget per-body state. */
   reset() {
-    this.hp.clear(); this.spawned.clear(); this.lastCall.clear(); this.callouts = []; this.banner = null;
+    this.hp.clear(); this.spawned.clear(); this.lastCall.clear(); this.callouts = []; this.banner = null; this.lastAny = -Infinity;
     this.stop = 0; this.trauma = 0; this.cool = 0; this.drawn = true;
   }
 }
