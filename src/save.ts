@@ -3,6 +3,7 @@ import { blankDaily, type DailySave } from "./core/daily";
 import type { Entitlement } from "./store/entitlement";
 import type { WalletSave } from "./economy/wallet";
 import type { RewardSave } from "./economy/gems";
+import type { ProgressionSave } from "./progression/troops";
 
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
@@ -18,6 +19,8 @@ export interface Save {
   wallet?: WalletSave;
   /** Free gem rewards already paid (src/economy/gems.ts). */
   rewards?: RewardSave;
+  /** Troop levels bought with coins (src/progression/troops.ts). Older saves have none: every unit is level 1. */
+  progression?: ProgressionSave;
 }
 
 const KEY = "muster.save.v1";

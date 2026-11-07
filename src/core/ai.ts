@@ -373,6 +373,7 @@ export function* planSteps(match: Match, side: Side, ai: AIProfile, opts: PlanOp
           seed: hashSeed(match.cfg.seed, "probe", match.round, k),
           obstacles: match.cfg.obstacles,
           mods: side === 0 ? [st.mods, other.mods] : [other.mods, st.mods],
+          levels: match.cfg.levels,
           limit: 30,
         });
         cand.score += scoreBattle(b, side, cand.goldLeft, ai) / seeds;

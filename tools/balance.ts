@@ -1,6 +1,9 @@
 // Campaign balance: plays every level against its foe with a strong (0.9) and a mid (0.5) player AI and prints win rates.
 //   npx vite-node tools/balance.ts                    all levels, N=8 seeds per player, parallel
 //   LEVELS=1,6,12 N=16 PROCS=6 npx vite-node tools/balance.ts
+// Troop levels (default: everyone level 1, the game as tuned):
+//   FOE_LEVEL=act        foes at the campaign's level curve (src/progression/economy.ts EXPECTED_LEVEL_BY_ACT); or a number
+//   PLAYER_LEVEL=expected|cap|<n>   the player's whole army at the expected curve, at the level cap for that act, or n
 // Targets: strong wins every level at least sometimes (>= 40% on bosses, more elsewhere); mid falls off act by act.
 import { spawn } from "node:child_process";
 import { cpus } from "node:os";
@@ -9,7 +12,9 @@ import { fileURLToPath } from "node:url";
 import { DEFAULT_AI, applyPlan, planTurn, type AIProfile } from "../src/core/ai";
 import { ACTS, LEVELS, buildLevel } from "../src/core/campaign";
 import { levelConfig, starsFor, type LevelDef } from "../src/core/content";
+import { uniformLevels, type Levels } from "../src/core/levels";
 import { Match } from "../src/core/match";
+import { foeLevelForAct, levelCap } from "../src/progression/economy";
 
 export const PLAYERS: Record<string, AIProfile> = {
   strong: { ...DEFAULT_AI, difficulty: 0.9 },
@@ -17,8 +22,8 @@ export const PLAYERS: Record<string, AIProfile> = {
 };
 
 /** Plays a whole level headless: both sides plan on the board as it stood at the start of the round, then fight. */
-export function playLevel(level: LevelDef, player: AIProfile, attempt: number): Match {
-  const m = new Match(levelConfig(level, attempt));
+export function playLevel(level: LevelDef, player: AIProfile, attempt: number, levels?: [Levels | undefined, Levels | undefined]): Match {
+  const m = new Match({ ...levelConfig(level, attempt), ...(levels ? { levels } : {}) });
   while (m.phase !== "over" && m.played < 40) {
     const foe = planTurn(m, 1, level.ai);
     const you = planTurn(m, 0, player);
@@ -36,9 +41,17 @@ interface Result extends Task { won: boolean; stars: number; rounds: number; hp:
 /** POWER=x overrides every level's tuned foe strength (for sweeps). */
 const levelFor = (id: number) => (process.env.POWER ? buildLevel(id - 1, Number(process.env.POWER)) : LEVELS[id - 1]);
 
+/** The uniform troop level each side fields on a level, from PLAYER_LEVEL and FOE_LEVEL. */
+export function sideLevels(l: LevelDef): [number, number] {
+  const pick = (v: string | undefined, act: number) =>
+    !v ? 1 : v === "act" || v === "expected" ? foeLevelForAct(act) : v === "cap" ? levelCap(act - 1) : Number(v) || 1;
+  return [pick(process.env.PLAYER_LEVEL, l.act), pick(process.env.FOE_LEVEL, l.act)];
+}
+
 function runTask(t: Task): Result {
   const level = levelFor(t.id);
-  const m = playLevel(level, PLAYERS[t.who], t.attempt);
+  const [pl, fl] = sideLevels(level);
+  const m = playLevel(level, PLAYERS[t.who], t.attempt, pl > 1 || fl > 1 ? [uniformLevels(pl), uniformLevels(fl)] : undefined);
   return { ...t, won: m.winner === 0, stars: starsFor(level, m), rounds: m.played, hp: m.sides[0].hp, losses: m.history.filter((r) => r.winner === 1).length };
 }
 
@@ -96,6 +109,7 @@ async function main() {
   const rows: string[] = [];
   const byAct = new Map<number, { s: number[]; m: number[] }>();
   const problems: string[] = [];
+  if (process.env.PLAYER_LEVEL || process.env.FOE_LEVEL) rows.push(`Troop levels: player ${process.env.PLAYER_LEVEL ?? 1}, foe ${process.env.FOE_LEVEL ?? 1}\n`);
   rows.push(" id act name                 foe              tactic     diff  foeHp | strong win stars rnds | mid win | twist");
   for (const l of levels) {
     const rs = results.filter((r) => r.id === l.id && r.who === "strong");
@@ -108,18 +122,19 @@ async function main() {
     if (!isNaN(sw)) a.s.push(sw);
     if (!isNaN(mw)) a.m.push(mw);
     byAct.set(l.act, a);
-    rows.push(`${String(l.id).padStart(3)} ${String(l.act).padStart(3)} ${(l.name + (l.boss ? " *" : "")).padEnd(20)} ${l.foe.padEnd(16)} ${l.ai.tactic.padEnd(10)} ${l.ai.difficulty.toFixed(2)} ${String(l.hp[1]).padStart(6)} | ${pct(sw)}       ${stars.toFixed(1)} ${rnds.toFixed(1).padStart(4)} | ${pct(mw)}    | ${twistOf(levelFor(l.id))}`);
+    const [pl, fl] = sideLevels(l);
+    rows.push(`${String(l.id).padStart(3)} ${String(l.act).padStart(3)} ${(l.name + (l.boss ? " *" : "")).padEnd(20)} ${l.foe.padEnd(16)} ${l.ai.tactic.padEnd(10)} ${l.ai.difficulty.toFixed(2)} ${String(l.hp[1]).padStart(6)} | ${pct(sw)}       ${stars.toFixed(1)} ${rnds.toFixed(1).padStart(4)} | ${pct(mw)}    | ${twistOf(levelFor(l.id))}${pl > 1 || fl > 1 ? ` | L${pl} v L${fl}` : ""}`);
     if (!isNaN(sw) && sw < (l.boss ? 0.4 : 0.5)) problems.push(`level ${l.id}: strong wins only ${pct(sw)}`);
   }
   console.log(rows.join("\n"));
   console.log("\n act                 strong   mid");
-  const actMid: number[] = [];
+  const actMid: number[] = [], actIds: number[] = [];
   for (const [act, a] of [...byAct.entries()].sort((x, y) => x[0] - y[0])) {
     const avg = (v: number[]) => v.reduce((s, x) => s + x, 0) / Math.max(1, v.length);
-    actMid.push(avg(a.m));
+    actMid.push(avg(a.m)); actIds.push(act);
     console.log(` ${act} ${ACTS[act - 1].padEnd(18)} ${pct(avg(a.s))}   ${pct(avg(a.m))}`);
   }
-  for (let i = 1; i < actMid.length; i++) if (actMid[i] > actMid[i - 1] + 0.05) problems.push(`mid win rate rises from act ${i} to act ${i + 1}`);
+  for (let i = 1; i < actMid.length; i++) if (actMid[i] > actMid[i - 1] + 0.05) problems.push(`mid win rate rises from act ${actIds[i - 1]} to act ${actIds[i]}`);
   if (process.env.JSON_OUT) (await import("node:fs")).writeFileSync(process.env.JSON_OUT, JSON.stringify(results));
   console.log(`\n${results.length} matches in ${((performance.now() - t0) / 1000).toFixed(0)}s on ${procs} processes. ${problems.length ? "CHECK:\n  " + problems.join("\n  ") : "All targets met."}`);
 }
