@@ -1,4 +1,5 @@
-// Bastion renderer: a big meadow battlefield baked once into a ground texture (grass, road, pads, trees, rocks),
+// Bastion renderer: a big meadow battlefield in one ground texture: the map's Blender render (public/td, from
+// art/td/render_td.py through this camera's ground layout) or, without one, a procedural bake (grass, road, pads, trees),
 // then units from the Blender atlases (sprites.ts / units.ts), the keeps (keeps.ts), projectiles and a capped
 // particle layer, all through TdCamera. Off-screen bodies are culled; the sim is interpolated between ticks.
 import type { BodyKind, Side } from "../core/defs";
@@ -7,12 +8,37 @@ import { ROAD_HALF, type TdMap } from "../core/td/maps";
 import { DT, type TdEvent, type TdRun } from "../core/td/sim";
 import { KEEP_SCALE, keepImage, keepManifest, keepState } from "./keeps";
 import { frame, preload } from "./sprites";
-import { TD_SQUASH, TdCamera } from "./tdCamera";
+import { TD_SQUASH, TD_TEX_M, TD_TEX_PPU, TdCamera } from "./tdCamera";
 import { animFor, drawFrame, drawRank, drawUnit, spriteVis } from "./units";
 import { loadVfx, vfxFrame, vfxSheet } from "./vfx";
 
-const TEX_PPU = 56; // ground texture pixels per world unit (across)
-const TEX_M = 3.5; // forest margin baked around the map, world units
+const TEX_PPU = TD_TEX_PPU;
+const TEX_M = TD_TEX_M;
+
+/** public/td/manifest.json, written by art/td/render_td.py: each map's backdrop as horizontal webp slices. */
+export interface TdBackdropManifest {
+  version: number; squash: number; margin: number; ppu: number;
+  maps: Record<string, { w: number; h: number; px: [number, number]; slices: { file: string; y: number; h: number }[];
+    pads: [number, number][]; roads: [number, number][][];
+    check: { camera_px: number; pads: [number, number]; road: [number, number]; verge: [number, number] } }>;
+}
+const tdBase = () => (import.meta as any).env?.BASE_URL ?? "./";
+let tdManifest: Promise<TdBackdropManifest | null> | null = null;
+/** The rendered backdrop for a map, slices loaded and decoded; null when there is none (the procedural bake stays). */
+export function loadBackdrop(mapId: string): Promise<{ px: [number, number]; slices: { img: HTMLImageElement; y: number }[] } | null> {
+  tdManifest ??= fetch(`${tdBase()}td/manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return tdManifest.then(async (m) => {
+    const info = m && m.ppu === TEX_PPU && m.margin === TEX_M && m.squash === TD_SQUASH ? m.maps[mapId] : null;
+    if (!info) return null;
+    const slices = await Promise.all(info.slices.map((s) => new Promise<{ img: HTMLImageElement; y: number }>((ok, no) => {
+      const img = new Image();
+      img.onload = () => ok({ img, y: s.y });
+      img.onerror = no;
+      img.src = `${tdBase()}td/${s.file}`;
+    })));
+    return { px: info.px, slices };
+  }).catch(() => null);
+}
 const MAX_PARTICLES = 140;
 const MAX_FLOATS = 24;
 
@@ -62,6 +88,12 @@ export class TdView {
   private groundCanvas: HTMLCanvasElement;
   private gctx: CanvasRenderingContext2D;
   private groundKey = "";
+  /** Decoded backdrop slices waiting to be copied into the ground texture (dropped once baked). */
+  private backdrop: { px: [number, number]; slices: { img: HTMLImageElement; y: number }[] } | null = null;
+  /** While the render loads, the ground is plain grass (no procedural bake to pop out a moment later). */
+  private backdropPending = true;
+  /** ?tddebug: draw the sim's road and pads over the ground, to check them against the render. */
+  private debug = typeof location !== "undefined" && /[?&]tddebug\b/.test(location.search);
   private parts: Particle[] = [];
   private floats: Float[] = [];
   private rings: Ring[] = [];
@@ -89,6 +121,13 @@ export class TdView {
     for (const w of run.waves) for (const g of w.groups) kinds.add(g.kind);
     preload([...kinds, "mite", "thrall", "golemling"], 1, [1, 2, 3, 4]);
     void loadVfx();
+    void loadBackdrop(run.map.id).then((b) => {
+      this.backdropPending = false;
+      if (!b || this.run.map.id !== run.map.id) return;
+      this.backdrop = b;
+      this.ground = null; // rebake from the render
+      this.tiles.clear(); this.tileScale = 0; this.groundKey = "";
+    });
   }
 
   /** A one-shot sprite effect from the shared VFX atlas (capped). */
@@ -141,6 +180,16 @@ export class TdView {
   // ------------------------------------------------------------ ground
   private bake(map: TdMap): HTMLCanvasElement {
     const P = TEX_PPU, Q = TEX_PPU * TD_SQUASH;
+    if (this.backdrop) {
+      // The Blender render: same layout as this bake (TEX_M margin, TEX_PPU across, squashed down), in slices.
+      const c = document.createElement("canvas");
+      [c.width, c.height] = this.backdrop.px;
+      const g = c.getContext("2d", { alpha: false })!;
+      g.fillStyle = "#2f8a3a"; g.fillRect(0, 0, c.width, c.height);
+      for (const sl of this.backdrop.slices) g.drawImage(sl.img, 0, sl.y);
+      this.backdrop = null; // let the decoded slices go
+      return c;
+    }
     const W = Math.round((map.w + TEX_M * 2) * P), H = Math.round((map.h + TEX_M * 2) * Q);
     const c = document.createElement("canvas");
     c.width = W; c.height = H;
@@ -227,7 +276,7 @@ export class TdView {
   draw(dt: number, alpha: number) {
     const { ctx, cam, run } = this;
     this.t += dt;
-    if (!this.ground) this.ground = this.bake(run.map);
+    if (!this.ground && !this.backdropPending) this.ground = this.bake(run.map);
     const dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     let sx = 0, sy = 0;
@@ -243,7 +292,10 @@ export class TdView {
       g.fillRect(0, 0, cam.vw, cam.vh);
       g.translate(sx, sy);
       g.imageSmoothingEnabled = true;
-      if (!this.drawTiles(g, sx, sy)) {
+      if (!this.ground) {
+        g.fillStyle = "#80c25a"; g.fillRect(0, 0, cam.vw, cam.vh);
+        this.groundKey = "";
+      } else if (!this.drawTiles(g, sx, sy)) {
         const a = cam.toWorld(0, 0), b = cam.toWorld(cam.vw, cam.vh), P = TEX_PPU, Q = TEX_PPU * TD_SQUASH;
         g.drawImage(this.ground, (a.x + TEX_M) * P, (a.y + TEX_M) * Q, (b.x - a.x) * P, (b.y - a.y) * Q, 0, 0, cam.vw, cam.vh);
         this.groundKey = ""; // redraw sharp once the zoom settles
@@ -263,6 +315,25 @@ export class TdView {
       const p = cam.toScreen(z.x, z.y);
       ctx.fillStyle = z.kind === "fire" ? "rgba(255,120,40,0.35)" : "rgba(60,120,40,0.45)";
       ctx.beginPath(); ctx.ellipse(p.x, p.y, z.r * s, z.r * s * TD_SQUASH, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    if (this.debug) {
+      ctx.strokeStyle = "rgba(255,0,200,0.9)"; ctx.lineWidth = 1.5;
+      for (const p of run.map.paths) {
+        for (const off of [-ROAD_HALF, 0, ROAD_HALF]) {
+          ctx.beginPath();
+          p.pts.forEach((q, i) => {
+            const a = p.pts[Math.max(0, i - 1)], b = p.pts[Math.min(p.pts.length - 1, i + 1)], l = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+            const o = cam.toScreen(q.x - ((b.y - a.y) / l) * off, q.y + ((b.x - a.x) / l) * off);
+            i ? ctx.lineTo(o.x, o.y) : ctx.moveTo(o.x, o.y);
+          });
+          ctx.stroke();
+        }
+      }
+      ctx.strokeStyle = "rgba(0,255,255,0.95)";
+      for (const pad of run.map.pads) {
+        const p = cam.toScreen(pad.x, pad.y);
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, 0.47 * s, 0.47 * s * TD_SQUASH, 0, 0, Math.PI * 2); ctx.moveTo(p.x - 4, p.y); ctx.lineTo(p.x + 4, p.y); ctx.moveTo(p.x, p.y - 4); ctx.lineTo(p.x, p.y + 4); ctx.stroke();
+      }
     }
     if (this.selectedPad >= 0) {
       const pad = run.map.pads[this.selectedPad];

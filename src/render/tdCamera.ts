@@ -4,6 +4,10 @@
 
 /** Vertical foreshortening of the ground. */
 export const TD_SQUASH = 0.8;
+/** Ground texture layout (tdView.ts bake, and the Blender backdrops in art/td): pixels per world unit across, and
+ *  the forest margin around the map in world units. Ground (x, y) is texture pixel ((x + M) * PPU, (y + M) * PPU * SQUASH). */
+export const TD_TEX_PPU = 72;
+export const TD_TEX_M = 3.5;
 const MARGIN = 1.5; // world units of forest shown beyond the map edge
 
 export class TdCamera {
