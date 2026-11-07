@@ -2,6 +2,7 @@
 import { blankDaily, type DailySave } from "./core/daily";
 import type { Entitlement } from "./store/entitlement";
 import type { WalletSave } from "./economy/wallet";
+import type { RewardSave } from "./economy/gems";
 
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
@@ -15,6 +16,8 @@ export interface Save {
   store?: Entitlement;
   /** Coins and gems (src/economy/wallet.ts). Older saves have none; the wallet fills it in. */
   wallet?: WalletSave;
+  /** Free gem rewards already paid (src/economy/gems.ts). */
+  rewards?: RewardSave;
 }
 
 const KEY = "muster.save.v1";

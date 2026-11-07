@@ -8,6 +8,7 @@ import UIKit
 /// Purchases need a window scene, so these run inside the TestHost app (see ios/MusterStore/TestHost/project.yml).
 final class StoreKitStoreTests: XCTestCase {
     static let fullArmy = "co.inflect.muster.fullarmy"
+    static let pouch = "co.inflect.muster.gems.pouch"
     var session: SKTestSession!
     var store: StoreKitStore!
 
@@ -90,6 +91,44 @@ final class StoreKitStoreTests: XCTestCase {
         let bought = try XCTUnwrap(session.allTransactions().first)
         try session.refundTransaction(identifier: bought.identifier)
         await fulfillment(of: [gone], timeout: 10)
+    }
+
+    func testGemPacksComeFromTheStoreKitFileWithPrices() async throws {
+        let ids = ["pouch", "sack", "coffer", "trove", "hoard"].map { "co.inflect.muster.gems.\($0)" }
+        let products = try await store.products(ids)
+        XCTAssertEqual(products.count, 5)
+        XCTAssertTrue(products.allSatisfy { $0.price > 0 && !$0.displayPrice.isEmpty })
+    }
+
+    /// A gem pack is paid but left unfinished until the game has saved the credit, then finished by id.
+    func testGemPackStaysUnfinishedUntilTheGameFinishesIt() async throws {
+        let outcome = await buy(Self.pouch)
+        guard case .purchasedUnfinished(let p) = outcome else { return XCTFail("expected an unfinished purchase, got \(outcome)") }
+        XCTAssertEqual(outcome.status, "purchased")
+        XCTAssertEqual(p.productId, Self.pouch)
+        let open = await store.unfinishedConsumables()
+        XCTAssertEqual(open, [p])
+        let owned = await store.owned()
+        XCTAssertEqual(owned, [], "consumables are never owned or restored")
+        let finished = await store.finish(p.txId)
+        XCTAssertTrue(finished)
+        let after = await store.unfinishedConsumables()
+        XCTAssertEqual(after, [])
+        let again = await store.finish(p.txId)
+        XCTAssertFalse(again)
+    }
+
+    func testAskToBuyGemPackArrivesUnfinishedThroughUpdates() async throws {
+        session.askToBuyEnabled = true
+        let arrived = expectation(description: "consumable from Transaction.updates")
+        store.listen({ _ in }, consumable: { p in if p.productId == Self.pouch { arrived.fulfill() } })
+        let outcome = await buy(Self.pouch)
+        XCTAssertEqual(outcome, .pending)
+        let pending = try XCTUnwrap(session.allTransactions().first)
+        try session.approveAskToBuyTransaction(identifier: pending.identifier)
+        await fulfillment(of: [arrived], timeout: 10)
+        let open = await store.unfinishedConsumables()
+        XCTAssertEqual(open.map(\.productId), [Self.pouch])
     }
 
     func testErrorMapping() {

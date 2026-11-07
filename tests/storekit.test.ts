@@ -128,9 +128,10 @@ describe("MusterStore Swift plugin and StoreKit config", () => {
     expect(swift).toMatch(/@objc\(MusterStorePlugin\)\s*public class MusterStorePlugin: CAPPlugin, CAPBridgedPlugin/);
     expect(swift).toContain(`public let jsName = "${PLUGIN_NAME}"`);
     const methods = [...swift.matchAll(/CAPPluginMethod\(name: "(\w+)"/g)].map((m) => m[1]).sort();
-    expect(methods).toEqual(["getProducts", "owned", "purchase", "restore"]);
+    expect(methods).toEqual(["finish", "getProducts", "owned", "purchase", "restore", "unfinished"]);
     for (const m of methods) expect(swift).toContain(`@objc func ${m}(_ call: CAPPluginCall)`);
     expect(swift).toContain('notifyListeners("ownedChanged"');
+    expect(swift).toMatch(/notifyListeners\("purchase", data: \[[^\]]*\], retainUntilConsumed: true\)/);
   });
 
   it("uses StoreKit 2 only: purchase, AppStore.sync, currentEntitlements and Transaction.updates", () => {
@@ -142,7 +143,7 @@ describe("MusterStore Swift plugin and StoreKit config", () => {
   it("ships a .storekit file with the US$4.99 Full Army non-consumable, matching the App Store Connect copy", () => {
     const sk = JSON.parse(read("ios/App/Muster.storekit"));
     const meta = JSON.parse(read("store/metadata.json")).inAppPurchase;
-    expect(sk.products).toHaveLength(1);
+    expect(sk.products.filter((x: { type: string }) => x.type === "NonConsumable")).toHaveLength(1);
     const p = sk.products[0];
     expect(p.productID).toBe(FULL_ARMY);
     expect(p.productID).toBe(meta.productId);

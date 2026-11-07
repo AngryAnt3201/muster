@@ -1,8 +1,6 @@
 {
   "identifier" : "6D3A91C4",
-  "nonRenewingSubscriptions" : [
-
-  ],
+  "nonRenewingSubscriptions" : [],
   "products" : [
     {
       "displayPrice" : "4.99",
@@ -18,6 +16,81 @@
       "productID" : "co.inflect.muster.fullarmy",
       "referenceName" : "Full Army",
       "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "0.99",
+      "familyShareable" : false,
+      "internalID" : "C1A20001",
+      "localizations" : [
+        {
+          "description" : "80 gems for the Shop",
+          "displayName" : "80 Gems",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.inflect.muster.gems.pouch",
+      "referenceName" : "Gems Pouch (80)",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "C1A20002",
+      "localizations" : [
+        {
+          "description" : "450 gems for the Shop",
+          "displayName" : "450 Gems",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.inflect.muster.gems.sack",
+      "referenceName" : "Gems Sack (450)",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "C1A20003",
+      "localizations" : [
+        {
+          "description" : "1,000 gems for the Shop",
+          "displayName" : "1,000 Gems",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.inflect.muster.gems.coffer",
+      "referenceName" : "Gems Coffer (1000)",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "C1A20004",
+      "localizations" : [
+        {
+          "description" : "2,200 gems for the Shop",
+          "displayName" : "2,200 Gems",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.inflect.muster.gems.trove",
+      "referenceName" : "Gems Trove (2200)",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "49.99",
+      "familyShareable" : false,
+      "internalID" : "C1A20005",
+      "localizations" : [
+        {
+          "description" : "6,000 gems for the Shop",
+          "displayName" : "6,000 Gems",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "co.inflect.muster.gems.hoard",
+      "referenceName" : "Gems Hoard (6000)",
+      "type" : "Consumable"
     }
   ],
   "settings" : {
@@ -29,14 +102,10 @@
     "_locale" : "en_US",
     "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "USA",
-    "_storeKitErrors" : [
-
-    ],
+    "_storeKitErrors" : [],
     "_timeRate" : 0
   },
-  "subscriptionGroups" : [
-
-  ],
+  "subscriptionGroups" : [],
   "version" : {
     "major" : 3,
     "minor" : 0
