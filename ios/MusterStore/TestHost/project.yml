@@ -1,0 +1,43 @@
+# A throwaway host app for the plugin's StoreKit tests: StoreKit only completes purchases in a process with a
+# window scene, which a bare `swift test` bundle doesn't have. Generate and run (needs xcodegen):
+#   cd ios/MusterStore/TestHost && xcodegen -q && xcodebuild test -project MusterStoreTestHost.xcodeproj \
+#     -scheme StoreTests -destination 'platform=iOS Simulator,name=iPhone 17' CODE_SIGNING_ALLOWED=NO
+# The generated .xcodeproj is git-ignored.
+name: MusterStoreTestHost
+options:
+  deploymentTarget:
+    iOS: "15.0"
+packages:
+  MusterStore:
+    path: ..
+targets:
+  TestHost:
+    type: application
+    platform: iOS
+    sources: [Host]
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: co.inflect.muster.storetests
+      GENERATE_INFOPLIST_FILE: YES
+      INFOPLIST_KEY_UILaunchScreen_Generation: YES
+      INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+      SWIFT_VERSION: "5.0"
+  StoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../ios/Tests/MusterStorePluginTests
+    dependencies:
+      - target: TestHost
+      - package: MusterStore
+        product: MusterStore
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      SWIFT_VERSION: "5.0"
+schemes:
+  StoreTests:
+    build:
+      targets:
+        TestHost: all
+        StoreTests: [test]
+    test:
+      targets: [StoreTests]

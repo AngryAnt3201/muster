@@ -1,10 +1,10 @@
-// The 42-level campaign in seven acts of six. Each act ends with a boss: a named rival, a set-piece board and a twist.
+// The 48-level campaign in eight acts of six. Each act ends with a boss: a named rival, a set-piece board and a twist.
 // New units unlock along the way; the level that introduces one sets the foe up so the new unit matters.
 import type { AIProfile, Tactic } from "./ai";
 import type { LevelDef, Objective } from "./content";
 import type { UnitKind } from "./defs";
 
-export const ACTS = ["The Borderlands", "Ash Fields", "The Hollow Wood", "Iron Pass", "The High Keep", "The Frozen Reach", "The Sky Throne"];
+export const ACTS = ["The Borderlands", "Ash Fields", "The Hollow Wood", "Iron Pass", "The High Keep", "The Frozen Reach", "The Sky Throne", "The Mirelight Fen"];
 
 /** The level each unit first appears on (the player's roster is everything unlocked so far). */
 const UNLOCKS: [number, UnitKind][] = [
@@ -12,6 +12,8 @@ const UNLOCKS: [number, UnitKind][] = [
   [11, "ballista"], [14, "shade"], [16, "hive"], [19, "storm"], [22, "golem"],
   [31, "sapper"], [32, "harrier"], [33, "banner"], [34, "rime"], [35, "ravager"], [36, "grave"],
   [37, "bombard"], [38, "tinker"], [39, "duelist"], [40, "pikeman"], [41, "keg"], [42, "trickster"],
+  // 1.1: four more join late in Act 7, alongside that level's first unlock.
+  [39, "lamp"], [40, "thorn"], [41, "hook"], [42, "outrider"],
 ];
 export const rosterAt = (id: number): UnitKind[] => UNLOCKS.filter(([at]) => at <= id).map(([, k]) => k);
 
@@ -145,7 +147,7 @@ const DRAFTS: Draft[] = [
   { name: "Clockwork", foe: "Skymarshal Ren", line: "Ren's harriers own the sky.", foeHp: 400, power: 0.99,
     foeRoster: ["harrier", "shade", "sapper", "lancer", "keg", "ravager", "trickster"],
     ai: ai(0.92, "ambush", 0.65, 0.4, 0.8, 2), stars: [WIN, hp(160), losses(5)] },
-  { name: "Crossed Steel", foe: "Blademaster Oku", line: "Oku's school teaches only the sword.", foeHp: 400, power: 1.16,
+  { name: "Crossed Steel", foe: "Blademaster Oku", line: "Oku's school teaches only the sword.", foeHp: 400, power: 1.04,
     foeRoster: ["blades", "ravager", "duelist", "banner", "sapper", "trickster", "medic", "pikeman"],
     ai: ai(0.93, "swarm", 0.7, 0.4, 0.6, 2), stars: [WIN, hp(160), rounds(14)] },
   { name: "Hold the Ford", foe: "Rider Calla", line: "Calla's lancers cross at a gallop.", foeHp: 400, power: 1.06,
@@ -161,17 +163,48 @@ const DRAFTS: Draft[] = [
     start: [undefined, [{ kind: "ravager", lx: 4.5, depth: 4.8, rank: 2 }, { kind: "storm", lx: 4.5, depth: 2.2 }, { kind: "bombard", lx: 4.5, depth: 0.8 },
       { kind: "harrier", lx: 2, depth: 3.5 }, { kind: "bulwark", lx: 6.5, depth: 4.4 }, { kind: "medic", lx: 3, depth: 2.4 }]],
     ai: ai(0.95, "balanced", 0.6, 0.55, 0.6, 2), stars: [WIN, hp(140), losses(5)] },
+
+  // ---------------------------------------------------------------- Act 8: The Mirelight Fen (1.1)
+  // No new units here: every foe is built around one of the four 1.1 units (Hookwarden, Thornweaver, Outrider,
+  // Lamplighter), and the boss puts all four on her opening board.
+  { name: "Reedwater", foe: "Bargeman Holt", line: "Holt's chains come out of the reeds.", foeHp: 400, power: 0.86,
+    foeRoster: ["hook", "bulwark", "pikeman", "medic", "ranger", "lamp", "ballista"],
+    obstacles: [{ x: 2, y: 7, r: 0.6 }, { x: 7, y: 7, r: 0.6 }],
+    ai: ai(0.94, "fortress", 0.3, 0.5, 0.6, 2), stars: [WIN, hp(150), rounds(15)] },
+  { name: "Will-o'-Wisp", foe: "Sister Ama", line: "Ama's lanterns never seem to go out.", foeHp: 400, power: 1.04,
+    foeRoster: ["lamp", "medic", "banner", "blades", "duelist", "ravager", "bulwark", "trickster"],
+    ai: ai(0.94, "balanced", 0.6, 0.45, 0.6, 2), stars: [WIN, hp(150), losses(5)] },
+  { name: "Bramble Causeway", foe: "Thornwife Esk", line: "The causeway grows shut behind you.", foeHp: 400, power: 1.04,
+    foeRoster: ["thorn", "hive", "mine", "sapper", "rime", "grenadier", "storm", "bulwark"],
+    obstacles: [{ x: 1.4, y: 6.6, r: 0.5 }, { x: 4.5, y: 7.4, r: 0.55 }, { x: 7.6, y: 6.6, r: 0.5 }],
+    ai: ai(0.95, "ambush", 0.5, 0.45, 0.8, 2), stars: [WIN, hp(140), rounds(15)] },
+  { name: "Running Water", foe: "Captain Saro", line: "Saro's riders circle and never close.", foeHp: 400, power: 1.15,
+    foeRoster: ["outrider", "harrier", "lancer", "ranger", "keg", "shade", "banner"],
+    ai: ai(0.95, "blitz", 0.85, 0.35, 0.7, 2), stars: [WIN, hp(140), losses(5)] },
+  { name: "The Drowned Bell", foe: "Ferryman Coyle", line: "Coyle drags you under his guns.", foeHp: 400, power: 0.86,
+    foeRoster: ["hook", "bombard", "thorn", "tinker", "pikeman", "ballista", "lamp", "medic"],
+    obstacles: [{ x: 4.5, y: 7, r: 0.65 }],
+    ai: ai(0.96, "siege", 0.5, 0.5, 0.5, 2), stars: [WIN, hp(130), rounds(16)] },
+  { name: "Mirelight", foe: "Mother Wick", line: "Her lanterns ward every soldier before the first blow.", foeHp: 400, power: 0.7, boss: true,
+    startGold: [14, 0], supply: [2, 1], mods: [undefined, { litStart: true }],
+    obstacles: [{ x: 1.5, y: 7, r: 0.55 }, { x: 4.5, y: 6.5, r: 0.5 }, { x: 7.5, y: 7, r: 0.55 }],
+    start: [undefined, [{ kind: "hook", lx: 4.5, depth: 4.8, rank: 2 }, { kind: "lamp", lx: 4.5, depth: 2.6, rank: 2 }, { kind: "thorn", lx: 3, depth: 2.2 },
+      { kind: "outrider", lx: 6.5, depth: 3 }, { kind: "bulwark", lx: 3, depth: 4.4 }, { kind: "medic", lx: 6, depth: 2 }]],
+    foeRoster: ["hook", "thorn", "outrider", "lamp", "bulwark", "medic", "pikeman", "bombard", "banner"],
+    ai: ai(0.97, "balanced", 0.55, 0.55, 0.6, 2), stars: [WIN, hp(130), losses(5)] },
 ];
 
 /** Builds a level from its draft; `power` overrides the tuned foe strength (for the balance tool). */
 export function buildLevel(index: number, power?: number): LevelDef {
   const { foeHp, hp: hpPair, power: tuned = 1, mods, ...d } = DRAFTS[index];
   const id = index + 1;
-  const unlock = UNLOCKS.find(([at]) => at === id)?.[1];
+  const fresh = UNLOCKS.filter(([at]) => at === id).map(([, k]) => k);
+  const unlock = fresh[0];
   const p = power ?? tuned;
   const foeMods = mods?.[1] ?? {};
   const scaled = p === 1 ? mods?.[1] : { ...foeMods, hpMul: +((foeMods.hpMul ?? 1) * p).toFixed(3), dmgMul: +((foeMods.dmgMul ?? 1) * p).toFixed(3) };
   const out: LevelDef = { id, act: Math.floor(index / 6) + 1, roster: rosterAt(id), unlock, hp: hpPair ?? [400, foeHp], ...d };
+  if (fresh.length > 1) out.unlocks = fresh;
   if (mods?.[0] || scaled) out.mods = [mods?.[0], scaled];
   return out;
 }

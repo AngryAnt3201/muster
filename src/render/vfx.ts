@@ -157,6 +157,8 @@ export interface VfxEnv {
   sound?(name: string, gain?: number): void;
   /** Camera kick for the biggest blasts. */
   kick?(amount: number): void;
+  /** World height of a body above the ground (a flyer's altitude, 0 on foot), so its hits play where it is drawn. */
+  lift?(id: number): number;
 }
 
 const RADIUS = (k: BodyKind): number => bodyDef(k)?.radius ?? 0.3;
@@ -166,8 +168,22 @@ const DUST = "#d6c3a0";
 const STEEL = "#bcd6ff";
 const STRUCT = new Set(["turret", "mine", "decoy"]);
 
-/** Drop a few sheets plus the debris particles for one event. */
+/** Events that play at one body's position (its id): their sparks, flashes and debris rise with a flyer. */
+const AT_BODY = new Set<BattleEvent["t"]>(["hit", "shot", "parry", "freeze"]);
+
+/** Drop a few sheets plus the debris particles for one event. A hit on a flyer plays at the flyer's height, not at
+ *  its feet, so it never sits on the ground under the bodies standing there. */
 export function playEvent(fx: Fx, e: BattleEvent, env: VfxEnv) {
+  const lift = AT_BODY.has(e.t) && "id" in e ? env.lift?.(e.id) ?? 0 : 0;
+  if (lift <= 0) return playAt(fx, e, env);
+  const a0 = fx.anims.length, p0 = fx.parts.length, f0 = fx.floats.length;
+  playAt(fx, e, env);
+  for (let i = a0; i < fx.anims.length; i++) if (fx.anims[i].layer === "air" && !fx.anims[i].path) fx.anims[i].z += lift;
+  for (let i = p0; i < fx.parts.length; i++) fx.parts[i].z += lift;
+  for (let i = f0; i < fx.floats.length; i++) fx.floats[i].z = (fx.floats[i].z ?? 0) + lift;
+}
+
+function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
   const snd = (n: string, g = 0.5) => env.sound?.(n, g);
   switch (e.t) {
     case "slash": {
@@ -426,9 +442,50 @@ export function playEvent(fx: Fx, e: BattleEvent, env: VfxEnv) {
       break;
     }
     case "zone":
+      if (e.kind === "thorn") {
+        // Brambles burst out of the ground; an Ascended crown seizes whatever is standing there.
+        fx.anim("dirt", e.x, e.y, { size: e.r * 1.6, max: 0.5 });
+        fx.anim("dust", e.x, e.y, { size: e.r * 2, max: 0.5, tint: "#b7c48a", layer: "ground" });
+        fx.burst(e.x, e.y, 10, { color: "#7f9a52", speed: 2.2, size: 0.07, max: 0.6, kind: "chunk", vz: 3, spin: 6 });
+        if (e.root) {
+          fx.ring(e.x, e.y, 0.2, e.r * 1.1, 0.35, "#a8d36b", 0.05);
+          fx.float(e.x, e.y - 0.5, "SEIZED", "#c6e48b", 0.26, 0.7);
+        }
+        snd("slam", 0.35);
+        break;
+      }
       fx.anim("fireball", e.x, e.y, { size: e.r * 1.4, max: 0.5 });
       fx.anim("flash", e.x, e.y, { size: e.r * 1.8, max: 0.15, tint: "#ffb347" });
       snd("pop", 0.3);
+      break;
+    case "hook": {
+      const a = Math.atan2(e.ty - e.y, e.tx - e.x);
+      fx.anim("streak", e.x, e.y, { size: 0.3, max: 0.22, a, tint: "#d7dde6", z: 0.3, alpha: 0.8 });
+      snd("throw", 0.5);
+      break;
+    }
+    case "reel":
+      fx.anim("impact", e.x, e.y, { size: 0.9, max: 0.28, tint: STEEL, z: 0.25, a: frand(0, 6.28) });
+      fx.burst(e.x, e.y, 6, { color: "#e8eef5", speed: 2.2, size: 0.04, max: 0.25, kind: "spark", gravity: 0 });
+      fx.float(e.x, e.y - 0.5, "HOOKED", "#e8eef5", 0.24, 0.6);
+      snd("clank", 0.7);
+      break;
+    case "ward": {
+      const from = env.find(e.from);
+      if (from) fx.beam(from.x, from.y, e.x, e.y, "rgba(255,210,120,0.8)", 0.05, 0.25);
+      fx.anim("glint", e.x, e.y, { size: 0.6, max: 0.35, tint: GOLD, z: 0.5 });
+      fx.ring(e.x, e.y, 0.15, 0.55, 0.3, "#ffd27a", 0.04);
+      snd("upgrade", 0.25);
+      break;
+    }
+    case "wardbreak":
+      fx.anim("flash", e.x, e.y, { size: e.burst ? 1.6 : 0.8, max: 0.2, tint: "#ffe2a0", z: 0.3 });
+      fx.burst(e.x, e.y, e.burst ? 14 : 6, { color: "#ffe2a0", speed: e.burst ? 3.5 : 1.6, size: 0.05, max: 0.35, kind: "spark", gravity: 0 });
+      if (e.burst) {
+        fx.ring(e.x, e.y, 0.2, 1.3, 0.35, "#fff2b8", 0.06);
+        fx.float(e.x, e.y - 0.55, "BEACON", "#fff2b8", 0.26, 0.7);
+        snd("pop", 0.6);
+      } else snd("clank", 0.3);
       break;
     case "revive":
       fx.anim("pillar", e.x, e.y, { size: 2.0, max: 0.9, tint: GOLD });

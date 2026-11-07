@@ -8,10 +8,11 @@ import { Camera, DIST, SLAB, TILT, sortDrawables, type Drawable, type Rect, type
 import { Fx, animAlpha, animFrame, frand, type Anim } from "./fx";
 import { BOARD, GOLD, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { frame, hasAtlas, spriteHeight } from "./sprites";
-import { SPRITE_VIS, animFor, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
+import { animFor, spriteVis, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
 import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
 import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playBoom, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
+import { spreadOffsets, type SpreadBody } from "./spread";
 
 export type { Rect } from "./camera";
 
@@ -42,6 +43,10 @@ const ICE = "#bfe9ff";
 const LIFT = 0.55;
 /** World height of a flyer per unit of the sim's altitude z. */
 const AIR = 0.75;
+/** Air effects at or above this height sort with the flyers (layer 2); lower ones sort with the bodies on foot. */
+export const FLYER_Z = 0.6;
+/** An effect at a body's own row draws just after (over) that body. */
+const AIR_SORT_EPS = 0.02;
 
 type TokenOpts = DrawOpts & { rank?: number; flat?: boolean };
 
@@ -68,6 +73,7 @@ export class BoardView {
   private drop = new Map<number, number>(); // piece id -> time it started falling
   private frozenAt = new Map<number, number>(); // body id -> board time it froze (ice grows in, shatters on thaw)
   private fuseSeen = new WeakMap<object, number>(); // fuse -> board time first drawn
+  private airSorted = false; // this frame's air sheets were drawn in the battle's depth sort
   /** Each commander's shown hp over max hp: drives the keep's damage state (the game keeps it in step with the bar). */
   keepHp: [number, number] = [1, 1];
   /** Draw the commander keeps (off for boards with no commanders to show). */
@@ -356,6 +362,10 @@ export class BoardView {
       textured: vfxReady(),
       sound: (n: string, g?: number) => this.onSound?.(n, g),
       kick: (k: number) => this.onShake?.(k),
+      lift: (id: number) => {
+        const bd = battle?.bodies.find((b) => b.id === id);
+        return bd?.flying ? (bd.z ?? 1.2) * AIR : 0;
+      },
     };
   }
 
@@ -420,21 +430,36 @@ export class BoardView {
     return Math.floor(this.time * fps + seed * 1.37) % n;
   }
 
-  /** Every playing sheet on one layer: "ground" under the bodies, "air" over them; placed through the camera. */
+  /** Every playing sheet on one layer: "ground" under the bodies, "air" over them; placed through the camera.
+   *  In a battle the air sheets are already drawn, depth-sorted with the bodies (pushAirAnims). */
   private drawAnims(layer: Anim["layer"]) {
     if (!vfxReady()) return;
+    if (layer === "air" && this.airSorted) return;
+    for (const an of this.fx.anims) if (an.delay <= 0 && an.layer === layer) this.drawAnim(an);
+  }
+
+  private drawAnim(an: Anim) {
+    const sh = vfxSheet(an.sheet);
+    if (!sh) return;
+    const u = 1 - an.life / an.max;
+    const k = an.grow ? an.grow[0] + (an.grow[1] - an.grow[0]) * easeOut(u) : 1;
+    const p = this.cam.project(an.x, an.y, an.z), s = p.s;
+    this.sheet(an.sheet, animFrame(an, sh.frames), p.x, p.y, an.size * s * k, {
+      a: an.a, alpha: animAlpha(an), tint: an.tint, blend: an.blend,
+      w: an.w !== undefined ? an.w * s * k : undefined,
+      squash: an.layer === "ground" ? an.squash * this.cam.squashAt(an.y) : an.squash,
+    });
+  }
+
+  /** Air sheets join the painter sort, so a hit draws over the body it lands on but under bodies standing in
+   *  front of it, and anything at flyer height (a hit on a flyer, a thrown bomb) draws with the flyers, over every
+   *  body on foot. */
+  private pushAirAnims(list: Drawable[]) {
+    this.airSorted = vfxReady();
+    if (!this.airSorted) return;
     for (const an of this.fx.anims) {
-      if (an.delay > 0 || an.layer !== layer) continue;
-      const sh = vfxSheet(an.sheet);
-      if (!sh) continue;
-      const u = 1 - an.life / an.max;
-      const k = an.grow ? an.grow[0] + (an.grow[1] - an.grow[0]) * easeOut(u) : 1;
-      const p = this.cam.project(an.x, an.y, an.z), s = p.s;
-      this.sheet(an.sheet, animFrame(an, sh.frames), p.x, p.y, an.size * s * k, {
-        a: an.a, alpha: animAlpha(an), tint: an.tint, blend: an.blend,
-        w: an.w !== undefined ? an.w * s * k : undefined,
-        squash: layer === "ground" ? an.squash * this.cam.squashAt(an.y) : an.squash,
-      });
+      if (an.delay > 0 || an.layer !== "air") continue;
+      list.push({ y: an.y + AIR_SORT_EPS, layer: an.z >= FLYER_Z ? 2 : 1, draw: () => this.drawAnim(an) });
     }
   }
 
@@ -458,6 +483,7 @@ export class BoardView {
     // Heads and flyers over the far edge may use the whole layout area.
     ctx.beginPath(); ctx.rect(this.area.x, this.area.y, this.area.w, this.area.h); ctx.clip();
     this.drawAnims("ground");
+    this.airSorted = false;
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
     this.drawFx();
@@ -485,7 +511,7 @@ export class BoardView {
     const h = spriteHeight(kind, rank);
     if (!h) return { x: at.x, y: at.y - at.r * 1.3, r: at.r };
     const feet = this.cam.project(x, y, z);
-    return { x: at.x, y: Math.min(at.y - at.r * 1.3, feet.y - h * feet.s * (radius / RADIUS(kind)) * SPRITE_VIS), r: at.r };
+    return { x: at.x, y: Math.min(at.y - at.r * 1.3, feet.y - h * feet.s * (radius / RADIUS(kind)) * spriteVis(RADIUS(kind))), r: at.r };
   }
 
   /** Draws a body standing at world (x, y), z above the ground. radius in world units. Upright Blender atlas frames
@@ -532,7 +558,7 @@ export class BoardView {
     ctx.globalAlpha *= (o.alpha ?? 1) * Math.min(1, alive * 2.5);
     if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
     // Drawn a bit larger than true scale so they read on a phone (collision is unchanged).
-    drawFrame(ctx, fr, (feet.s * (radius / RADIUS(kind)) * SPRITE_VIS) / fr.ppu, o.flash ?? 0);
+    drawFrame(ctx, fr, (feet.s * (radius / RADIUS(kind)) * spriteVis(RADIUS(kind))) / fr.ppu, o.flash ?? 0);
     ctx.restore();
   }
 
@@ -653,12 +679,15 @@ export class BoardView {
   /** Where the bodies of a piece stand: one, or Blades' trio around the placed point. */
   private footprints(kind: BodyKind, x: number, y: number, facing: number): [number, number][] {
     if (kind !== "blades") return [[x, y]];
-    const out: [number, number][] = [];
+    const pts: SpreadBody[] = [];
+    const r = RADIUS("blades");
     for (let i = 0; i < 3; i++) {
       const a = (Math.PI / 2) * facing + (i * TAU) / 3;
-      out.push([x + Math.cos(a) * 0.32, y + Math.sin(a) * 0.32]);
+      pts.push({ id: i, x: x + Math.cos(a) * 0.32, y: y + Math.sin(a) * 0.32, r, side: 0, vis: spriteVis(r) });
     }
-    return out;
+    // Spaced the way the battle draws the trio (see spreadBattle), so Fight doesn't snap them together.
+    const off = spreadOffsets(pts);
+    return pts.map((p) => { const o = off.get(p.id); return [p.x + (o?.[0] ?? 0), p.y + (o?.[1] ?? 0)]; });
   }
 
   private drawRangeHint(kind: UnitKind, x: number, y: number, ok: boolean) {
@@ -688,10 +717,13 @@ export class BoardView {
 
   private drawBattle(sc: BattleScene) {
     const ctx = this.ctx, b = sc.battle, a = sc.alpha, as = this.assault;
+    const spread = this.spreadBattle(b, a);
     // During the round-end assault the survivors move on the assault's clock, not the battle's.
     const pos = (bd: Body) => {
       const st = as?.pose(bd.id);
-      return st ? [st.x, st.y] as const : [bd.px + (bd.x - bd.px) * a, bd.py + (bd.y - bd.py) * a] as const;
+      if (st) return [st.x, st.y] as const;
+      const o = spread.get(bd.id);
+      return [bd.px + (bd.x - bd.px) * a + (o?.[0] ?? 0), bd.py + (bd.y - bd.py) * a + (o?.[1] ?? 0)] as const;
     };
     const height = (bd: Body) => (bd.flying ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
     const tex = vfxReady();
@@ -699,6 +731,7 @@ export class BoardView {
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
       const left = Math.min(1, (z.until - b.time) / 0.6);
+      if (z.kind === "thorn") { this.drawBrambles(z, left); continue; }
       const fl = 0.75 + 0.25 * Math.sin(this.time * 17 + z.id);
       this.ground(z.x, z.y, (g) => {
         const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
@@ -830,6 +863,7 @@ export class BoardView {
       list.push({ y: p.py + (p.y - p.py) * a, layer: lob ? 2 : 1, draw: () => { ctx.save(); ctx.globalAlpha *= vanish; this.drawProj(p, a); ctx.restore(); } });
     }
     if (as) this.pushShots(list, as);
+    this.pushAirAnims(list);
     this.pushKeeps(list, live.filter((bd) => bd.alive && !bd.flying && !as?.pose(bd.id)?.gone).map((bd) => ({ x: pos(bd)[0], y: pos(bd)[1], kind: bd.kind })));
     for (const d of sortDrawables(list)) d.draw();
     // ---- bars and ranks on top (not for illusions, bodies underground or the assault's strikers)
@@ -851,6 +885,31 @@ export class BoardView {
       const at = this.headAt(bd.kind, bd.rank, x, y, height(bd), bd.radius);
       drawRank(ctx, at.x, at.y + at.r * 1.3 - (bd.hp < bd.maxHp && !st ? 14 : 5), at.r * 1.3, bd.rank);
     }
+  }
+
+  private spreadOf = new Map<number, [number, number]>();
+  private spreadFor?: Battle;
+  private spreadT = 0;
+  /** Render-only crowd spacing for ground bodies (spread.ts), eased per body so figures glide apart rather than jump.
+   *  Bodies seen for the first time start at their target, matching the deploy footprints. */
+  private spreadBattle(b: Battle, a: number): Map<number, [number, number]> {
+    if (this.spreadFor !== b) { this.spreadOf.clear(); this.spreadFor = b; this.spreadT = this.time; }
+    const dt = Math.max(0, Math.min(0.1, this.time - this.spreadT));
+    this.spreadT = this.time;
+    const crowd: SpreadBody[] = [];
+    for (const bd of b.bodies) {
+      if (!bd.alive || bd.flying || bd.burrowed || bd.kind === "mine") continue;
+      const r = RADIUS(bd.kind);
+      crowd.push({ id: bd.id, x: bd.px + (bd.x - bd.px) * a, y: bd.py + (bd.y - bd.py) * a, r: bd.radius, side: bd.side, vis: spriteVis(r) });
+    }
+    const target = spreadOffsets(crowd), k = 1 - Math.exp(-dt * 6);
+    for (const c of crowd) {
+      const t = target.get(c.id) ?? [0, 0], cur = this.spreadOf.get(c.id);
+      if (!cur) { this.spreadOf.set(c.id, [t[0], t[1]]); continue; }
+      cur[0] += (t[0] - cur[0]) * k; cur[1] += (t[1] - cur[1]) * k;
+    }
+    // The dead keep the offset they fell with.
+    return this.spreadOf;
   }
 
   private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number, fade: number) {
@@ -907,7 +966,69 @@ export class BoardView {
       ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
       ctx.beginPath(); ctx.arc(at.x + at.r * 0.8, at.y - at.r * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
     }
+    if (bd.alive && (bd.ward ?? 0) > 0) {
+      // Lantern ward: a warm bubble that thins as it soaks up blows.
+      const fade = Math.min(1, (bd.wardT ?? 1) / 0.5);
+      const pulse = 0.85 + 0.15 * Math.sin(this.time * 6 + bd.id);
+      ctx.save();
+      ctx.globalAlpha = 0.75 * fade;
+      ctx.strokeStyle = bd.wardBurst ? "#fff2b8" : "#ffd27a"; ctx.lineWidth = 2;
+      ctx.fillStyle = "rgba(255,214,120,0.14)";
+      ctx.beginPath(); ctx.ellipse(at.x, at.y - at.r * 0.35, at.r * 1.3 * pulse, at.r * 1.45 * pulse, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    if (bd.alive && bd.kind === "hook" && (bd.state === "cast" || bd.state === "reel")) {
+      // The Hookwarden's chain, taut from its fist to each catch.
+      for (const id of bd.hits ?? []) {
+        const v = b.bodies.find((o) => o.id === id);
+        if (!v || !v.alive) continue;
+        const vx = v.x, vy = v.y;
+        let tx = vx, ty = vy;
+        if (bd.state === "cast") {
+          // In flight: the hook runs out from the fist toward the target.
+          const k = Math.max(0, Math.min(1, 1 - (bd.budget - b.time) / Math.max(0.05, Math.hypot(vx - x, vy - y) / 12)));
+          tx = x + (vx - x) * k; ty = y + (vy - y) * k;
+        }
+        const p0 = this.cam.project(x, y, 0.35), p1 = this.cam.project(tx, ty, 0.3);
+        ctx.save();
+        ctx.strokeStyle = "#3b3f48"; ctx.lineWidth = Math.max(2, p0.s * 0.07); ctx.setLineDash([p0.s * 0.09, p0.s * 0.05]);
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+        ctx.strokeStyle = bd.rank >= 4 ? "#fff2b8" : "#b9c2cf"; ctx.lineWidth = Math.max(1, p0.s * 0.035);
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+        ctx.restore();
+      }
+    }
     if (bd.alive && bd.stun > 0.05) this.drawStun(at.x, at.y - at.r * 1.1, at.r, tex);
+  }
+
+  /** A Thornweaver's bramble patch: a mossy ground stain with thorned runners curling across it. */
+  private drawBrambles(z: { id: number; x: number; y: number; r: number; until: number }, left: number) {
+    this.ground(z.x, z.y, (g) => {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
+      gr.addColorStop(0, `rgba(96,122,58,${0.5 * left})`);
+      gr.addColorStop(0.7, `rgba(74,96,44,${0.35 * left})`);
+      gr.addColorStop(1, "rgba(60,80,40,0)");
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(0, 0, z.r, 0, TAU); g.fill();
+      const n = Math.max(5, Math.round(z.r * 7));
+      g.lineCap = "round";
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * TAU + z.id * 1.3, rr = z.r * (0.55 + 0.35 * ((i * 7 + z.id) % 3) / 2);
+        const sway = Math.sin(this.time * 2 + i) * 0.04;
+        const mx = Math.cos(a0 + 0.5 + sway) * rr * 0.6, my = Math.sin(a0 + 0.5 + sway) * rr * 0.6;
+        const ex = Math.cos(a0) * rr, ey = Math.sin(a0) * rr;
+        g.strokeStyle = `rgba(58,44,30,${0.95 * left})`; g.lineWidth = 0.07;
+        g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+        g.strokeStyle = `rgba(122,150,72,${0.9 * left})`; g.lineWidth = 0.035;
+        g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(mx, my, ex, ey); g.stroke();
+        // thorns along the runner
+        g.fillStyle = `rgba(236,224,196,${0.9 * left})`;
+        for (const t of [0.45, 0.75]) {
+          const px = 2 * (1 - t) * t * mx + t * t * ex, py = 2 * (1 - t) * t * my + t * t * ey;
+          g.beginPath(); g.moveTo(px - 0.025, py); g.lineTo(px + Math.cos(a0 + 1.6) * 0.07, py + Math.sin(a0 + 1.6) * 0.07); g.lineTo(px + 0.025, py); g.fill();
+        }
+      }
+    });
   }
 
   private drawFuse(x: number, y: number, keg: boolean, urgent = false) {
@@ -1382,7 +1503,7 @@ export class BoardView {
     }
     for (const f of fx.floats) {
       const u = 1 - f.life / f.max;
-      const q = cam.project(f.x, f.y, 0.6);
+      const q = cam.project(f.x, f.y, 0.6 + (f.z ?? 0));
       ctx.save();
       ctx.globalAlpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
       // Whole pixels only: the float drifts in depth every frame, and a new font size each frame misses the

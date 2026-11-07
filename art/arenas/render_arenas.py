@@ -1,6 +1,6 @@
 """Arenas v3: one battlefield per campaign act in the active style direction (Sunlit Meadow), for the 3/4 camera.
 
-    blender -b --factory-startup -P art/arenas/render_arenas.py -- [--only 1,5] [--samples 16] [--quick]
+    blender -b --factory-startup -P art/arenas/render_arenas.py -- [--only 1,5] [--samples 16] [--quick] [--no-ground | --no-props]
     npm run art:arenas
 
 Per act this renders, with the shared toon kit (art/muster_art: ink hulls, cel bands, violet shadow tint):
@@ -55,14 +55,23 @@ ACTS = {
             border="rocks", trees=("pine", "pine", "crag"), scatter="pebbles", obstacle="crag"),
     5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#cf5446", path_dk="#9c3a30",
                                      strip="#86c25a", strip_dk="#6aa947", court="#dcc6a0", court_dk="#a88d68"),
-            court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar"),
+            court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar",
+            relief="flagstones", stones=("#dcc6a0", "#e7d6b3", "#ccb38b", "#d5bf98"), trim="#ffcf4d"),
     6: dict(name="Frozen Reach", g=dict(grass="#eef5fb", grass_dk="#d3e2ef", grass_lt="#ffffff", path="#c5d7e8", path_dk="#9fb7cf",
                                         strip="#dbe7f2", strip_dk="#b9cde0", foliage="#3f8f6a", foliage_dk="#2b6b52", rock="#a9b4c2", rock_dk="#76828f",
                                         moss="#f4f9ff", edge="#8aa2bb"),
-            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock"),
+            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock", relief="snow"),
     7: dict(name="Sky Throne", g=dict(grass="#bfe0ff", grass_dk="#a6d0f7", grass_lt="#e6f3ff", path="#6f8fe0", path_dk="#4c69bd",
                                       strip="#efe3c8", strip_dk="#cdbd9a", court="#f5efe3", court_dk="#d9cdb6", rock="#f2ece0", rock_dk="#c9bfae"),
-            court=True, border="rail", trees=("cloud",), scatter="none", obstacle="obelisk"),
+            court=True, border="rail", trees=("cloud",), scatter="none", obstacle="obelisk",
+            relief="flagstones", stones=("#f5efe3", "#fbf8f1", "#ebe1cf", "#e9eef5"), strip_stones=("#efe3c8", "#f7eedb", "#e3d3b2"),
+            inlay="#ffcf4d", trim="#ffcf4d", path_tiles=True),
+    8: dict(name="Mirelight Fen", g=dict(grass="#88bd62", grass_dk="#6ea44f", grass_lt="#a6d47a", path="#d0aa78", path_dk="#9a7550",
+                                         strip="#6fb9b8", strip_dk="#4f9a9c", foliage="#78b552", foliage_dk="#4f8d3e", moss="#86b852",
+                                         willow="#b2d35e", willow_dk="#86ad44",
+                                         rock="#a3a48c", rock_dk="#737660", edge="#5d8a49", plank="#cf9d62", plank_dk="#9a6b3d"),
+            border="reeds", trees=("willow", "willow", "reedbed", "broad", "willow"), scatter="pond", obstacle="fenlamp", relief="fen",
+            water="#2f97b0", water_lt="#7fd2dc", lantern="#ffcf6b"),
 }
 
 
@@ -72,6 +81,8 @@ def parse():
     ap.add_argument("--only", default="")
     ap.add_argument("--samples", type=int, default=16)
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--no-ground", action="store_true", help="skip the backdrop (props only)")
+    ap.add_argument("--no-props", action="store_true", help="skip the obstacle props (backdrop only)")
     return ap.parse_args(argv)
 
 
@@ -183,6 +194,21 @@ def main():
             elif kind == "crag":
                 wk.ball(0.55 * s, toon("rock"), loc=B(x, y, 0.3 * s), scale=(1.0, 0.9, 0.95), subdiv=1, smooth=False, rot=(0, 0, 30 * i))
                 wk.ball(0.32 * s, toon("rock_dk"), loc=B(x + 0.4 * s, y + 0.2 * s, 0.15 * s), subdiv=1, smooth=False)
+            elif kind == "willow":
+                wk.cyl(0.1 * s, 0.6 * s, toon("trunk"), loc=B(x, y, 0.3 * s), r2=0.07 * s)
+                wk.ball(0.42 * s, toon("willow"), loc=B(x, y, 1.0 * s), scale=(1.0, 0.95, 0.55), subdiv=2)
+                wk.ball(0.26 * s, toon("grass_lt"), loc=B(x - 0.08 * s, y - 0.08 * s, 1.14 * s), scale=(1.0, 0.9, 0.5), subdiv=2)
+                for j in range(11):  # the hanging curtain, wider than the crown
+                    aa = j * math.tau / 11 + i
+                    wk.cone(0.12 * s, 0.8 * s, toon("willow_dk" if j % 2 else "willow"), loc=B(x + math.cos(aa) * 0.5 * s, y + math.sin(aa) * 0.44 * s, 0.6 * s),
+                            rot=(180 + 14 * math.sin(aa), -14 * math.cos(aa), 0), seg=6)
+            elif kind == "reedbed":
+                for j in range(5):
+                    aa = j * 1.3 + i
+                    rx, ry = x + math.cos(aa) * 0.18 * s, y + math.sin(aa) * 0.14 * s
+                    wk.cone(0.05 * s, (0.55 + 0.1 * (j % 3)) * s, toon("foliage" if j % 2 else "foliage_dk"), loc=B(rx, ry, 0.28 * s), rot=(8 * math.cos(aa), 8 * math.sin(aa), 0), seg=5)
+                    if j % 2 == 0:
+                        wk.cyl(0.035 * s, 0.14 * s, K.toon("#7a4f2f"), loc=B(rx, ry, (0.62 + 0.1 * (j % 3)) * s), seg=6, outline=0.006)
             elif kind == "topiary":
                 wk.box((0.6 * s, 0.6 * s, 0.35 * s), toon("court_dk"), loc=B(x, y, 0.17 * s), bevel=0.04)
                 wk.cyl(0.05 * s, 0.4 * s, toon("trunk"), loc=B(x, y, 0.5 * s))
@@ -210,6 +236,20 @@ def main():
                 wk.ball(0.27, toon("rock" if i % 3 else "rock_dk"), loc=B(x, y, 0.13), scale=(1.15, 1.05, 0.75), subdiv=1, smooth=False, rot=(0, 0, 37 * i))
             elif kind == "snow":
                 wk.ball(0.3, K.toon("#ffffff"), loc=B(x, y, 0.12), scale=(1.15, 1.1, 0.7), subdiv=2)
+            elif kind == "reeds":
+                if i % 7 == 3:  # a lantern post now and then
+                    wk.cyl(0.05, 0.62, toon("plank_dk"), loc=B(x, y, 0.31), seg=8)
+                    wk.box((0.16, 0.16, 0.05), toon("plank_dk"), loc=B(x, y, 0.64))
+                    wk.sphere(0.075, K.glow(th["lantern"], 2.2), loc=B(x, y, 0.72), seg=10, rings=6, outline=0.006)
+                    wk.cone(0.11, 0.08, toon("plank_dk"), loc=B(x, y, 0.82), seg=8)
+                    return
+                wk.ball(0.24, toon("moss"), loc=B(x, y, 0.06), scale=(1.2, 1.1, 0.45), subdiv=2)
+                for j in range(4):
+                    aa = j * 1.7 + i
+                    wk.cone(0.045, 0.34 + 0.08 * (j % 2), toon("foliage" if j % 2 else "foliage_dk"), loc=B(x + math.cos(aa) * 0.12, y + math.sin(aa) * 0.1, 0.22),
+                            rot=(10 * math.cos(aa), 10 * math.sin(aa), 0), seg=5, outline=0.006)
+                if i % 2:
+                    wk.cyl(0.03, 0.1, K.toon("#7a4f2f"), loc=B(x, y, 0.42), seg=6, outline=0.005)
             else:
                 wk.ball(0.3, toon("foliage_dk" if i % 3 == 0 else "foliage"), loc=B(x, y, 0.22), scale=(1.1, 1.1, 0.85), subdiv=2)
 
@@ -227,103 +267,312 @@ def main():
                 wk.sphere(0.05, K.glow("#ff9a3c", 2.0), loc=B(x, y, 0.09), seg=8, rings=5, outline=0)
             elif kind == "pebbles":
                 wk.ball(0.09, toon("rock"), loc=B(x, y, 0.04), scale=(1.2, 1, 0.6), subdiv=1, smooth=False, outline=0.008)
+            elif kind == "pond":
+                with wk.at(B(x, y, 0.004), rot=(0, 0, 37 * i), scale=(1.4, 1.0, 1)):
+                    wk.cyl(0.42, 0.012, toon("path_dk"), seg=20, outline=0)
+                    wk.cyl(0.36, 0.016, K.toon(th["water"]), seg=20, outline=0.004)
+                for j in range(2):
+                    wk.cyl(0.08, 0.01, toon("foliage"), loc=B(x + 0.2 * (j - 0.5), y + 0.06 * j, 0.022), seg=10, outline=0.004)
+                if i % 3 == 0:
+                    wk.sphere(0.04, K.toon("#ff9fc0"), loc=B(x - 0.1, y, 0.04), seg=8, rings=5, outline=0.004)
             elif kind == "ice":
                 wk.crystal(0.08, 0.3, K.toon("#bfe9ff", spec=0.5), loc=B(x, y, 0.0), rot=(8, -6, 20 * i))
 
-        # ---------------- the ground
-        court = th.get("court")
-        wk.box((44, 44, 0.04), S.ground_mat(st, "grass", "grass_dk", "patches", key_c="grass_lt"), loc=B(4.5, 3.0, -0.02), outline=0)
-        if court:
-            wk.box((W + 1.2, H + 1.2, 0.05), S.ground_mat(st, "court", "court_dk", "tiles", scale=1.2), loc=B(W / 2, H / 2, -0.004), outline=0)
-            wk.box((W + 1.5, H + 1.5, 0.12), toon("court_dk"), loc=B(W / 2, H / 2, -0.07), bevel=0.03)
-        strip_pat = th.get("strip_pat") or ("tiles" if court else "patches")
-        wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", strip_pat, scale=1.3), loc=B(W / 2, H / 2, 0.012), outline=0)
-        for yy in (ZD, H - ZD):
-            wk.box((W, 0.09, 0.05), toon("edge"), loc=B(W / 2, yy, 0.03), bevel=0.015, outline=0)
-        pts = [(4.5 + 0.32 * math.sin(i * 0.55), -6.0 + i * 0.6) for i in range(int((H + 6.5) / 0.6) + 1)]
-        ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.03)
-        ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "tiles" if court else "patches", scale=2.0), 0.034)
-        for kx, ky in KEEPS:
-            wk.cyl(1.5, 0.02, K.flat(g["path_dk"]), loc=B(kx, ky, 0.036), seg=40, outline=0)
-            wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.04), seg=40, outline=0)
-        # ---------------- the border around the board
-        i = 0
-        yy = -0.3
-        while yy < H + 0.6:
-            for xx in (-0.45, W + 0.45):
-                border_piece(xx, yy, False, i)
-                i += 1
-            yy += 0.6
-        for yb in (-0.45, H + 0.55):
-            xx = -0.45
-            while xx < W + 0.6:
-                if abs(xx - 4.5) > 0.95:
-                    border_piece(xx, yb, True, i)
-                i += 1
-                xx += 0.6
-        # ---------------- trees and scenery beyond it
-        kinds = th["trees"]
-        j = 0
-        for gy in range(-17, 22):
-            for gx in range(-12, 22):
-                x = gx * 1.25 + (rnd(gx, gy) - 0.5) * 0.7 + (0.6 if gy % 2 else 0)
-                y = gy * 1.05 + (rnd(gy, gx + 9) - 0.5) * 0.5
-                inside = -1.3 < x < W + 1.3 and -1.25 < y < H + 1.4
-                if inside or (abs(x - 4.5) < 1.2 and y < 0):
-                    continue
-                u, v = cam_uv(x, y)
-                if not (VIEW["u0"] - 0.04 < u < VIEW["u1"] + 0.04 and VIEW["v0"] - 0.06 < v < VIEW["v1"] + 0.02):
-                    continue
-                if rnd(gx * 3, gy * 7) < 0.12:
-                    scatter(x, y, j)
-                    j += 1
-                    continue
-                tree(kinds[j % len(kinds)], x, y, 0.95 + rnd(gx, gy * 3) * 0.4, j)
-                j += 1
-        for n in range(26):  # small things in the margins between the border and the trees
-            side = n % 2
-            x = (-0.95 if side == 0 else W + 0.95) + (rnd(n, 2) - 0.5) * 0.4
-            y = -0.8 + rnd(n, 3) * (H + 1.8)
-            scatter(x, y, n)
+        FLAG_H = 0.05
 
-        # ---------------- backdrop through the game camera
-        cam = stage.cam
-        d = cam.data
-        d.type = "PERSP"
-        d.sensor_fit = "HORIZONTAL"
-        d.sensor_width = 36.0
-        uw = VIEW["u1"] - VIEW["u0"]
-        d.lens = 36.0 / uw
-        d.shift_x = ((VIEW["u0"] + VIEW["u1"]) / 2) / uw
-        d.shift_y = -((VIEW["v0"] + VIEW["v1"]) / 2) / uw
-        d.clip_start, d.clip_end = 0.5, 200.0
-        cam.location = B(W / 2, H / 2 + DIST * math.sin(TILT), DIST * math.cos(TILT))
-        cam.rotation_euler = (TILT, 0, 0)
-        rx = int(round(uw * KPX * ss))
-        ry = int(round((VIEW["v1"] - VIEW["v0"]) * KPX * ss))
-        sc = stage.sc
-        sc.render.resolution_x, sc.render.resolution_y = rx, ry
-        bpy.context.view_layer.update()
-        err = 0.0
-        for (x, y) in ((0, 0), (W, 0), (0, H), (W, H), (4.5, 7), (-3, -8)):
-            p = world_to_camera_view(sc, cam, Vector(B(x, y, 0)))
-            u, v = cam_uv(x, y)
-            fx, fy = (u - VIEW["u0"]) / uw, 1 - (v - VIEW["v0"]) / (VIEW["v1"] - VIEW["v0"])
-            err = max(err, abs(p.x - fx) * rx, abs(p.y - fy) * ry)
-        print(f"ARENA {act} camera check: max error {err:.2f}px at {rx}x{ry}", flush=True)
-        img = render(os.path.join(BUILD, f"act{act}_raw.png"))
-        img = S.downsample(img, ss)
-        img = S.grade(img, st, vignette=False)
-        png = os.path.join(BUILD, f"act{act}.png")
-        S.write_png(png, img)
-        to_jpeg(png, os.path.join(OUT, f"act{act}.jpg"))
+        def flagstones(x0, y0, x1, y1, size, tones, seed, gap=0.05):
+            """Running-bond slabs over [x0, x1] x [y0, y1]: bevelled, a hair of height and tilt jitter, a tone each."""
+            rows = max(1, int(round((y1 - y0) / size)))
+            dy = (y1 - y0) / rows
+            ncol = max(1, int(round((x1 - x0) / size)))
+            dx = (x1 - x0) / ncol
+            mats = [toon(c, spec=0.15) for c in tones]
+            for r in range(rows):
+                off = (0.5 if r % 2 else 0.0) * dx
+                cuts = sorted({x0, x1} | {x0 + off + c * dx for c in range(-1, ncol + 2) if x0 + 0.2 < x0 + off + c * dx < x1 - 0.2})
+                c = 0
+                while c < len(cuts) - 1:
+                    xa, xb = cuts[c], cuts[c + 1]
+                    # Now and then two slabs are one long one.
+                    if c < len(cuts) - 2 and rnd(seed * 31 + r, c * 7) < 0.18:
+                        xb = cuts[c + 2]
+                        c += 1
+                    c += 1
+                    ya, yb = y0 + r * dy, y0 + (r + 1) * dy
+                    h = rnd(seed + r * 13, c * 17)
+                    tone = mats[int(rnd(seed * 7 + c, r * 3 + 5) * len(mats)) % len(mats)]
+                    wk.box((xb - xa - gap, yb - ya - gap, FLAG_H), tone,
+                           loc=B((xa + xb) / 2, (ya + yb) / 2, FLAG_H / 2 - 0.006 + (h - 0.5) * 0.014),
+                           rot=((rnd(r, c + seed) - 0.5) * 1.6, (rnd(c, r + seed) - 0.5) * 1.6, 0), bevel=0.028, outline=0.007)
+
+        if not a.no_ground:
+            # ---------------- the ground
+            court = th.get("court")
+            relief = th.get("relief")
+            wk.box((44, 44, 0.04), S.ground_mat(st, "grass", "grass_dk", "patches", key_c="grass_lt"), loc=B(4.5, 3.0, -0.02), outline=0)
+
+            def path_x(y):
+                """Centre of the keep-to-keep path at board row y (the ribbon below)."""
+                return 4.5 + 0.32 * math.sin(((y + 6.0) / 0.6) * 0.55)
+
+            pts = [(path_x(-6.0 + i * 0.6), -6.0 + i * 0.6) for i in range(int((H + 6.5) / 0.6) + 1)]
+            if relief == "flagstones":
+                # Raised, bevelled flagstones in running bond with ink grout and a few tones each, so the courtyard has
+                # real height (bevels catch the key light, outlines read as grout) instead of a flat brick texture.
+                # Kept low (FLAG_H) so units still stand on the board plane.
+                wk.box((W + 1.2, H + 1.2, 0.05), K.flat(g["court_dk"]), loc=B(W / 2, H / 2, -0.004), outline=0)
+                wk.box((W + 1.5, H + 1.5, 0.12), toon("court_dk"), loc=B(W / 2, H / 2, -0.07), bevel=0.03)
+                tones = th["stones"]
+                flagstones(-0.6, -0.6, W + 0.6, ZD - 0.05, 0.82, tones, 1)
+                flagstones(-0.6, H - ZD + 0.05, W + 0.6, H + 0.6, 0.82, tones, 2)
+                if th.get("strip_stones"):
+                    flagstones(0.0, ZD + 0.05, W, H - ZD - 0.05, 1.1, th["strip_stones"], 3)
+                    wk.box((W, H - 2 * ZD, 0.04), K.flat(g["strip_dk"]), loc=B(W / 2, H / 2, 0.0), outline=0)  # grout, below the slabs
+                else:
+                    # A sunken lawn between the zones, with tufts.
+                    wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", "patches", scale=1.3), loc=B(W / 2, H / 2, 0.024), outline=0)
+                    for n in range(34):
+                        x, y = 0.3 + rnd(n, 41) * (W - 0.6), ZD + 0.25 + rnd(n, 42) * (H - 2 * ZD - 0.5)
+                        if abs(x - path_x(y)) < 0.95:
+                            continue
+                        for j in range(3):
+                            wk.cone(0.035, 0.11, toon("grass_dk" if j % 2 else "grass_lt"), loc=B(x + 0.05 * (j - 1), y + 0.02 * j, 0.05), rot=(12 * (j - 1), 0, 0), seg=5, outline=0.004)
+                if th.get("inlay"):
+                    # Gold inlay ring at the centre of the board, under the runner.
+                    wk.torus(1.05, 0.035, K.toon(th["inlay"], spec=0.4), loc=B(W / 2, H / 2, 0.035), scale=(1, 1, 0.5), outline=0.004)
+                    wk.torus(0.7, 0.025, K.toon(th["inlay"], spec=0.4), loc=B(W / 2, H / 2, 0.035), scale=(1, 1, 0.5), outline=0.004)
+                # Stone kerbs on the zone lines, with a gap where the path passes.
+                kerb = th.get("kerb", "court_dk")
+                for yy in (ZD, H - ZD):
+                    px = path_x(yy)
+                    for xa, xb in ((-0.05, px - 0.8), (px + 0.8, W + 0.05)):
+                        wk.box((xb - xa, 0.16, 0.1), toon(kerb, spec=0.3), loc=B((xa + xb) / 2, yy, 0.05), bevel=0.03, outline=0.006)
+                    for xx in (px - 0.8, px + 0.8):
+                        wk.cyl(0.11, 0.18, toon(kerb, spec=0.3), loc=B(xx, yy, 0.09), seg=12, bevel=0.025, outline=0.006)
+                        wk.sphere(0.07, K.toon(th.get("inlay") or g["court"], spec=0.4), loc=B(xx, yy, 0.21), seg=10, rings=6, outline=0.004)
+                ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.075)
+                ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "tiles" if th.get("path_tiles") else "flat", scale=2.0), 0.079)
+                if th.get("trim"):
+                    for side in (-1, 1):
+                        trim = [(x + side * 0.6, y) for x, y in pts]
+                        ribbon(trim, 0.07, K.flat(th["trim"]), 0.083)
+                for kx, ky in KEEPS:
+                    # A raised round dais under each keep.
+                    wk.cyl(1.52, 0.1, toon("court_dk"), loc=B(kx, ky, 0.05), seg=40, bevel=0.03, outline=0.006)
+                    wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.1), seg=40, outline=0)
+            elif relief == "snow":
+                # Frozen Reach: a frozen stream across the neutral strip, packed-snow banks along the zone lines and the
+                # path, wind ripples and a few ice patches in the deploy zones: soft height on an otherwise flat field.
+                wk.box((W + 1.2, H + 1.2, 0.02), S.ground_mat(st, "grass", "grass_dk", "patches", scale=1.6, key_c="grass_lt"), loc=B(W / 2, H / 2, 0.0), outline=0)
+                wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", "patches", scale=2.4), loc=B(W / 2, H / 2, 0.006), outline=0)
+                ice = K.toon("#bfe3f7", spec=0.7)
+                wk.box((W, H - 2 * ZD - 0.5, 0.02), ice, loc=B(W / 2, H / 2, 0.014), outline=0.005)
+                for n in range(9):  # cracks and glints on the ice
+                    x, y = 0.4 + rnd(n, 51) * (W - 0.8), ZD + 0.45 + rnd(n, 52) * (H - 2 * ZD - 0.9)
+                    a = rnd(n, 53) * 180
+                    wk.box((0.5 + rnd(n, 54) * 0.6, 0.025, 0.01), K.flat("#8fb8d6"), loc=B(x, y, 0.026), rot=(0, 0, a), outline=0)
+                    wk.box((0.22, 0.05, 0.01), K.flat("#ffffff"), loc=B(x + 0.3, y - 0.2, 0.027), rot=(0, 0, 35), outline=0)
+                for yy in (ZD, H - ZD):  # snow banks on the zone lines (low, so they read as ground, not walls)
+                    x = -0.1
+                    k = 0
+                    while x < W + 0.1:
+                        wk.ball(0.2 + 0.05 * rnd(k, yy), K.toon("#ffffff"), loc=B(x, yy + (rnd(k, 61) - 0.5) * 0.06, 0.0), scale=(1.4, 1.0, 0.42), subdiv=2, outline=0.005)
+                        x += 0.3
+                        k += 1
+                for side in (-1, 1):  # ploughed banks along the path
+                    for i in range(int((H + 2.0) / 0.32)):
+                        y = -1.0 + i * 0.32
+                        if abs(y - ZD) < 0.3 or abs(y - (H - ZD)) < 0.3:
+                            continue
+                        wk.ball(0.13, K.toon("#ffffff"), loc=B(path_x(y) + side * (0.72 + 0.04 * rnd(i, side)), y, 0.0), scale=(1.0, 1.5, 0.4), subdiv=2, outline=0.004)
+                for n in range(70):  # wind ripples (sastrugi)
+                    x, y = 0.2 + rnd(n, 71) * (W - 0.4), -0.4 + rnd(n, 72) * (H + 0.8)
+                    if abs(x - path_x(y)) < 1.0 or ZD - 0.3 < y < H - ZD + 0.3:
+                        continue
+                    wk.ball(0.18 + 0.1 * rnd(n, 73), K.toon("#f4f9ff"), loc=B(x, y, -0.005), scale=(2.2, 0.55, 0.22), rot=(0, 0, 18 + 10 * rnd(n, 74)), subdiv=2, outline=0.003)
+                for n in range(7):  # ice patches
+                    x, y = 0.6 + rnd(n, 81) * (W - 1.2), 0.6 + rnd(n, 82) * (H - 1.2)
+                    if abs(x - path_x(y)) < 1.2 or ZD - 0.5 < y < H - ZD + 0.5:
+                        continue
+                    with wk.at(B(x, y, 0.01), rot=(0, 0, rnd(n, 84) * 90), scale=(1.3, 0.9, 1)):
+                        wk.cyl(0.32 + 0.15 * rnd(n, 83), 0.012, ice, seg=18, outline=0.004)
+                    wk.box((0.2, 0.04, 0.01), K.flat("#ffffff"), loc=B(x - 0.08, y - 0.06, 0.02), rot=(0, 0, 30), outline=0)
+                for n in range(22):  # boot prints along a trail through your zone
+                    y = H - 0.8 - n * 0.24
+                    x = 1.6 + 0.5 * math.sin(n * 0.35) + (0.07 if n % 2 else -0.07)
+                    with wk.at(B(x, y, 0.012), scale=(0.75, 1.3, 1)):
+                        wk.cyl(0.045, 0.006, K.flat("#b9cde0"), seg=10, outline=0)
+                ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.02)
+                ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "patches", scale=2.0), 0.024)
+                for kx, ky in KEEPS:
+                    wk.cyl(1.5, 0.06, K.toon("#ffffff"), loc=B(kx, ky, 0.02), seg=40, bevel=0.025, outline=0.005)
+                    wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.05), seg=40, outline=0)
+            elif relief == "fen":
+                # Mirelight Fen: a reed-banked mere across the neutral strip with a plank boardwalk over it, peat banks,
+                # tussocks and puddles in the deploy zones, plank decks under the keeps: height everywhere, all of it low.
+                wk.box((W + 1.2, H + 1.2, 0.02), S.ground_mat(st, "grass", "grass_dk", "patches", scale=1.5, key_c="grass_lt"), loc=B(W / 2, H / 2, 0.0), outline=0)
+                water = K.toon(th["water"])
+                wk.box((W + 1.0, H - 2 * ZD + 0.36, 0.02), K.flat(g["path_dk"]), loc=B(W / 2, H / 2, 0.006), outline=0)  # peat bank
+                wk.box((W + 1.0, H - 2 * ZD - 0.04, 0.02), water, loc=B(W / 2, H / 2, 0.02), outline=0.005)
+                for n in range(16):  # ripples and glints on the water
+                    x, y = 0.3 + rnd(n, 91) * (W - 0.6), ZD + 0.3 + rnd(n, 92) * (H - 2 * ZD - 0.6)
+                    if abs(x - path_x(y)) < 0.9:
+                        continue
+                    if n % 2:
+                        wk.torus(0.12 + 0.12 * rnd(n, 93), 0.012, K.flat(th["water_lt"]), loc=B(x, y, 0.034), scale=(1.4, 1, 0.3), outline=0)
+                    else:  # a glint
+                        with wk.at(B(x, y, 0.034), scale=(2.4, 0.7, 1)):
+                            wk.cyl(0.05 + 0.03 * rnd(n, 93), 0.004, K.flat("#d8f4f6"), seg=10, outline=0)
+                for n in range(14):  # lily pads
+                    x, y = 0.3 + rnd(n, 94) * (W - 0.6), ZD + 0.3 + rnd(n, 95) * (H - 2 * ZD - 0.6)
+                    if abs(x - path_x(y)) < 0.95:
+                        continue
+                    wk.cyl(0.1 + 0.04 * rnd(n, 96), 0.01, toon("foliage"), loc=B(x, y, 0.036), seg=12, outline=0.004)
+                    if n % 4 == 0:
+                        wk.sphere(0.04, K.toon("#ff9fc0"), loc=B(x + 0.03, y - 0.02, 0.055), seg=8, rings=5, outline=0.004)
+                for yy in (ZD, H - ZD):  # reed tufts along both banks (low, so they read as ground)
+                    for n in range(30):
+                        x = -0.2 + n * 0.32 + (rnd(n, yy) - 0.5) * 0.1
+                        if abs(x - path_x(yy)) < 0.85 or rnd(n, yy + 1) < 0.25:
+                            continue
+                        for j in range(3):
+                            wk.cone(0.035, 0.14 + 0.05 * j, toon("foliage_dk" if j % 2 else "foliage"), loc=B(x + 0.05 * (j - 1), yy + (0.05 if yy < H / 2 else -0.05), 0.08),
+                                    rot=(10 * (j - 1), 0, 0), seg=5, outline=0.004)
+                for n in range(40):  # tussocks in the deploy zones
+                    x, y = 0.3 + rnd(n, 101) * (W - 0.6), 0.3 + rnd(n, 102) * (H - 0.6)
+                    if abs(x - path_x(y)) < 0.95 or ZD - 0.3 < y < H - ZD + 0.3 or any(math.hypot(x - kx, y - ky) < 1.7 for kx, ky in KEEPS):
+                        continue
+                    wk.ball(0.12, toon("grass_dk"), loc=B(x, y, 0.0), scale=(1.3, 1.1, 0.5), subdiv=2, outline=0.004)
+                    for j in range(3):
+                        wk.cone(0.03, 0.12, toon("grass_lt" if j % 2 else "foliage"), loc=B(x + 0.05 * (j - 1), y, 0.08), rot=(14 * (j - 1), 0, 0), seg=5, outline=0.003)
+                for n in range(8):  # puddles
+                    x, y = 0.6 + rnd(n, 111) * (W - 1.2), 0.6 + rnd(n, 112) * (H - 1.2)
+                    if abs(x - path_x(y)) < 1.2 or ZD - 0.5 < y < H - ZD + 0.5 or any(math.hypot(x - kx, y - ky) < 1.8 for kx, ky in KEEPS):
+                        continue
+                    with wk.at(B(x, y, 0.004), rot=(0, 0, rnd(n, 113) * 90), scale=(1.4, 0.9, 1)):
+                        wk.cyl(0.36 + 0.12 * rnd(n, 114), 0.012, K.flat(g["path_dk"]), seg=18, outline=0)
+                        wk.cyl(0.3 + 0.12 * rnd(n, 114), 0.016, water, seg=18, outline=0.003)
+                ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.022)
+                ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "patches", scale=2.0), 0.026)
+                # The boardwalk over the mere: planks across the path on short piles.
+                plank, plank_dk = toon("plank", spec=0.15), toon("plank_dk")
+                y = ZD - 0.35
+                n = 0
+                while y < H - ZD + 0.35:
+                    px = path_x(y)
+                    tang = math.degrees(math.atan2(path_x(y + 0.05) - path_x(y - 0.05), 0.1))
+                    wk.box((1.3, 0.17, 0.05), plank if n % 3 else plank_dk, loc=B(px, y, 0.065 + 0.006 * (rnd(n, 121) - 0.5)), rot=(0, 0, tang + 3 * (rnd(n, 122) - 0.5)), bevel=0.012, outline=0.005)
+                    if n % 4 == 0:
+                        for side in (-1, 1):
+                            wk.cyl(0.05, 0.16, plank_dk, loc=B(px + side * 0.7, y, 0.06), seg=8, bevel=0.01, outline=0.005)
+                    y += 0.2
+                    n += 1
+                for kx, ky in KEEPS:  # plank decks under the keeps
+                    R = 1.5
+                    wk.cyl(R + 0.04, 0.08, plank_dk, loc=B(kx, ky, 0.03), seg=40, bevel=0.02, outline=0.006)
+                    yy = -R + 0.1
+                    k = 0
+                    while yy < R - 0.05:
+                        half = math.sqrt(max(0.0, R * R - (yy + 0.08) ** 2)) - 0.08
+                        if half > 0.15:
+                            wk.box((2 * half, 0.19, 0.04), plank if k % 3 else toon("path"), loc=B(kx, ky + yy + 0.1, 0.085), bevel=0.01, outline=0.004)
+                        yy += 0.21
+                        k += 1
+                    for j in range(10):
+                        aa = j * math.tau / 10
+                        wk.cyl(0.07, 0.16, plank_dk, loc=B(kx + math.cos(aa) * R, ky + math.sin(aa) * R, 0.08), seg=8, outline=0.005)
+            else:
+                if court:
+                    wk.box((W + 1.2, H + 1.2, 0.05), S.ground_mat(st, "court", "court_dk", "tiles", scale=1.2), loc=B(W / 2, H / 2, -0.004), outline=0)
+                    wk.box((W + 1.5, H + 1.5, 0.12), toon("court_dk"), loc=B(W / 2, H / 2, -0.07), bevel=0.03)
+                strip_pat = th.get("strip_pat") or ("tiles" if court else "patches")
+                wk.box((W, H - 2 * ZD, 0.02), S.ground_mat(st, "strip", "strip_dk", strip_pat, scale=1.3), loc=B(W / 2, H / 2, 0.012), outline=0)
+                for yy in (ZD, H - ZD):
+                    wk.box((W, 0.09, 0.05), toon("edge"), loc=B(W / 2, yy, 0.03), bevel=0.015, outline=0)
+                ribbon(pts, 1.45, K.flat(g["path_dk"]), 0.03)
+                ribbon(pts, 1.15, S.ground_mat(st, "path", "path_dk", "tiles" if court else "patches", scale=2.0), 0.034)
+                for kx, ky in KEEPS:
+                    wk.cyl(1.5, 0.02, K.flat(g["path_dk"]), loc=B(kx, ky, 0.036), seg=40, outline=0)
+                    wk.cyl(1.38, 0.02, S.ground_mat(st, "path", "path_dk", "tiles", scale=1.4), loc=B(kx, ky, 0.04), seg=40, outline=0)
+            # ---------------- the border around the board
+            i = 0
+            yy = -0.3
+            while yy < H + 0.6:
+                for xx in (-0.45, W + 0.45):
+                    border_piece(xx, yy, False, i)
+                    i += 1
+                yy += 0.6
+            for yb in (-0.45, H + 0.55):
+                xx = -0.45
+                while xx < W + 0.6:
+                    if abs(xx - 4.5) > 0.95:
+                        border_piece(xx, yb, True, i)
+                    i += 1
+                    xx += 0.6
+            # ---------------- trees and scenery beyond it
+            kinds = th["trees"]
+            j = 0
+            for gy in range(-17, 22):
+                for gx in range(-12, 22):
+                    x = gx * 1.25 + (rnd(gx, gy) - 0.5) * 0.7 + (0.6 if gy % 2 else 0)
+                    y = gy * 1.05 + (rnd(gy, gx + 9) - 0.5) * 0.5
+                    inside = -1.3 < x < W + 1.3 and -1.25 < y < H + 1.4
+                    if inside or (abs(x - 4.5) < 1.2 and y < 0):
+                        continue
+                    u, v = cam_uv(x, y)
+                    if not (VIEW["u0"] - 0.04 < u < VIEW["u1"] + 0.04 and VIEW["v0"] - 0.06 < v < VIEW["v1"] + 0.02):
+                        continue
+                    if rnd(gx * 3, gy * 7) < 0.12:
+                        scatter(x, y, j)
+                        j += 1
+                        continue
+                    tree(kinds[j % len(kinds)], x, y, 0.95 + rnd(gx, gy * 3) * 0.4, j)
+                    j += 1
+            for n in range(26):  # small things in the margins between the border and the trees
+                side = n % 2
+                x = (-0.95 if side == 0 else W + 0.95) + (rnd(n, 2) - 0.5) * 0.4
+                y = -0.8 + rnd(n, 3) * (H + 1.8)
+                scatter(x, y, n)
+
+            # ---------------- backdrop through the game camera
+            cam = stage.cam
+            d = cam.data
+            d.type = "PERSP"
+            d.sensor_fit = "HORIZONTAL"
+            d.sensor_width = 36.0
+            uw = VIEW["u1"] - VIEW["u0"]
+            d.lens = 36.0 / uw
+            d.shift_x = ((VIEW["u0"] + VIEW["u1"]) / 2) / uw
+            d.shift_y = -((VIEW["v0"] + VIEW["v1"]) / 2) / uw
+            d.clip_start, d.clip_end = 0.5, 200.0
+            cam.location = B(W / 2, H / 2 + DIST * math.sin(TILT), DIST * math.cos(TILT))
+            cam.rotation_euler = (TILT, 0, 0)
+            rx = int(round(uw * KPX * ss))
+            ry = int(round((VIEW["v1"] - VIEW["v0"]) * KPX * ss))
+            sc = stage.sc
+            sc.render.resolution_x, sc.render.resolution_y = rx, ry
+            bpy.context.view_layer.update()
+            err = 0.0
+            for (x, y) in ((0, 0), (W, 0), (0, H), (W, H), (4.5, 7), (-3, -8)):
+                p = world_to_camera_view(sc, cam, Vector(B(x, y, 0)))
+                u, v = cam_uv(x, y)
+                fx, fy = (u - VIEW["u0"]) / uw, 1 - (v - VIEW["v0"]) / (VIEW["v1"] - VIEW["v0"])
+                err = max(err, abs(p.x - fx) * rx, abs(p.y - fy) * ry)
+            print(f"ARENA {act} camera check: max error {err:.2f}px at {rx}x{ry}", flush=True)
+            img = render(os.path.join(BUILD, f"act{act}_raw.png"))
+            img = S.downsample(img, ss)
+            img = S.grade(img, st, vignette=False)
+            png = os.path.join(BUILD, f"act{act}.png")
+            S.write_png(png, img)
+            to_jpeg(png, os.path.join(OUT, f"act{act}.jpg"))
 
         # ---------------- obstacle props
         wk.clear()
+        d = stage.cam.data
         d.type = "ORTHO"
         c = {"camera": {"ppu": PROP_PPU, "supersample": ss, "elevation_deg": math.degrees(el_prop)}}
         props = []
-        for v in range(3):
+        for v in range(0 if a.no_props else 3):
             wk.clear()
             build_obstacle(wk, th["obstacle"], v, toon, K, B)
             verts = wk.verts_world()
@@ -338,7 +587,10 @@ def main():
             props.append({"file": name, "footprint": round(foot, 4)})
             man["prop"] = {"frame": [round(x1 - x0, 5), round(u1 - u0, 5)], "anchor": [round((0 - x0) / (x1 - x0), 5), round((u1 - 0) / (u1 - u0), 5)],
                            "res": [prx // ss, pry // ss], "elev": round(math.degrees(el_prop), 3)}
-        man["size"] = [rx // ss, ry // ss]
+        if not a.no_ground:
+            man["size"] = [rx // ss, ry // ss]
+        if a.no_props:
+            props = man["acts"].get(str(act), {}).get("props", [])
         man["acts"][str(act)] = {"name": th["name"], "edge": g["grass"], "obstacle": th["obstacle"], "ground": f"act{act}.jpg", "props": props}
         with open(man_path, "w") as f:
             json.dump(man, f, indent=1)
@@ -399,6 +651,38 @@ def build_obstacle(wk, kind, v, toon, K, B):
         for j in range(2 + v):
             aa = j * 2.3 + v
             wk.crystal(0.16, 0.7, K.toon("#bfe9ff", spec=0.6), loc=B(math.cos(aa) * 0.55, math.sin(aa) * 0.45, 0.3), rot=(18 * math.cos(aa), 18 * math.sin(aa), 0))
+    elif kind == "fenlamp":
+        # A peat mound held together by roots, with a lantern on a crooked post (or reeds, or a willow stump).
+        wk.ball(r * 0.97, K.toon("#7a5a3c"), loc=B(0, 0, 0.12), scale=(1.0, 0.94, 0.3), subdiv=2)
+        wk.ball(r * 0.74, toon("moss"), loc=B(-0.05, -0.04, 0.26), scale=(1.0, 0.95, 0.32), subdiv=2)
+        for j in range(5):
+            aa = j * 1.26 + v
+            wk.rod(B(math.cos(aa) * 0.35, math.sin(aa) * 0.3, 0.3), B(math.cos(aa) * 0.95, math.sin(aa) * 0.9, 0.02), 0.07, K.toon("#6b4a32"), r2=0.035, seg=6)
+        if v == 1:  # an old willow stump
+            wk.cyl(0.46, 1.3, K.toon("#8a6440"), loc=B(0.1, 0.1, 0.85), r2=0.36, seg=12)
+            wk.cyl(0.33, 0.04, K.toon("#d9b07a"), loc=B(0.1, 0.1, 1.5), seg=12, outline=0.008)
+            wk.ball(0.34, toon("willow"), loc=B(0.0, 0.2, 1.62), scale=(1.2, 1.0, 0.5), subdiv=2)
+            for j in range(7):
+                aa = j * 0.9 + 0.3
+                wk.cone(0.11, 0.75, toon("willow" if j % 2 else "willow_dk"), loc=B(0.1 + math.cos(aa) * 0.38, 0.1 + math.sin(aa) * 0.34, 1.32), rot=(180, 0, 0), seg=6)
+        else:  # a crooked post with a lit lantern
+            wk.rod(B(0.15, 0.2, 0.2), B(0.05, 0.25, 2.3), 0.1, K.toon("#6b4a32"), r2=0.07, seg=8)
+            wk.rod(B(0.05, 0.25, 2.2), B(-0.55, 0.25, 2.26), 0.055, K.toon("#6b4a32"), seg=6)
+            wk.rod(B(-0.52, 0.25, 2.24), B(-0.52, 0.25, 2.02), 0.015, K.toon("#3a2a20"), seg=4, outline=0.004)
+            wk.cone(0.24, 0.14, K.toon("#3a2a20"), loc=B(-0.52, 0.25, 2.02), seg=8)
+            wk.ball(0.19, K.glow("#ffcf6b", 2.6), loc=B(-0.52, 0.25, 1.8), scale=(1, 1, 1.2), subdiv=2, outline=0.008)
+            wk.box((0.3, 0.3, 0.05), K.toon("#3a2a20"), loc=B(-0.52, 0.25, 1.56))
+            if v == 2:  # a second, smaller lantern on a stake
+                wk.rod(B(0.55, -0.35, 0.2), B(0.55, -0.35, 1.2), 0.05, K.toon("#6b4a32"), seg=6)
+                wk.ball(0.13, K.glow("#ffcf6b", 2.6), loc=B(0.55, -0.35, 1.3), scale=(1, 1, 1.2), subdiv=2, outline=0.006)
+                wk.cone(0.16, 0.1, K.toon("#3a2a20"), loc=B(0.55, -0.35, 1.48), seg=8)
+        n = 4 if v == 2 else 2
+        for j in range(n):  # reeds round the edge
+            aa = j * 2.1 + 0.7 * v
+            x, y = math.cos(aa) * 0.6, math.sin(aa) * 0.5
+            for q in range(3):
+                wk.cone(0.06, 0.8 + 0.15 * q, toon("foliage" if q % 2 else "foliage_dk"), loc=B(x + 0.07 * (q - 1), y, 0.55), rot=(9 * (q - 1), 0, 0), seg=5)
+            wk.cyl(0.05, 0.18, K.toon("#7a4f2f"), loc=B(x, y, 1.08), seg=6, outline=0.006)
     else:  # boulder
         wk.ball(r * 0.95, toon("rock"), loc=B(0, 0, 0.42), scale=(1.0, 0.92, 0.72 + 0.1 * v), subdiv=1, smooth=False, rot=(0, 0, 20 + v * 40))
         wk.ball(r * 0.4, toon("rock_dk"), loc=B(0.48, 0.38, 0.2), scale=(1.0, 0.9, 0.7), subdiv=1, smooth=False)

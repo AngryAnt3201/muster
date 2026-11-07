@@ -139,6 +139,26 @@
      "footprint": 0.971
     }
    ]
+  },
+  "8": {
+   "name": "Mirelight Fen",
+   "edge": "#88bd62",
+   "obstacle": "fenlamp",
+   "ground": "act8.jpg",
+   "props": [
+    {
+     "file": "act8_prop0.png",
+     "footprint": 0.9648
+    },
+    {
+     "file": "act8_prop1.png",
+     "footprint": 0.9646
+    },
+    {
+     "file": "act8_prop2.png",
+     "footprint": 0.9646
+    }
+   ]
   }
  },
  "version": 3,

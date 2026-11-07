@@ -1097,6 +1097,196 @@ def trickster(k, P, tier, pose, ghost=False):
                     k.prism([(0, -0.03), (0.05, -0.03), (0.05, 0.03), (0, 0.03)], 0.01, P.pearl if j % 2 else P.team, loc=p, rot=(0, 0, math.degrees(a)))
 
 
+# ================================================================== 25 hookwarden
+def chain(k, P, a, b, mat, link=0.03, r=0.007):
+    """A run of alternating links from a to b."""
+    a, b = V(a), V(b)
+    d = b - a
+    n = max(2, int(d.length / (link * 1.4)))
+    for i in range(n + 1):
+        c = a + d * (i / n)
+        k.torus(link * 0.55, r, mat, loc=c, rot=(90 if i % 2 else 0, 0, math.degrees(math.atan2(d.y, d.x))),
+                scale=(1.0, 0.6, 1.0), seg=10, rseg=5, outline=0.004)
+
+
+def iron_hook(k, P, c, d, tier, size=1.0):
+    """A barbed grapple hook at c pointing along d."""
+    mat = T(tier, P.iron, P.steel, P.gold, P.glow_lt)
+    with k.mat(H.frame_dir(d, origin=c)):
+        k.rod((-0.02, 0, 0), (0.06 * size, 0, 0), 0.014 * size, mat)
+        k.torus(0.05 * size, 0.012 * size, mat, loc=(0.09 * size, 0, 0), rot=(90, 0, 0), arc=200.0)
+        k.spike((0.09 * size, 0, -0.05 * size), (0.05 * size, 0, -0.07 * size), 0.012 * size, mat)
+        k.spike((0.09 * size, 0, 0.05 * size), (0.05 * size, 0, 0.07 * size), 0.012 * size, mat)
+
+
+@unit("hook", 0.3)
+def hookwarden(k, P, tier, pose):
+    S = hum_scale(0.3, tier) * 0.84
+    atk = pose == "attack"
+    lk = look_for(tier, head=T(tier, "cap", "helm", "helm", "helm"), crest=T(tier, None, None, "team", "plume"),
+                  pads=T(tier, "leather", "steel", "gold", "crystal"), chest=T(tier, "leather", "steel", "steel", "pearl"),
+                  cape=T(tier, None, None, "short", "energy"), legs=T(tier, "cloth_dk", "leather_dk", "iron", "pearl"))
+    link = T(tier, P.iron_dk, P.iron, P.gold_dk, P.glow)
+    if atk:
+        rh, lh = V((0.36, -0.12, 0.46)), V((0.12, 0.2, 0.32))
+    else:
+        rh, lh = V((0.16, -0.22, 0.26)), V((0.12, 0.2, 0.32))
+    with k.at(scale=S):
+        humanoid(k, P, tier, {"R": rh, "L": lh}, lk, bulk=1.18, lean=10 if atk else 0)
+        # chain coiled over the left shoulder and down across the chest
+        for i in range(T(tier, 1, 2, 2, 3)):
+            k.torus(0.15 - 0.012 * i, 0.012, link, loc=(0.0, 0.03, 0.32 - 0.03 * i), rot=(0, 62, 18), outline=0.005)
+        # the round buckler on the off arm
+        H.round_shield(k, P, lh + V((0.04, 0.05, 0.02)), V((0.6, 0.6, 0.4)), T(tier, 0.07, 0.08, 0.085, 0.09), tier)
+        if atk:
+            # chain thrown out ahead, hook flying at the end
+            tip = rh + V((0.5, 0.02, -0.04))
+            chain(k, P, rh, tip, link)
+            iron_hook(k, P, tip, V((1, 0, -0.1)), tier, 1.1)
+        else:
+            # hook hangs from the fist on a short drop of chain
+            low = rh + V((0.06, -0.02, -0.14))
+            chain(k, P, rh, low, link)
+            iron_hook(k, P, low, V((0.2, 0, -1)), tier)
+        if tier >= 3:
+            k.box((0.05, 0.05, 0.05), P.team_dk, loc=(-0.12, 0.0, 0.26), bevel=0.012)
+        if tier == 4:
+            H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
+            H.orbit_shards(k, P, V((0, 0, 0.32)), 0.24, n=4, h=0.06, mat=P.glow_lt)
+
+
+# ================================================================== 26 thornweaver
+def leaf(k, P, c, ang, size, mat, tilt=30):
+    k.prism([(0, 0), (size * 0.45, size * 0.2), (size, 0), (size * 0.45, -size * 0.2)], 0.008, mat, loc=c, rot=(tilt, 0, ang), outline=0.004)
+
+
+def bramble(k, P, base, tier, h=0.22, seed=0):
+    """A curling thorned vine rising from the ground at base."""
+    base = V(base)
+    pts = [base + V((math.sin(seed + i * 1.3) * 0.03, math.cos(seed + i * 1.1) * 0.03, h * i / 4)) for i in range(5)]
+    k.tube(pts, 0.016, P.wood_dk if tier < 4 else P.moss, r_end=0.005, smooth_n=3)
+    for i in (1, 2, 3):
+        p = pts[i]
+        a = seed * 2 + i * 2.1
+        k.spike(p, p + V((math.cos(a) * 0.04, math.sin(a) * 0.04, 0.01)), 0.008, P.bone_dk if tier < 4 else P.glow_lt)
+    leaf(k, P, pts[2], math.degrees(seed) + 40, 0.06, P.moss)
+
+
+@unit("thorn", 0.26)
+def thornweaver(k, P, tier, pose):
+    S = hum_scale(0.26, tier)
+    atk = pose == "attack"
+    lk = look_for(tier, head="hood", crest=None, torso="team", pads=T(tier, None, "leather", "gold", "crystal"),
+                  chest=T(tier, None, "cloth", "leather", "pearl"), cape=T(tier, "short", "long", "long", "energy"),
+                  legs=T(tier, "cloth_dk", "leather_dk", "leather_dk", "pearl"), belt="leather", gloves="leather")
+    sh = V((0.34, -0.12, 0.4)) if atk else V((0.16, -0.2, 0.3))
+    top = V((0.56, -0.12, 0.42)) if atk else V((0.2, -0.24, 0.76))
+    off = V((0.2, 0.18, 0.44)) if atk else V((0.06, 0.2, 0.28))
+    with k.at(scale=S):
+        humanoid(k, P, tier, {"R": sh, "L": off}, lk, lean=8 if atk else 0)
+        # gnarled staff, twisted with a vine, leaves at the head
+        k.tube([sh + (sh - top) * 0.35, sh, (sh + top) / 2 + V((0.02, 0.01, 0)), top], 0.017, P.wood_dk, r_end=0.012, smooth_n=2)
+        for i in range(4):
+            leaf(k, P, top + V((0, 0, -0.01 * i)), i * 90 + 20, T(tier, 0.06, 0.07, 0.075, 0.08), P.moss, tilt=-35)
+        seed = T(tier, P.moss, P.moss, P.heal, P.glow)
+        k.ball(T(tier, 0.03, 0.035, 0.04, 0.05), seed, loc=top + V((0, 0, 0.03)))
+        # leaf mantle over the shoulders
+        if tier >= 2:
+            for s in (1, -1):
+                for j in range(3):
+                    leaf(k, P, V((-0.02 + 0.03 * j, s * 0.15, 0.43)), s * (70 + 25 * j), 0.08, P.moss, tilt=s * 20)
+        # crown of thorns
+        if tier >= 3:
+            for i in range(6):
+                a = 2 * math.pi * i / 6
+                p = H.HEAD + V((math.cos(a) * 0.1, math.sin(a) * 0.1, 0.1))
+                k.spike(p, p + V((math.cos(a) * 0.03, math.sin(a) * 0.03, 0.06)), 0.01, P.wood_dk if tier == 3 else P.glow_lt)
+        if tier == 4:
+            for i in range(5):
+                a = 2 * math.pi * i / 5
+                leaf(k, P, V((math.cos(a) * 0.24, math.sin(a) * 0.24, 0.5 + 0.04 * math.sin(3 * a))), math.degrees(a) + 90, 0.07, P.glow_soft, tilt=10)
+        if atk:
+            # brambles bursting from the ground ahead
+            for j, (x, y) in enumerate(((0.62, -0.08), (0.7, 0.08), (0.56, 0.14))):
+                bramble(k, P, (x, y, 0.0), tier, h=0.18 + 0.04 * tier + 0.03 * j, seed=j * 1.7)
+
+
+# ================================================================== 27 outrider
+@unit("outrider", 0.34)
+def outrider(k, P, tier, pose):
+    S = TIER_SCALE[tier] * 1.08
+    atk = pose == "attack"
+    lk = look_for(tier, head=T(tier, "hood", "hood", "helm_open", "helm"), crest=T(tier, None, None, "team", "plume"),
+                  cape=T(tier, None, "short", "long", "energy"), pads=T(tier, None, "leather", "gold", "crystal"),
+                  chest=T(tier, "leather", "leather", "steel", "pearl"), gloves="leather")
+    with k.at(scale=S):
+        mount(k, P, tier, atk)
+        # quiver hung on the saddle
+        k.rod((-0.2, 0.18, 0.42), (-0.3, 0.2, 0.62), 0.035, P.leather_dk)
+        for i in range(T(tier, 2, 3, 3, 4)):
+            k.rod((-0.29 + 0.012 * i, 0.19 + 0.01 * i, 0.62), (-0.31 + 0.012 * i, 0.2 + 0.01 * i, 0.68), 0.006, P.wood)
+            k.cone(0.012, 0.03, P.team, loc=(-0.31 + 0.012 * i, 0.2 + 0.01 * i, 0.69))
+        with k.at((-0.04, 0, 0.3), scale=0.78, rot=(0, 0, 50 if atk else 0)):
+            # an atk rider twists in the saddle to shoot to the side
+            grip = V((0.3, 0.0, 0.44)) if atk else V((0.2, 0.12, 0.34))
+            draw = V((0.02, -0.03, 0.44)) if atk else V((0.14, -0.14, 0.36))
+            humanoid(k, P, tier, {"L": grip, "R": draw}, lk)
+            span = T(tier, 0.22, 0.26, 0.3, 0.34)
+            if atk:
+                H.bow(k, P, grip, tier, True, span=span, draw_to=draw)
+            else:
+                with k.at(grip, rot=(0, 0, 30)):
+                    H.bow(k, P, (0, 0, 0), tier, False, span=span)
+            if tier == 4:
+                H.halo(k, P, H.HEAD + V((0, 0, 0.18)), R=0.09)
+
+
+# ================================================================== 28 lamplighter
+def lantern(k, P, c, tier, lit=True, size=1.0):
+    c = V(c)
+    frame = T(tier, P.iron, P.bronze, P.gold, P.gold)
+    s = 0.05 * size
+    k.box((s * 2, s * 2, 0.012), frame, loc=c + V((0, 0, s * 1.2)), bevel=0.004)
+    k.box((s * 2, s * 2, 0.012), frame, loc=c + V((0, 0, -s * 1.2)), bevel=0.004)
+    for sx, sy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+        k.rod(c + V((sx * s, sy * s, -s * 1.2)), c + V((sx * s, sy * s, s * 1.2)), 0.006, frame)
+    k.cone(s * 1.1, s * 0.8, frame, loc=c + V((0, 0, s * 1.6)))
+    k.torus(s * 0.4, 0.005, frame, loc=c + V((0, 0, s * 2.2)), rot=(90, 0, 0))
+    flame = P.glow_lt if tier == 4 else (P.fire_hot if lit else P.fire)
+    k.ball(s * 0.75, flame, loc=c, outline=0)
+    k.sphere(s * 1.05, P.glow_soft if tier == 4 else P.fire, loc=c, outline=0)
+
+
+@unit("lamp", 0.25)
+def lamplighter(k, P, tier, pose):
+    S = hum_scale(0.25, tier)
+    atk = pose == "attack"
+    lk = look_for(tier, head="hat", crest=None, pads=T(tier, None, None, "gold", "crystal"),
+                  chest=T(tier, None, "cloth", "pearl", "pearl"), cape=T(tier, None, "short", "long", "energy"),
+                  legs="cloth_dk", belt=T(tier, "leather", "leather", "gold", "gold"))
+    # a long lantern pole: over the shoulder at rest, raised high to cast
+    rh = V((0.22, -0.12, 0.6)) if atk else V((0.14, -0.2, 0.32))
+    top = V((0.34, -0.12, 1.02)) if atk else V((0.36, -0.22, 0.82))
+    off = V((0.18, 0.18, 0.5)) if atk else V((0.06, 0.2, 0.28))
+    with k.at(scale=S):
+        humanoid(k, P, tier, {"R": rh, "L": off}, lk)
+        k.rod(rh + (rh - top) * 0.3, top, 0.014, T(tier, P.wood, P.wood, P.wood_dk, P.pearl))
+        hang = top + V((0.08, 0, -0.02))
+        k.tube([top, top + V((0.05, 0, 0.03)), hang], 0.008, T(tier, P.iron, P.bronze, P.gold, P.gold), smooth_n=2)
+        lantern(k, P, hang + V((0, 0, -0.1)), tier, size=T(tier, 1.0, 1.1, 1.2, 1.3))
+        if tier >= 2:
+            lantern(k, P, V((-0.02, 0.17, 0.2)), tier, size=0.6)
+        if tier == 4:
+            H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
+            for i in range(4):
+                a = 2 * math.pi * i / 4 + 0.4
+                k.ball(0.022, P.glow_lt, loc=(math.cos(a) * 0.26, math.sin(a) * 0.26, 0.46), outline=0)
+        if atk:
+            c = hang + V((0, 0, -0.1))
+            k.torus(0.13 + 0.02 * tier, 0.01, P.glow_lt if tier == 4 else P.fire_hot, loc=c, rot=(90, 0, 0), outline=0)
+            k.torus(0.2 + 0.02 * tier, 0.007, P.glow_soft if tier == 4 else P.fire, loc=c, rot=(90, 0, 0), outline=0)
+
+
 # ================================================================== spawned bodies
 def bug(k, P, tier, open_jaw, queen=False):
     shell = P.team

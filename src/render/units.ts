@@ -24,6 +24,12 @@ export interface DrawOpts {
 /** Atlas sprites draw this much larger than true scale so they read on a phone like the Meadow style frame (collision is unchanged). */
 export const SPRITE_VIS = 1.5;
 
+/** The draw scale for a body of this collision radius (world units): small bodies get the full SPRITE_VIS so they
+ *  read, big ones (bulwark, ballista, golem) less, so they no longer swamp keeps and neighbours. */
+export function spriteVis(radius: number): number {
+  return radius <= 0.3 ? SPRITE_VIS : Math.max(1.25, SPRITE_VIS - (radius - 0.3));
+}
+
 /** Which animation a body plays and where in it (phase 0..1, see sprites.frame). */
 export function animFor(o: DrawOpts): { anim: Anim; phase: number } {
   const t = o.t ?? 0, id = o.id ?? 0;

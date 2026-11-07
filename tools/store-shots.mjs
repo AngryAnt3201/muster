@@ -1,12 +1,14 @@
 // App Store screenshots for iPhone 6.9" (1320 x 2868, portrait, no alpha) from the dev server.
 //   npm run store:shots                      all scenes, with a caption band, into store/screenshots/
 //   node tools/store-shots.mjs --only=battle,ascended --no-caption --out=some/dir --base=http://127.0.0.1:5180
+//   node tools/store-shots.mjs --only=iap-review     the Shop screen for the Full Army review screenshot (store/IAP.md), no caption
 // Uses the running dev server (npm run dev, port 5180) or starts one for the run. Re-run any time the art changes.
 // Scenes are built through the game's own modules (Vite serves them by URL) and the GameScreen on window.__game,
 // so what you see is the real game UI and renderer; only the setup (rounds played, gold for the Ascend) is scripted.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { chromium, devices } from "playwright";
+import { contentCounts, fillCounts } from "./counts.mjs";
 
 const arg = (k, d) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=").slice(1).join("=") ?? d;
 const root = new URL("..", import.meta.url).pathname;
@@ -25,11 +27,16 @@ const FONT_CSS = font ? `@font-face{font-family:"SF Pro Rounded";src:url(data:fo
 const SCENES = [
   { id: "01-battle", caption: ["Watch your army <em>fight</em>", "every unit thinks for itself"], run: battle },
   { id: "02-deploy", caption: ["Build. Place. <em>Clash.</em>", "buy from the shop, place anywhere"], run: deploy },
-  { id: "03-ascended", caption: ["<em>Ascend</em> your units", "24 units · 24 signature abilities"], run: ascended },
-  { id: "04-campaign", caption: ["A <em>30-level</em> campaign", "five acts · a boss at the end of each"], save: { campaign: stars(11), puzzles: { 1: 3, 2: 2, 3: 3 }, gauntlet: { best: 7, runs: 4 } }, run: campaign },
+  { id: "03-ascended", caption: ["<em>Ascend</em> your units", "{{units}} units · {{abilities}} signature abilities"], run: ascended },
+  { id: "04-campaign", caption: ["A <em>{{levels}}-level</em> campaign", "{{actsWord}} acts · a boss at the end of each"], save: { campaign: stars(11), puzzles: { 1: 3, 2: 2, 3: 3 }, gauntlet: { best: 7, runs: 4 } }, run: campaign },
   { id: "05-breakpoint", caption: ["<em>Breakpoint</em> puzzles", "one battle · fixed gold"], run: breakpoint },
   { id: "06-ai-lab", caption: ["Rivals you can <em>tune</em>", "or set two AIs on each other"], run: lab },
+  // Not a listing screenshot: App Review's screenshot of the Full Army purchase. Only runs when asked for by --only.
+  { id: "iap-review", extra: true, run: shop },
 ];
+// Counts in captions come from src/core, so they match the game that ships.
+const COUNTS = contentCounts();
+for (const s of SCENES) if (s.caption) s.caption = s.caption.map((c) => fillCounts(c, COUNTS));
 
 function stars(n) { const s = {}; for (let i = 1; i <= n; i++) s[i] = [3, 3, 2, 3, 1, 3, 2, 3, 3, 2, 3][(i - 1) % 11]; return s; }
 
@@ -147,6 +154,22 @@ async function lab(page) {
   await page.waitForTimeout(900);
 }
 
+/** The Shop screen with the Full Army offer: ?shop if the app supports it, else the title screen's Shop button. */
+async function shop(page) {
+  await page.goto(`${BASE}/?shop`);
+  await page.waitForSelector(".screen");
+  await page.waitForTimeout(600);
+  if (!(await page.getByText("Full Army").count())) {
+    await page.goto(`${BASE}/`);
+    await page.waitForSelector(".screen");
+    const button = page.getByRole("button", { name: /shop/i }).first();
+    if (!(await button.count())) throw Error("no Shop screen in this build yet (the Full Army store item adds it)");
+    await button.click();
+    await page.getByText("Full Army").first().waitFor({ timeout: 5000 });
+  }
+  await page.waitForTimeout(900); // the mock store answers with a price
+}
+
 // ------------------------------------------------------------------ run
 async function ensureServer() {
   try { await fetch(BASE); return null; } catch { /* start one */ }
@@ -191,8 +214,9 @@ const browser = await chromium.launch();
 const failures = [];
 try {
   for (const scene of SCENES) {
-    if (ONLY.length && !ONLY.some((o) => scene.id.includes(o))) continue;
-    const ctx = await browser.newContext({ ...devices["iPhone 15 Pro Max"], viewport: { width: W, height: H - BAND }, screen: { width: W, height: H }, deviceScaleFactor: DPR });
+    if (ONLY.length ? !ONLY.some((o) => scene.id.includes(o)) : scene.extra) continue;
+    const band = CAPTION && scene.caption ? BAND : 0;
+    const ctx = await browser.newContext({ ...devices["iPhone 15 Pro Max"], viewport: { width: W, height: H - band }, screen: { width: W, height: H }, deviceScaleFactor: DPR });
     const save = { campaign: {}, puzzles: {}, gauntlet: { best: 0, runs: 0 }, seen: [], ...scene.save, settings: { sound: false, haptics: false, speed: 1 } };
     await ctx.addInitScript(({ save, css }) => {
       try { localStorage.setItem("muster.save.v1", JSON.stringify(save)); } catch { /* fine */ }
@@ -207,7 +231,7 @@ try {
     try {
       await scene.run(page);
       let png = await page.screenshot({ type: "png" });
-      if (CAPTION) png = await compose(browser, png, scene.caption);
+      if (CAPTION && scene.caption) png = await compose(browser, png, scene.caption);
       checkPng(png, scene.id);
       writeFileSync(`${OUT}/${scene.id}.png`, png);
       console.log(`${scene.id}.png${errors.length ? `  (page errors: ${errors.join(" | ")})` : ""}`);

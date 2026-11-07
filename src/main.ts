@@ -3,6 +3,7 @@ import { DEFAULT_AI, TACTICS, type AIProfile, type Tactic } from "./core/ai";
 import { ACTS, LEVELS } from "./core/campaign";
 import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type LevelDef, type PuzzleDef } from "./core/content";
 import { UNITS, UNIT_KINDS, START_HP, type UnitKind } from "./core/defs";
+import { beginDaily, canScore, dailyBoard, dailyConfig, dailyResult, dateKey, finishDaily, streakOn } from "./core/daily";
 import { boonChoices, duelConfig, endDuel, gauntletFoe, boardValue, newRun, takeBoon, type GauntletRun } from "./core/gauntlet";
 import type { Match } from "./core/match";
 import { PUZZLES } from "./core/puzzles";
@@ -11,6 +12,9 @@ import { initNative, setHaptics } from "./native";
 import { loadSprites } from "./render/sprites";
 import { applyStyleVars } from "./render/style";
 import { load, save } from "./save";
+import { StoreController, createStore } from "./store";
+import { actGated, gauntletGated, levelGated, puzzleGated } from "./store/entitlement";
+import { actGateCard, fullArmyOffer } from "./ui/shop";
 import { el, stars } from "./ui/dom";
 import { MAP_SIZE } from "./ui/mapdata";
 import { mapForAct, nodeFractions, nodePositions, pathUpTo } from "./ui/maplayout";
@@ -19,10 +23,15 @@ import { ROLE_LABEL, applyUIStyle, coin, icon, roleBadge } from "./ui/kit";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
+/** The Full Army store (StoreKit on iOS, a mock on the web). */
+const store = new StoreController(createStore(location.search), { load, save });
+/** Redraws the menu screen on show when the entitlement changes (null in battles and on the Shop, which updates itself). */
+let here: (() => void) | null = null;
 
 function clear() {
   game?.destroy(); game = null;
   sheetEl = null;
+  here = null;
   app.replaceChildren();
 }
 
@@ -51,8 +60,10 @@ function unitIcon(kind: keyof typeof UNITS, size = 44) {
 // ---------------------------------------------------------------- title
 function title() {
   clear();
+  here = title;
   const s = load();
   const camp = Object.keys(s.campaign).length;
+  const gLocked = gauntletGated(s);
   screen("title",
     el("div", { class: "logo" }, [
       el("span", { class: "logo-word", "data-t": "MUSTER" }, [el("span", {}, ["MUSTER"])]),
@@ -60,19 +71,29 @@ function title() {
     ]),
     el("div", { class: "menu" }, [
       btn(el("span", {}, ["Campaign", el("small", {}, [`${camp}/${LEVELS.length}`])]), "primary big", campaign),
-      btn(el("span", {}, ["Gauntlet", el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big", gauntlet),
-      btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big", puzzles),
-      btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big", skirmish),
+      // Secondary modes in pairs, so the menu stays low and the key art's clash shows above it.
+      el("div", { class: "menu-row" }, [
+        btn(el("span", {}, ["Daily", el("small", {}, [dailyTag()])]), "big half daily-btn", daily),
+        btn(el("span", {}, ["Gauntlet", gLocked ? el("small", { class: "gated" }, [icon("crown"), "Full Army"]) : el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big half gauntlet-btn", () => (gLocked ? paywall() : gauntlet())),
+      ]),
+      el("div", { class: "menu-row" }, [
+        btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big half puzzles-btn", puzzles),
+        btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big half skirmish-btn", skirmish),
+      ]),
     ]),
     el("div", { class: "title-foot" }, [
       btn("Barracks", "ghost small", barracks),
+      btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, shopScreen),
       btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
     ]),
   );
 }
 
 // ---------------------------------------------------------------- campaign
-const unlocked = (id: number) => id === 1 || (load().campaign[id - 1] ?? 0) > 0;
+/** Reached in the campaign: the first level, or the one before it cleared. */
+const reached = (id: number) => id === 1 || (load().campaign[id - 1] ?? 0) > 0;
+/** Reached and not behind the Full Army. */
+const unlocked = (id: number) => reached(id) && !levelGated(load(), LEVELS.find((l) => l.id === id) ?? { act: 1 });
 const SVG = "http://www.w3.org/2000/svg";
 
 /** The campaign: one illustrated map per act (by ACTS index), level nodes on the painted road, swipe or arrows between acts. */
@@ -80,7 +101,8 @@ function campaign(focusAct?: number) {
   clear();
   const s = load();
   const acts = ACTS.map((name, i) => ({ name, index: i, levels: LEVELS.filter((l) => l.act === i + 1) })).filter((a) => a.levels.length);
-  const next = LEVELS.find((l) => unlocked(l.id) && !s.campaign[l.id]) ?? [...LEVELS].reverse().find((l) => unlocked(l.id));
+  // The next level to play; if it's behind the Full Army the map opens on its act so the gate card shows.
+  const next = LEVELS.find((l) => reached(l.id) && !s.campaign[l.id]) ?? [...LEVELS].reverse().find((l) => unlocked(l.id));
   const want = focusAct ?? next?.act ?? 1;
   let cur = Math.max(0, acts.findIndex((a) => a.index === want - 1));
   const total = Object.values(s.campaign).reduce((a, b) => a + b, 0);
@@ -99,6 +121,7 @@ function campaign(focusAct?: number) {
   const dots = el("div", { class: "act-dots" });
   const bar = el("div", { class: "act-bar" }, [prev, dots, nextBtn]);
   const scr = screen("campaign map-screen", head, view, bar);
+  here = () => campaign(acts[cur].index + 1);
 
   const actOpen = (a: (typeof acts)[number]) => unlocked(a.levels[0].id);
   acts.forEach((a, i) => {
@@ -123,7 +146,8 @@ function campaign(focusAct?: number) {
 
     const pts = nodePositions(map, a.levels.length);
     const reached = a.levels.reduce((k, l, i) => (unlocked(l.id) ? i : k), -1);
-    const page = el("div", { class: `map ${open ? "" : "locked"} ${dir > 0 ? "from-right" : dir < 0 ? "from-left" : ""}`, style: `background-image:url(${map.image})` });
+    const gated = actGated(s, a.index + 1);
+    const page = el("div", { class: `map ${open ? "" : "locked"} ${gated ? "gated" : ""} ${dir > 0 ? "from-right" : dir < 0 ? "from-left" : ""}`, style: `background-image:url(${map.image})` });
     // progress trail: the road walked so far, up to the furthest open node
     const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("class", "map-trail");
@@ -139,7 +163,7 @@ function campaign(focusAct?: number) {
     a.levels.forEach((l, i) => {
       const lopen = unlocked(l.id);
       const best = s.campaign[l.id] ?? 0;
-      const current = next?.id === l.id;
+      const current = next?.id === l.id && lopen;
       const [x, y] = pts[i];
       const n = el("button", {
         class: `node ${lopen ? "" : "locked"} ${l.boss ? "boss" : ""} ${best ? "done" : ""} ${current ? "current" : ""}`,
@@ -150,20 +174,21 @@ function campaign(focusAct?: number) {
         stars(best),
       ]);
       if (l.boss) n.append(el("span", { class: "node-boss" }, ["Boss"]));
-      if (l.unlock && lopen) n.append(unitIcon(l.unlock, 24));
+      if (l.unlock && lopen) for (const k of l.unlocks ?? [l.unlock]) n.append(unitIcon(k, 24));
       if (current) n.append(el("span", { class: "node-name" }, [l.name]));
       n.addEventListener("click", () => {
         if (swiped) return;
-        if (lopen) { sfx("tap"); levelSheet(l); } else { sfx("deny"); n.classList.remove("shake"); void n.offsetWidth; n.classList.add("shake"); }
+        if (lopen) { sfx("tap"); levelSheet(l); } else if (gated) { sfx("tap"); paywall(); } else { sfx("deny"); n.classList.remove("shake"); void n.offsetWidth; n.classList.add("shake"); }
       });
       page.append(n);
     });
-    if (!open) {
+    if (gated) page.append(el("div", { class: "map-gate" }, [actGateCard(a.index + 1, store, paywall)]));
+    else if (!open) {
       const prevBoss = LEVELS.find((l) => l.id === a.levels[0].id - 1);
       page.append(el("div", { class: "map-lock" }, [el("span", { class: "node-lock" }), el("b", {}, [`Act ${a.index + 1} is locked`]), el("small", {}, [prevBoss ? `Beat ${prevBoss.foe} to open it` : "Finish the act before it"])]));
     }
     view.replaceChildren(page);
-    const focus = page.querySelector(".node.current") ?? page.querySelectorAll(".node")[Math.max(0, reached)];
+    const focus = page.querySelector(".map-gate .act-gate") ?? page.querySelector(".node.current") ?? page.querySelectorAll(".node")[Math.max(0, reached)];
     requestAnimationFrame(() => (focus as HTMLElement | null)?.scrollIntoView({ block: "center" }));
   }
 
@@ -199,7 +224,7 @@ function levelSheet(l: LevelDef) {
     el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
   ]);
-  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${k === l.unlock ? "new" : ""}`).frame));
+  const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${(l.unlocks ?? [l.unlock]).includes(k) ? "new" : ""}`).frame));
   sheet(el("div", {}, [
     el("div", { class: "sheet-kicker" }, [`Act ${l.act} · Level ${l.id}`]),
     el("h2", {}, [l.name]),
@@ -227,7 +252,9 @@ function playLevel(l: LevelDef, attempt = 0) {
         heading: m.winner === 0 ? "Victory" : "Defeat",
         stars: m.winner === 0 ? n : undefined,
         lines: l.stars.map((o) => [objectiveText(o), objectiveMet(o, m)] as [string, boolean]),
-        primary: m.winner === 0 && nextL ? ["Next level", () => playLevel(nextL)] : ["Retry", () => playLevel(l, attempt + 1)],
+        primary: m.winner === 0 && nextL
+          ? levelGated(load(), nextL) ? [`Act ${nextL.act}`, () => campaign(nextL.act)] : ["Next level", () => playLevel(nextL)]
+          : ["Retry", () => playLevel(l, attempt + 1)],
         secondary: ["Campaign", () => campaign(l.act)],
       });
     },
@@ -272,15 +299,24 @@ function closeSheet() { sheetEl?.remove(); sheetEl = null; }
 // ---------------------------------------------------------------- breakpoint
 function puzzles() {
   clear();
+  here = puzzles;
   const s = load();
-  const grid = el("div", { class: "puzzle-grid" }, PUZZLES.map((p, i) => {
-    const open = i === 0 || (s.puzzles[PUZZLES[i - 1].id] ?? 0) > 0;
-    const b = el("button", { class: `tile ${open ? "" : "locked"} ${s.puzzles[p.id] ? "done" : ""}` }, [
+  const tiles: HTMLElement[] = [];
+  PUZZLES.forEach((p, i) => {
+    const gated = puzzleGated(s, p.id);
+    const open = !gated && (i === 0 || (s.puzzles[PUZZLES[i - 1].id] ?? 0) > 0);
+    if (gated && (i === 0 || !puzzleGated(s, PUZZLES[i - 1].id))) {
+      const more = PUZZLES.filter((x) => puzzleGated(s, x.id)).length;
+      tiles.push(btn(el("span", {}, [icon("crown"), el("b", {}, [`${more} more puzzles in the Full Army`]), el("small", {}, ["See what's inside"])]), "tile-gate", paywall));
+    }
+    const b = el("button", { class: `tile ${open ? "" : "locked"} ${gated ? "gated" : ""} ${s.puzzles[p.id] ? "done" : ""}` }, [
       el("span", { class: "tile-id" }, [String(p.id)]), el("span", { class: "tile-name" }, [p.name]), stars(s.puzzles[p.id] ?? 0),
     ]);
-    b.addEventListener("click", () => { if (open) { sfx("tap"); playPuzzle(p); } else sfx("deny"); });
-    return b;
-  }));
+    if (gated) b.append(el("span", { class: "tile-crown" }, [icon("crown")]));
+    b.addEventListener("click", () => { if (open) { sfx("tap"); playPuzzle(p); } else if (gated) { sfx("tap"); paywall(); } else sfx("deny"); });
+    tiles.push(b);
+  });
+  const grid = el("div", { class: "puzzle-grid" }, tiles);
   const ptotal = Object.values(s.puzzles).reduce((a, b) => a + b, 0);
   screen("puzzles", header("Breakpoint", title, starTotal(ptotal)), grid);
 }
@@ -296,7 +332,8 @@ function playPuzzle(p: PuzzleDef) {
       const won = m.history[0]?.winner === 0;
       const n = puzzleStars(p, won, m.sides[0].gold);
       if (n > (load().puzzles[p.id] ?? 0)) save((s) => { s.puzzles[p.id] = n; });
-      const next = PUZZLES[PUZZLES.indexOf(p) + 1];
+      const after = PUZZLES[PUZZLES.indexOf(p) + 1];
+      const next = after && !puzzleGated(load(), after.id) ? after : undefined;
       results(m, {
         heading: won ? "Solved" : "Not yet",
         stars: won ? n : undefined,
@@ -364,6 +401,87 @@ function boonPick(r: GauntletRun) {
     ribbon("Choose a boon", "gold"),
     el("div", { class: "boon-list" }, choices.map((b) => btn(el("span", {}, [el("b", {}, [b.name]), el("small", {}, [b.text])]), "boon", () => { takeBoon(r, b.id); closeSheet(); duel(); }))),
   ]), false);
+}
+
+// ---------------------------------------------------------------- daily challenge
+/** Today's day key: the device's local calendar day. */
+const today = () => dateKey(new Date());
+function dailyTag() {
+  const d = load().daily, k = today();
+  const streak = streakOn(d, k);
+  if (canScore(d, k)) return streak ? `streak ${streak} · new` : "new board";
+  return `streak ${streak} · done`;
+}
+const num = (n: number) => n.toLocaleString("en");
+function untilTomorrow() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const mins = Math.max(1, Math.ceil((next.getTime() - now.getTime()) / 60000));
+  return mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`;
+}
+
+function daily() {
+  clear();
+  const key = today();
+  const b = dailyBoard(key);
+  const d = load().daily;
+  const open = canScore(d, key);
+  const t = d.today?.key === key ? d.today : undefined;
+  const when = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const status = open
+    ? el("p", { class: "lead" }, ["One scored attempt today. Same board for every player."])
+    : el("div", { class: `daily-today ${t?.won ? "won" : ""}` }, [
+      el("b", {}, [t?.done ? `${t.won ? "Victory" : "Defeat"} · ${num(t.score)}` : "Attempt abandoned"]),
+      el("small", {}, [`Next board in ${untilTomorrow()}`]),
+    ]);
+  screen("daily", header("Daily", title, el("span", { class: "star-total" }, [icon("flag"), String(streakOn(d, key))])),
+    el("div", { class: "panel daily-card" }, [
+      el("div", { class: "sheet-kicker" }, [`Challenge ${b.number} · ${when}`]),
+      el("div", { class: "daily-rule" }, [ribbon(b.rule.name, "gold small"), el("span", {}, [b.rule.text])]),
+      el("div", { class: "foe-line" }, ["vs ", el("b", {}, [b.foe.name]), el("span", { class: "tag" }, [cap(b.foe.ai.tactic)])]),
+      el("div", { class: "roster" }, b.roster.map((k) => framedPortrait(k, 1, "roster-unit").frame)),
+      el("div", { class: "result-stats" }, [
+        el("span", {}, [el("b", {}, [String(streakOn(d, key))]), "streak"]),
+        el("span", {}, [el("b", {}, [num(d.best)]), "best"]),
+        el("span", {}, [el("b", {}, [String(d.bestStreak)]), "top streak"]),
+      ]),
+      status,
+      open
+        ? btn("Play today's board", "primary big", () => { save((s) => { beginDaily(s.daily, key); }); playDaily(key, false); })
+        : btn("Practice (unscored)", "big", () => playDaily(key, true)),
+    ]));
+}
+
+function playDaily(key: string, practice: boolean, attempt = 0) {
+  clear();
+  const b = dailyBoard(key);
+  const cfg = dailyConfig(b);
+  // Practice replays shuffle the shop; the scored attempt is the same match for everyone.
+  if (practice) cfg.seed = (cfg.seed + 7919 * (attempt + 1)) >>> 0;
+  game = new GameScreen(app, {
+    cfg,
+    foe: b.foe.ai,
+    mode: "daily",
+    arena: b.arena,
+    title: practice ? "Daily practice" : `Daily ${b.number}`,
+    intro: `vs ${b.foe.name} · ${b.rule.name}`,
+    onEnd: (m) => {
+      const r = dailyResult(m);
+      let scored = false;
+      if (!practice) save((s) => { scored = finishDaily(s.daily, key, r); });
+      const d = load().daily;
+      results(m, {
+        heading: r.won ? "Victory" : "Defeat",
+        note: scored
+          ? `Score ${num(r.score)} · streak ${d.streak}${d.bestKey === key ? " · new best!" : ""}`
+          : `Practice: ${num(r.score)}, not scored.`,
+        primary: ["Daily", daily],
+        secondary: ["Menu", title],
+      });
+    },
+    onQuit: daily,
+    ...(practice ? { onRestart: () => playDaily(key, true, attempt + 1) } : {}),
+  });
 }
 
 // ---------------------------------------------------------------- skirmish / AI lab
@@ -436,6 +554,20 @@ function playSkirmish(lab: Lab) {
 }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
+// ---------------------------------------------------------------- shop / paywall
+function shopScreen() {
+  clear();
+  screen("shop-screen", header("Shop", title), fullArmyOffer(store));
+}
+
+/** The Full Army offer as a sheet over the current screen (gates open it); redraws the screen once it's owned. */
+function paywall() {
+  sheet(el("div", { class: "paywall" }, [fullArmyOffer(store, { compact: true, onOwned: () => {
+    const shown = sheetEl;
+    setTimeout(() => { if (sheetEl !== shown) return; closeSheet(); here?.(); }, 1200);
+  } })]));
+}
+
 // ---------------------------------------------------------------- barracks
 function barracks() {
   clear();
@@ -473,8 +605,10 @@ function showcase(n: number) {
   const sets: [string, number, number, number][][] = [
     [["pikeman", 3.0, 4.8, 4], ["ravager", 6.0, 4.6, 3], ["rime", 2.2, 2.6, 4], ["tinker", 6.8, 2.2, 3], ["banner", 4.5, 3.2, 4], ["grave", 4.5, 1.2, 3]],
     [["lancer", 2.0, 3.6, 4], ["keg", 4.5, 4.9, 3], ["harrier", 6.5, 3.4, 4], ["sapper", 7.6, 4.2, 3], ["trickster", 3.4, 2.4, 4], ["bombard", 4.5, 0.8, 3]],
+    // 1.1: the four late-Act-7 units, Ascended and not.
+    [["hook", 3.2, 4.6, 4], ["hook", 6.2, 4.4, 2], ["outrider", 1.2, 3.0, 4], ["thorn", 4.5, 1.6, 4], ["lamp", 6.6, 1.4, 4], ["outrider", 7.8, 2.6, 1]],
   ];
-  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : sets;
+  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : n === 3 ? [sets[2], sets[0]] : sets;
   const start = (list: [string, number, number, number][]) => list.map(([kind, lx, depth, rank]) => ({ kind: kind as UnitKind, lx, depth, rank }));
   const ai = (t: Tactic): AIProfile => ({ ...DEFAULT_AI, difficulty: 0.6, tactic: t, economy: 1 });
   game = new GameScreen(app, {
@@ -504,15 +638,20 @@ async function boot() {
   const font = Promise.race([document.fonts?.load('20px "Lilita One"').catch(() => undefined), new Promise((r) => setTimeout(r, 800))]);
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
+  // The cached entitlement is good offline; the store check runs alongside and redraws if it changes anything.
+  store.onChange(() => { if (!sheetEl) here?.(); });
+  void store.start();
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
-  // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?gauntlet, ?watch
+  // Deep links for checks (they skip the Full Army gates): ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }
   if (q.has("campaign")) return campaign(Number(q.get("campaign")) || undefined);
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
+  if (q.has("daily")) return daily();
   if (q.has("barracks")) return barracks();
+  if (q.has("shop")) return shopScreen();
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));

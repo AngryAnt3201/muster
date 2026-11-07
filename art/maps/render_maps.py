@@ -300,6 +300,8 @@ class Terrain:
             self.river_y = uv_to_ground(0.5, w["v"])[1]
         if w and w["kind"] == "lake":
             self.lake = uv_to_ground(w["u"], w["v"])
+        if w and w["kind"] == "ponds":
+            self.ponds = [(*uv_to_ground(u, v), r) for u, v, r in w["ponds"]]
 
     def height(self, x, y):
         a = self.act
@@ -328,6 +330,10 @@ class Terrain:
             dl = np.hypot((x - lx) / 1.25, y - ly)
             r = self.water["r"]
             h = np.minimum(h, -0.5 + (h + 0.5) * smoothstep(r - 0.2, r + 0.6, dl))
+        if self.water and self.water["kind"] == "ponds":
+            for px, py, r in self.ponds:
+                dl = np.hypot((x - px) / 1.3, y - py) + 0.18 * np.sin(x * 2.3 + y * 1.7)
+                h = np.minimum(h, -0.5 + (h + 0.5) * smoothstep(r - 0.2, r + 0.5, dl))
         return h
 
     def at(self, x, y):
@@ -340,6 +346,8 @@ class Terrain:
             return True
         if self.water["kind"] == "river":
             return abs(y - (self.river_y + 0.35 * math.sin(x * 0.8))) < self.water["width"] / 2 + pad
+        if self.water["kind"] == "ponds":
+            return any(math.hypot((x - px) / 1.3, y - py) < r + pad for px, py, r in self.ponds)
         lx, ly = self.lake
         return math.hypot((x - lx) / 1.25, y - ly) < self.water["r"] + pad
 
@@ -579,6 +587,42 @@ class Props:
         k.box((0.04, 0.34, 0.5), toon(col or self.foe, raw=True), loc=(0, 0.18, 0.8))
         k.ball(0.05, toon("#ffcf4d"), loc=(0, 0, 1.12), subdiv=1)
 
+    def willow(self, s=1.0):
+        k, r = self.k, self.rng
+        k.cyl(0.1, 0.62, toon("#7a5636"), loc=(0, 0, 0.31), r2=0.07, seg=8)
+        k.ball(0.5, toon("#6fae4f"), loc=(0, 0, 0.92), scale=(1.0, 0.95, 0.55), subdiv=2)
+        k.ball(0.3, toon("#9bcf6c"), loc=(-0.08, -0.08, 1.06), scale=(1.0, 0.9, 0.5), subdiv=2)
+        n = 9
+        for j in range(n):
+            a = j * math.tau / n + r.uniform(-0.2, 0.2)
+            k.cone(0.12, r.uniform(0.5, 0.66), toon("#4f8d3e" if j % 2 else "#6fae4f"), loc=(math.cos(a) * 0.42, math.sin(a) * 0.38, 0.6), rot=(180, 0, 0), seg=6)
+
+    def reeds(self, s=1.0):
+        k, r = self.k, self.rng
+        for j in range(5):
+            a = j * 1.3 + r.uniform(0, 1)
+            x, y = math.cos(a) * 0.12, math.sin(a) * 0.1
+            hh = r.uniform(0.45, 0.65)
+            k.cone(0.04, hh, toon("#5d9a45" if j % 2 else "#7cb653"), loc=(x, y, hh / 2), rot=(8 * math.cos(a), 8 * math.sin(a), 0), seg=5)
+            if j % 2 == 0:
+                k.cyl(0.03, 0.12, toon("#7a4f2f"), loc=(x, y, hh + 0.02), seg=6)
+
+    def lily(self, s=1.0):
+        k, r = self.k, self.rng
+        for j in range(r.randint(1, 3)):
+            k.cyl(r.uniform(0.09, 0.14), 0.01, toon("#5fa84a"), loc=(r.uniform(-0.15, 0.15), r.uniform(-0.1, 0.1), 0.0), seg=12, outline=0.004)
+        if r.random() < 0.4:
+            k.sphere(0.045, toon("#ff9fc0"), loc=(0, 0, 0.03), seg=8, rings=5, outline=0.004)
+
+    def lanternpost(self, s=1.0):
+        k = self.k
+        wood = toon("#6b4a32")
+        k.rod((0, 0, 0), (0.04, 0, 0.95), 0.045, wood, r2=0.035, seg=7)
+        k.rod((0.04, 0, 0.92), (0.3, 0, 0.95), 0.025, wood, seg=6)
+        k.box((0.14, 0.14, 0.035), toon("#3a2a20"), loc=(0.3, 0, 0.86))
+        k.ball(0.075, glow("#ffcf6b", 1.6), loc=(0.3, 0, 0.78), scale=(1, 1, 1.2), subdiv=2)
+        k.box((0.14, 0.14, 0.03), toon("#3a2a20"), loc=(0.3, 0, 0.69))
+
     # ---- landmarks
     def camp(self):
         k, r = self.k, self.rng
@@ -714,17 +758,52 @@ class Props:
                 k.box((0.34, 0.34, 0.1), gold, loc=(0, 0, 1.65))
 
 
+    def lanternhall(self):
+        """Mother Wick's hall: a long wooden house on stilts over the water, a lantern tower and strung lanterns."""
+        k = self.k
+        wood, dk, roof = toon("#c99a62"), toon("#8a6440"), toon(self.foe_dk, raw=True)
+        lamp = glow("#ffcf6b", 1.6)
+        with k.at((0, 0.8, 0)):
+            for x in (-1.2, -0.4, 0.4, 1.2):  # stilts
+                for y in (-0.5, 0.5):
+                    k.cyl(0.08, 0.6, dk, loc=(x, y, 0.3), seg=8)
+            k.box((2.9, 1.4, 0.12), wood, loc=(0, 0, 0.62), bevel=0.02)
+            k.box((2.2, 1.0, 0.8), toon("#e8d2a8"), loc=(0, 0.05, 1.08), bevel=0.03)
+            k.prism([(-0.72, 0), (0.72, 0), (0, 0.8)], 2.5, roof, loc=(0, 0.05, 1.48), rot=(90, 0, 90))
+            k.box((0.42, 0.06, 0.55), toon("#3a2a20"), loc=(0, -0.47, 0.98))
+            for x in (-0.7, 0.7):
+                k.box((0.26, 0.06, 0.24), lamp, loc=(x, -0.47, 1.18))
+            k.box((0.5, 0.5, 0.06), wood, loc=(0, -0.95, 0.45))  # steps
+            k.box((0.5, 0.4, 0.06), wood, loc=(0, -1.25, 0.25))
+        with k.at((1.75, 0.5, 0)):  # the lantern tower
+            k.cyl(0.26, 2.3, dk, loc=(0, 0, 1.15), r2=0.18, seg=8)
+            k.box((0.62, 0.62, 0.08), wood, loc=(0, 0, 2.32))
+            for x in (-0.24, 0.24):
+                for y in (-0.24, 0.24):
+                    k.cyl(0.035, 0.42, dk, loc=(x, y, 2.55), seg=6)
+            k.ball(0.26, lamp, loc=(0, 0, 2.58), subdiv=2)
+            k.cone(0.48, 0.45, roof, loc=(0, 0, 2.95), seg=4, rot=(0, 0, 45))
+            with k.at((0, 0, 3.2)):
+                self.banner()
+        for i in range(5):  # strung lanterns from the hall to the tower
+            t = i / 4
+            x, z = -1.3 + t * 3.0, 2.15 - 0.35 * math.sin(t * math.pi)
+            k.ball(0.07, lamp, loc=(x, 0.25, z), subdiv=1, outline=0.004)
+
+
 SCALE = {"tree": (1.0, 1.35), "pine": (1.0, 1.4), "snowpine": (1.0, 1.4), "deadtree": (0.9, 1.3), "bush": (0.8, 1.2),
          "bush_gold": (0.8, 1.2), "rock": (0.8, 1.4), "rock_snow": (0.8, 1.4), "boulder": (1.8, 2.6), "house": (1.0, 1.2),
          "fence": (0.9, 1.0), "wall": (0.9, 1.0), "flowers": (0.9, 1.3), "haystack": (0.9, 1.2), "crater": (0.9, 1.4),
          "ember": (1, 1), "stump": (0.9, 1.3), "bones": (0.9, 1.1), "mushroom": (0.9, 1.6), "log": (0.8, 1.1), "cart": (1.0, 1.1),
          "crystal": (1.0, 1.6), "crystal_iron": (0.9, 1.3), "crystal_gold": (0.9, 1.4), "drift": (0.8, 1.5), "snowman": (1, 1.1),
-         "pillar": (1, 1.1), "statue": (1, 1.2), "cloudpuff": (1.0, 1.8), "tower": (1.0, 1.1), "banner": (1, 1)}
-RADIUS = {"boulder": 1.0, "house": 0.6, "tower": 0.5, "cloudpuff": 0.9, "fence": 0.7, "wall": 0.8, "tree": 0.45, "pine": 0.45, "snowpine": 0.45}
+         "pillar": (1, 1.1), "statue": (1, 1.2), "cloudpuff": (1.0, 1.8), "tower": (1.0, 1.1), "banner": (1, 1),
+         "willow": (1.0, 1.4), "reeds": (0.8, 1.3), "lily": (0.9, 1.3), "lanternpost": (1.0, 1.1)}
+RADIUS = {"willow": 0.55, "reeds": 0.2, "lily": 0.2, "boulder": 1.0, "house": 0.6, "tower": 0.5, "cloudpuff": 0.9, "fence": 0.7, "wall": 0.8, "tree": 0.45, "pine": 0.45, "snowpine": 0.45}
 SHADOW = {"boulder": 0.42, "rock": 0.3, "rock_snow": 0.3, "house": 0.55, "tower": 0.42, "fence": 0.0, "wall": 0.0, "tree": 0.38,
           "pine": 0.36, "snowpine": 0.36, "cart": 0.3, "statue": 0.3, "pillar": 0.2}
-NO_SHADOW = {"ember", "flowers", "crater", "cloudpuff", "drift"}
-ALONG_ROAD = {"fence", "wall", "banner"}
+NO_SHADOW = {"ember", "flowers", "crater", "cloudpuff", "drift", "lily"}
+ALONG_ROAD = {"fence", "wall", "banner", "lanternpost"}
+IN_WATER = {"lily"}
 
 
 def scatter(P, T, road, act, rng, view, keep_out):
@@ -758,14 +837,17 @@ def scatter(P, T, road, act, rng, view, keep_out):
                     continue
                 if "sky" in act and T.at(x, y) < -0.25:
                     continue
-            if kind not in ("ember",) and T.in_water(x, y, rad * 0.6 + 0.2):
+            if kind in IN_WATER:
+                if not T.in_water(x, y, -0.5) or T.at(x, y) > -0.3:
+                    continue
+            elif kind not in ("ember",) and T.in_water(x, y, rad * 0.6 + 0.2):
                 continue
             if any(math.hypot(x - kx, y - ky) < kr + rad for kx, ky, kr in keep_out):
                 continue
             if any(math.hypot(x - px, y - py) < (pr + rad) * 0.75 for px, py, pr in placed):
                 continue
             s = rng.uniform(lo, hi)
-            z = T.at(x, y) if kind != "cloudpuff" else -3.1
+            z = -3.1 if kind == "cloudpuff" else -0.215 if kind in IN_WATER else T.at(x, y)
             if kind not in NO_SHADOW and SHADOW.get(kind, 0.25) > 0:
                 P.shadow_at(x, y, SHADOW.get(kind, 0.25) * s)
             with P.k.at((x, y, z), rot=(0, 0, yaw), scale=s):

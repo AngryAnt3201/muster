@@ -10,10 +10,10 @@ export type Style = "melee" | "arrow" | "bolt" | "pellet" | "lob" | "shell" | "z
 
 export function styleOf(kind: BodyKind): Style {
   switch (kind) {
-    case "ranger": return "arrow";
+    case "ranger": case "outrider": return "arrow";
     case "ballista": return "bolt";
-    case "turret": return "pellet";
-    case "grenadier": return "lob";
+    case "turret": case "lamp": return "pellet";
+    case "grenadier": case "thorn": return "lob";
     case "bombard": return "shell";
     case "storm": return "zap";
     case "rime": return "shard";

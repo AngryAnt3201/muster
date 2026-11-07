@@ -1,0 +1,10 @@
+{
+  "name": "muster-store",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Muster's own StoreKit 2 Capacitor plugin: the one-time Full Army unlock. No third-party SDK.",
+  "license": "UNLICENSED",
+  "capacitor": {
+    "ios": { "src": "ios" }
+  }
+}

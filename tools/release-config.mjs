@@ -2,11 +2,16 @@
 //   ios/app.xcconfig             display name, version, build, bundle id, team (Xcode reads it for Debug and Release)
 //   ios/App/ExportOptions.plist  App Store export with automatic signing for the team
 //   store/metadata.json          synced fields, then store/LISTING.md is regenerated from it
-//   site/*.html, store/RELEASE-CHECKLIST.md   the old store name, email and site URL are replaced with the new ones
+//   store/IAP.md                 the Full Army in-app purchase fields for App Store Connect, from metadata.json inAppPurchase
+//   site/*.html, store/RELEASE-CHECKLIST.md   the old store name, email and site URL are replaced with the new ones,
+//                                and <span data-count="units">..</span> in site/*.html gets the current count
+// Copy placeholders: {{name}} plus the content counts from src/core ({{units}}, {{levels}}, {{acts}}, {{actsWord}}, ...,
+// see tools/content-counts.ts), so the listing never quotes stale numbers.
 // Also checks App Store length limits. Run: npm run release:config (ios:release and ios:release:dry run it too).
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { contentCounts, fillCounts } from "./counts.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const read = (p) => readFileSync(join(root, p), "utf8");
@@ -83,7 +88,10 @@ meta.reviewContact = { ...meta.reviewContact, email: app.supportEmail };
 if (meta.nameOptions) meta.nameOptions.chosen = app.storeName;
 write(metaPath, JSON.stringify(meta, null, 2) + "\n");
 
-const fill = (s) => (s ?? "").replaceAll("{{name}}", app.storeName);
+const counts = contentCounts();
+console.log(`  counts from src/core: ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+const fill = (s) => fillCounts((s ?? "").replaceAll("{{name}}", app.storeName), counts);
+const iap = meta.inAppPurchase;
 const fields = {
   name: [meta.name, 30],
   subtitle: [meta.subtitle, 30],
@@ -91,8 +99,38 @@ const fields = {
   description: [fill(meta.description), 4000],
   keywords: [meta.keywords, 100],
   reviewNotes: [fill(meta.reviewNotes), 4000],
+  ...(meta.whatsNew ? { whatsNew: [fill(meta.whatsNew), 4000] } : {}),
+  ...(iap ? {
+    "inAppPurchase.referenceName": [iap.referenceName, 64],
+    "inAppPurchase.displayName": [iap.displayName, 30],
+    "inAppPurchase.description": [iap.description, 45],
+    "inAppPurchase.reviewNotes": [iap.reviewNotes, 4000],
+  } : {}),
 };
-for (const [k, [v, max]] of Object.entries(fields)) need(v && [...v].length <= max, `${k} is ${[...(v ?? "")].length} characters (max ${max})`);
+for (const [k, [v, max]] of Object.entries(fields)) {
+  need(v && [...v].length <= max, `${k} is ${[...(v ?? "")].length} characters (max ${max})`);
+  need(!/\{\{\w+\}\}/.test(v ?? ""), `${k} has an unknown placeholder: ${(v ?? "").match(/\{\{\w+\}\}/)?.[0]}`);
+}
+if (iap) {
+  need(iap.displayName?.length >= 2, "inAppPurchase.displayName must be at least 2 characters");
+  need(/^[A-Za-z0-9._-]{1,100}$/.test(iap.productId ?? ""), "inAppPurchase.productId: letters, numbers, . _ - only, max 100");
+}
+
+// The copy must not promise what the build does not have, or deny what it does. Fatal for a real release;
+// `--warn-copy` (used by ios-release.sh dry) only warns, so a simulator dry run works while features are still landing.
+const copyNeed = (ok, msg) => { if (ok) return; if (process.argv.includes("--warn-copy")) console.warn(`  warning: ${msg}`); else problems.push(msg); };
+const listed = [meta.promotionalText, fill(meta.description), fill(meta.reviewNotes), fill(meta.whatsNew)].join("\n");
+const srcText = (() => {
+  const walk = (d) => readdirSync(join(root, d), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : /\.(ts|js|swift|storekit)$/.test(e.name) ? [`${d}/${e.name}`] : []));
+  const skip = /\/(build|public|Pods|\.build|DerivedData|node_modules)\//;
+  return [...walk("src"), ...(existsSync(join(root, "ios")) ? walk("ios").filter((f) => !skip.test(f)) : [])].map(read).join("\n");
+})();
+const NO_IAP = /no (in-app )?purchases|no in-app purchase/i;
+need(!(iap && NO_IAP.test(listed)), "store copy still says there are no purchases, but metadata.json lists an in-app purchase");
+if (iap) copyNeed(srcText.includes(iap.productId), `copy sells ${iap.displayName} but no source file mentions ${iap.productId} yet (the StoreKit item has not landed)`);
+if (/daily challenge/i.test(listed)) copyNeed(/daily/i.test(srcText), "copy promises a Daily Challenge but src/ has no daily mode yet");
+if (/\bact 8\b/i.test(listed)) copyNeed(counts.acts >= 8, `copy promises Act 8 but src/core/campaign.ts has ${counts.acts} acts`);
+if (/four new units/i.test(listed)) copyNeed(counts.units >= 28, `copy promises four new units but src/core/defs.ts has ${counts.units}`);
 need(!/,\s/.test(meta.keywords), "keywords: no spaces after commas (they waste characters)");
 const nameWords = new Set(`${meta.name} ${meta.subtitle}`.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean));
 const dupes = meta.keywords.toLowerCase().split(",").filter((k) => nameWords.has(k.trim()));
@@ -134,7 +172,12 @@ ${count(meta.promotionalText, 170)}. Can be changed any time without a new build
 ${block(fill(meta.description))}
 ${count(fill(meta.description), 4000)}.
 
-## Keywords
+${meta.whatsNew ? `## What's New in This Version
+
+${block(fill(meta.whatsNew))}
+${count(fill(meta.whatsNew), 4000)}. ${meta._whatsNewNote ?? ""}
+
+` : ""}## Keywords
 
 ${block(meta.keywords)}
 ${count(meta.keywords, 100)}. Comma separated, no spaces after commas, no competitor names, no words already in the name or subtitle (Apple indexes those anyway).
@@ -167,7 +210,11 @@ ${meta.ageRating.answers.map(([q, a]) => `| ${q} | ${a === "None" || a === "No" 
 
 ${meta.ageRating._why}
 
-## App Privacy
+${iap ? `## In-app purchase
+
+One ${iap.type.toLowerCase()}: **${iap.displayName}** (\`${iap.productId}\`), ${iap.price}. Every field to enter in App Store Connect is in \`store/IAP.md\`.
+
+` : ""}## App Privacy
 
 **${meta.appPrivacy.label}.** ${meta.appPrivacy.answer} ${meta.appPrivacy.tracking}
 
@@ -191,6 +238,69 @@ Re-shoot after art changes: \`npm run dev\` in one terminal, then \`npm run stor
 `;
 write("store/LISTING.md", md);
 
+// ---------------------------------------------------------------- in-app purchase guide
+if (iap) {
+  const shot = join(root, iap.reviewScreenshot);
+  const shotNote = existsSync(shot)
+    ? `\`${iap.reviewScreenshot}\` (1320 x 2868, the Shop screen).`
+    : `\`${iap.reviewScreenshot}\`: **not shot yet.** With the Shop screen in the build, run \`npm run dev\` in one terminal, then \`node tools/store-shots.mjs --only=iap-review\`. Any iPhone screenshot of the Shop screen with the price showing also works.`;
+  write("store/IAP.md", `# ${meta.name}: Full Army in-app purchase
+
+Generated from \`store/metadata.json\` (\`inAppPurchase\`) by \`npm run release:config\`. Edit that, not this file.
+What the player gets: the free download has Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles.
+**${iap.displayName}** opens every act, the Gauntlet and every Breakpoint puzzle for good, with one payment. Players who had already reached Act 3 keep it without buying.
+The app reads the price from the App Store (StoreKit 2), so changing the price here never needs a new build.
+
+## 0. Once per account: Paid Apps Agreement (5 min, can take a day to go active)
+
+App Store Connect > **Business** (Agreements, Tax, and Banking) > **Paid Apps** > accept the agreement, add a bank account and fill in the tax forms.
+Until it says **Active**, the purchase cannot be sold and App Review cannot buy it in the sandbox.
+
+## 1. Create the purchase (3 min)
+
+Apps > ${meta.name} > Monetization > **In-App Purchases** > **+**
+
+| Field | Enter | Limit |
+| --- | --- | --- |
+| Type | **${iap.type}** | |
+| Reference Name | \`${iap.referenceName}\` | ${count(iap.referenceName, 64)}, only you see it |
+| Product ID | \`${iap.productId}\` | must match the app exactly; can never be changed or reused |
+
+Click **Create**, then on the purchase's page:
+
+| Section | Field | Enter |
+| --- | --- | --- |
+| Availability | Countries or Regions | ${iap.availability} |
+| Price Schedule | Base price | ${iap.price} |
+| App Store Localization (English (U.S.)) | Display Name | \`${iap.displayName}\` (${count(iap.displayName, 30)}) |
+| App Store Localization (English (U.S.)) | Description | \`${iap.description}\` (${count(iap.description, 45)}) |
+| Family Sharing | | ${iap.familySharing} |
+| Tax Category | | ${iap.taxCategory} |
+| Review Information | Screenshot | ${shotNote} |
+| Review Information | Review Notes | the block below |
+| Promotional Image | | ${iap.promotionalImage} |
+
+Review Notes:
+
+${block(iap.reviewNotes)}
+${count(iap.reviewNotes, 4000)}.
+
+The purchase's status should now read **Ready to Submit**. If it says Missing Metadata, one of the fields above is empty.
+
+## 2. Submit it with version ${meta.version}
+
+Apple requires the first in-app purchase to go to review together with a new app version.
+On the iOS App > ${meta.version} page, scroll to **In-App Purchases and Subscriptions** > **+** > tick **${iap.displayName}** > Done.
+Then submit the version as usual (\`store/RELEASE-CHECKLIST.md\` step 7). The purchase and the build are reviewed together.
+
+## 3. Test it before submitting (optional, 5 min)
+
+- **Simulator, no Apple account needed:** \`npm run ios:open\`, pick an iPhone simulator, press Run. The shared App scheme already uses \`ios/App/Muster.storekit\` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and Restore all work locally. Debug > StoreKit > Manage Transactions refunds or deletes the test purchase. The plugin's own StoreKit tests run from \`ios/MusterStore/TestHost\` (command at the top of its project.yml).
+- **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy Full Army from a TestFlight or Xcode build. Sandbox purchases are free.
+- **Restore:** delete the app, reinstall, open Shop > Restore Purchases. Full Army comes back. (Game progress does not; it lives on the device.)
+`);
+}
+
 // ---------------------------------------------------------------- site + checklist: rename in place
 const swaps = [
   [old.name, app.storeName],
@@ -203,6 +313,9 @@ for (const f of docs) {
   if (!existsSync(join(root, f))) continue;
   let s = read(f);
   for (const [a, b] of swaps) s = s.split(a).join(b);
+  s = s.replace(/(<span data-count="(\w+)">)[^<]*(<\/span>)/g, (m, open, k, close) => (k in counts ? `${open}${counts[k]}${close}` : m));
+  for (const [, k] of s.matchAll(/data-count="(\w+)"/g)) need(k in counts, `${f}: data-count="${k}" is not a known count`);
+  if (iap) need(!NO_IAP.test(s), `${f} still says there are no purchases`);
   write(f, s);
 }
 
