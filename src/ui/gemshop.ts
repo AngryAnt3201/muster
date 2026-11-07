@@ -16,6 +16,15 @@ import { currencyBar, flyInto, gemIcon, coinIcon, rewardStrip } from "./currency
 import { el } from "./dom";
 import { ribbon } from "./game";
 import { starterOffer } from "./shop";
+// [pass] special offers: limited-time bundles on the generic price tiers (src/store/offers.ts, src/store/pass.ts)
+import "./pass.css";
+import { UNITS } from "../core/defs";
+import { CHESTS } from "../progression/chests";
+import { takeChest, waitingChests } from "../progression/pass";
+import { offerPayout, offerValueX, type Offer } from "../store/offers";
+import { currentOffers, isOfferBought, offerPool, passShops } from "../store/pass";
+import { chestArt, chestInfo, clock, openChest } from "./chests";
+import { paintPortrait } from "./game";
 
 const fmt = (n: number) => n.toLocaleString("en");
 function button(label: string | Node, cls: string, fn: () => void) {
@@ -133,6 +142,7 @@ export function shopView(starter: StarterShop, gems: GemShop) {
   const offer = starterOffer(starter, { onGone: refreshCoins });
   return el("div", { class: "gem-shop" }, [
     ...(offer ? [offer] : []),
+    offersSection(refreshCoins), // [pass] special offers: below the Starter Pack, above the chests
     // [chests] Chest offers for gems (with odds) and the daily card deals for coins.
     el("div", { id: "shop-chests", class: "shop-chests" }, [chestShop()]),
     el("section", { class: "gem-section panel" }, [
@@ -149,6 +159,97 @@ export function shopView(starter: StarterShop, gems: GemShop) {
       `Every level and mode is free to play: purchases only speed you up. Every pack and bundle gives exactly what it says. No ads, no tracking.`,
     ]),
   ]);
+}
+
+// ---------------------------------------------------------------- [pass] special offers
+const longWait = (ms: number) => (ms >= 86_400_000 ? `${Math.floor(ms / 86_400_000)}d ${Math.floor((ms % 86_400_000) / 3_600_000)}h` : clock(ms));
+const RARITY_WORD: Record<string, string> = { common: "Common", rare: "Rare", epic: "Epic", legendary: "Legendary" };
+
+/** Opens the next chest a bundle or pass reward left waiting (saved), then the next. */
+function openWaiting(after: () => void) {
+  const ch = takeChest();
+  if (!ch) return after();
+  openChest(ch, () => (waitingChests().length ? openWaiting(after) : after()));
+}
+
+/**
+ * The Shop's special offers: 2-3 bundles that rotate every 2 days, each buyable once while it's up. Each shows exactly
+ * what it pays (the unit its cards are for, the chest with a link to its odds) and an honest "Nx value" against the
+ * gem packs. Prices are StoreKit's displayPrice for the bundle's price tier.
+ */
+export function offersSection(onChange: () => void = () => undefined): HTMLElement {
+  const shops = passShops();
+  const root = el("section", { class: "offers-section panel", "data-offers": "1" });
+  const status = el("p", { class: "of-status", role: "status", "aria-live": "polite" });
+  const say = (t: string, tone = "") => { status.textContent = t; status.className = `of-status ${tone}`; };
+  let busy = false, prices: Record<string, number | undefined> = {}, shown: Record<string, string> = {};
+  const draw = () => {
+    const offers = currentOffers(), pool = offerPool();
+    if (!offers.length) { root.hidden = true; return; }
+    const ends = offers[0].endsAt;
+    const waiting = waitingChests().length;
+    root.replaceChildren(
+      ribbon("Special offers", "gem-ribbon"),
+      el("span", { class: "of-timer" }, [`Ends in ${longWait(ends - Date.now())}`]),
+      ...(waiting ? [el("div", { class: "of-waiting" }, [button(el("span", {}, [`Open your chest${waiting > 1 ? "s" : ""} (${waiting})`]), "primary small", () => openWaiting(draw))])] : []),
+      ...offers.map((o) => card(o, pool)),
+      status,
+      el("p", { class: "of-fine" }, ["Value compares the bundle with gem packs at the same price (coins at 10 a gem, cards at their daily-deal price, the chest at its Shop price). Chest contents follow the odds shown."]),
+    );
+  };
+  const card = (o: Offer, pool: ReturnType<typeof offerPool>) => {
+    const pay = offerPayout(o, pool), bought = isOfferBought(o.id);
+    const unit = pay.cards ? (() => {
+      const c = el("canvas", { width: "60", height: "60", style: "width:30px;height:30px" }) as HTMLCanvasElement;
+      requestAnimationFrame(() => paintPortrait(c, pay.cards!.kind));
+      return c;
+    })() : coinIcon();
+    const buy = button(el("span", {}, [shown[o.productId] ?? "..."]), "gold big of-buy", () => void doBuy(o));
+    buy.disabled = busy || !shown[o.productId];
+    const x = offerValueX(o, prices);
+    return el("div", { class: `of-card ${o.tier} ${bought ? "bought" : ""}`, "data-offer-id": o.id }, [
+      el("div", { class: "of-head" }, [el("b", {}, [o.name]), x >= 2 ? el("span", { class: "gem-flag" }, [`${x}x value`]) : el("span")]),
+      el("div", { class: "of-items" }, [
+        el("div", { class: "of-item" }, [gemIcon(), el("b", {}, [fmt(pay.gems)]), el("small", {}, [GEM_NAME])]),
+        el("div", { class: "of-item" }, [coinIcon(), el("b", {}, [fmt(pay.coins)]), el("small", {}, ["coins"])]),
+        el("div", { class: `of-item r-${pay.cards?.rarity ?? "common"}` }, [unit, el("b", {}, [pay.cards ? `x${pay.cards.n}` : "-"]), el("small", {}, [pay.cards ? `${UNITS[pay.cards.kind].name} (${RARITY_WORD[pay.cards.rarity]})` : "cards as coins"])]),
+        el("div", { class: "of-item" }, [chestArt(o.chest), el("small", {}, [CHESTS[o.chest].name]), button("Odds", "ghost small of-odds", () => chestInfo(o.chest))]),
+      ]),
+      el("div", { class: "of-foot" }, [bought ? el("span", { class: "of-done" }, ["Bought. Thank you!"]) : buy]),
+    ]);
+  };
+  async function doBuy(o: Offer) {
+    if (busy || isOfferBought(o.id)) return;
+    busy = true; say(""); draw();
+    const r = await shops.buyOffer(o);
+    busy = false;
+    if (r.status === "purchased") {
+      buzz("success"); sfx("upgrade");
+      say(`${o.name}: +${fmt(o.gems)} ${GEM_NAME.toLowerCase()}, coins and cards. Opening your chest...`, "good");
+      const at = root.querySelector(`[data-offer-id="${o.id}"]`) ?? root;
+      void flyInto(at, counter("gems"), "gems", o.gems);
+      void flyInto(at, counter("coins"), "coins", o.coins);
+      draw(); onChange();
+      setTimeout(() => openWaiting(() => { draw(); onChange(); }), 650);
+      return;
+    }
+    draw();
+    if (r.status === "pending") say("Waiting for approval. The bundle arrives by itself once it goes through.");
+    else if (r.status === "failed") { sfx("deny"); say(r.message ? `The purchase didn't go through. ${r.message}` : "The purchase didn't go through.", "warn"); }
+  }
+  const off = shops.offers.onCredit((_p, what) => {
+    if (!root.isConnected) { off(); return; }
+    say(what ? `${what.offer.name} arrived. Thank you!` : "Your bundle arrived.", "good");
+    draw(); onChange();
+  });
+  shops.offers.products().then((ps) => {
+    prices = Object.fromEntries(ps.map((p) => [p.id, p.price]));
+    shown = Object.fromEntries(ps.map((p) => [p.id, p.displayPrice]));
+    if (!busy) draw();
+  }, () => { say("Can't reach the App Store right now.", "warn"); });
+  const tick = window.setInterval(() => { if (!root.isConnected) { clearInterval(tick); return; } if (!busy) draw(); }, 60_000);
+  draw();
+  return root;
 }
 
 /** Appends the free gems a result screen just paid into its sheet (a marked hook in src/main.ts calls this). */

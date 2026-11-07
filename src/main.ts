@@ -36,15 +36,23 @@ import { foeLevelForAct } from "./progression/economy";
 import { attachReward, barracksScreen } from "./ui/barracks";
 // [chests] chest slots, free and crown chests, the opening moment (src/progression/chests.ts, src/ui/chests.ts)
 import { seedDemo, winChest } from "./progression/chests";
-import { chestArt, chestDemo, chestEarned } from "./ui/chests";
+import { chestDemo, chestEarned } from "./ui/chests";
 // [home] the tabbed home: bottom tab bar, Battle and Modes tabs, settings sheet (src/ui/home.ts, src/ui/tabs.ts)
 import { chests, crownReady, freeBanked, gameNow, initChests, localDay, onChestsChange, stateOf } from "./progression/chests";
 import { onWalletChange } from "./economy/wallet";
 import { onCollectionChange } from "./progression/collection";
 import { readyCount } from "./progression/troops";
 import { battleTab, flameChip, modesTab, settingsBody, starChip, type ModeCard } from "./ui/home";
-import { TABS, neighbour, swipeTabs, tabBar, tabIcon, type Badges, type Tab } from "./ui/tabs";
+import { TABS, neighbour, swipeTabs, tabBar, type Badges, type Tab } from "./ui/tabs";
 import { MAP_DEFS } from "./core/td/maps"; // map data only (no imports), so Bastion stays a lazy chunk
+// [pass] daily quests, the War Pass and special offers (src/progression/pass.ts, quests.ts, src/store/pass.ts, offers.ts)
+import { onPassChange, startPass } from "./progression/pass";
+import { passBadge, passScreen } from "./ui/pass";
+import { passEvent } from "./progression/passEvents";
+import { onQuestsChange, settleQuests } from "./progression/quests";
+import { usePassStore } from "./store/pass";
+import { seedPassDemo } from "./progression/pass";
+import { seedQuestDemo } from "./progression/quests";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -59,6 +67,8 @@ const starter = new StarterShop(store, (txId) => payStarter(txId, {
 }), () => starterBought(load()));
 /** [gems] Gem packs on the same store, credited through the shared wallet once per transaction. */
 const gemShop = new GemShop(store, creditPurchase);
+/** [pass] War Pass Premium and special offers on the same store (credit once per transaction, then finish). */
+usePassStore(store);
 /** Redraws the menu screen when a Starter Pack lands outside a buy (null in battles and on the Shop, which updates itself). */
 let here: (() => void) | null = null;
 
@@ -131,14 +141,14 @@ function tabBadges(): Badges {
   const c = chests(), now = gameNow();
   const ready = c.slots.filter((ch) => ch && stateOf(ch, now) === "ready").length
     + (freeBanked({ ...c } as never, now) > 0 ? 1 : 0) + (crownReady({ ...c, crown: { ...c.crown } } as never, localDay()) ? 1 : 0);
-  return { army: readyCount(), shop: !shopSeenToday(), modes: canScore(load().daily, today()), battle: ready };
+  return { army: readyCount(), shop: !shopSeenToday(), modes: canScore(load().daily, today()), battle: ready, pass: passBadge() };
 }
 const SHOP_SEEN = "muster.home.shopSeen";
 const shopSeenToday = () => { try { return localStorage.getItem(SHOP_SEEN) === localDay(); } catch { return true; } };
 const markShopSeen = () => { try { localStorage.setItem(SHOP_SEEN, localDay()); } catch { /* private mode */ } };
 /** Badges follow the wallet, the collection and the chests while the bar is up (an upgrade, a chest opening...). */
 const refreshBar = () => { const bar = app.querySelector(":scope > .tb-bar"); if (bar) bar.replaceWith(tabBar(tab, tabBadges(), (n) => home(n, TABS.indexOf(n) > TABS.indexOf(tab) ? 1 : -1))); };
-onWalletChange(refreshBar); onCollectionChange(refreshBar); onChestsChange(refreshBar);
+onWalletChange(refreshBar); onCollectionChange(refreshBar); onChestsChange(refreshBar); onPassChange(refreshBar); onQuestsChange(refreshBar); // [pass]
 
 /** The Modes tab's cards. Each opens the mode's own screen; its back button returns here. */
 function modeCards(): ModeCard[] {
@@ -181,13 +191,8 @@ function settingsSheet() {
 //   passScreen(app, { back: title, shop: () => home("shop", -1) });
 // It should append one `.screen` to `app` (home() then adds the tab bar and swipe, and hides a `.screen-head > .back`).
 function passTab() {
-  screen("pass-soon", el("div", { class: "hm-pass" }, [
-    tabIcon("pass", "hm-pass-ico"),
-    ribbon("War Pass", "gold"),
-    el("p", { class: "hm-pass-lead" }, ["Coming soon"]),
-    el("p", { class: "hm-pass-line" }, ["A season of rewards for every battle you fight: chests, coins, gems and banners."]),
-    el("div", { class: "hm-pass-teaser", "aria-hidden": "true" }, (["wood", "iron", "gilded", "royal"] as const).map((k, i) => el("span", { class: `hm-pass-tier ${i === 3 ? "top" : ""}` }, [chestArt(k), el("small", {}, [`Tier ${(i + 1) * 5}`])]))),
-  ]));
+  // [pass] the War Pass screen (src/ui/pass.ts) fills the Pass tab; home() adds the tab bar around it.
+  passScreen(app, { back: title });
 }
 // ================================================================ [/home]
 
@@ -557,6 +562,7 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
       if (!practice) save((s) => { scored = finishDaily(s.daily, key, r); });
       const d = load().daily;
       const coins = awardDaily(r.won, scored, d.streak); // [progression] scored attempt only
+      passEvent({ kind: "play", mode: "daily" }); // [pass] "play the Daily" quest
       results(m, {
         heading: r.won ? "Victory" : "Defeat",
         note: scored
@@ -718,6 +724,7 @@ async function boot() {
   void starter.start();
   void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
   settleRewards(); // [gems] pay free gems for progress made before gems existed
+  startPass(); settleQuests(); // [pass] quest + pass XP listeners, Premium's chest perk, yesterday's unclaimed quests
   migrateArmy(); // [progression] once: old saves move to the card collection (found units, new-scale levels)
   settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);
@@ -739,6 +746,8 @@ async function boot() {
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
   if (q.has("chests")) { const k = q.get("chests") ?? ""; if (k !== "result") seedDemo(); if (k === "result" || k === "full") { gemDemo("reward"); return chestEarned(winChest(3)); } title(); return chestDemo(k); } // [chests] review shots: ?chests=title|result|full|info|open|shop
+  // [pass] debug route: ?pass opens the War Pass; ?pass=free|premium|claim seeds a mid-season save for review shots.
+  if (q.has("pass")) { const k = q.get("pass") ?? ""; if (k) { seedPassDemo(k); seedQuestDemo(); } return void import("./ui/pass").then((m) => { clear(); m.passScreen(app, { back: title }); }); }
   if (q.has("gemdemo")) return gemDemo(q.get("gemdemo") ?? ""); // [gems] review shots of the result-screen moments
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });

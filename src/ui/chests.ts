@@ -11,6 +11,7 @@ import {
   crownReady, dealBought, effectiveOdds, findable, freeBanked, freeNextIn, gameNow, grantChest, localDay, msLeft,
   onChestsChange, openReady, openWithGems, skipCost, startUnlock, stateOf, todaysDeals, unlocking,
   initChests, rollContents, type Chest, type ChestType, type Granted, type WinResult,
+  unlockMsOf,
 } from "../progression/chests";
 import { foundKinds } from "../progression/collection";
 import { canAfford } from "../economy/wallet";
@@ -100,7 +101,7 @@ const ODDS_NOTE = "Cards only come from units you've met in the campaign. Units 
 export function chestInfo(type: ChestType, slot?: number, after?: () => void) {
   const d = CHESTS[type];
   const kids: Node[] = [
-    el("div", { class: "ch-info-head" }, [chestArt(type, "big"), el("div", {}, [el("h2", {}, [d.name]), el("small", {}, [d.unlockMs ? `Unlocks in ${clock(d.unlockMs)}` : "Opens at once"])])]),
+    el("div", { class: "ch-info-head" }, [chestArt(type, "big"), el("div", {}, [el("h2", {}, [d.name]), el("small", {}, [d.unlockMs ? `Unlocks in ${clock(unlockMsOf(type))}` : "Opens at once"])])]),
     contentsLine(type),
     el("div", { class: "ch-sub" }, ["Drop odds"]),
     oddsTable(type),
@@ -113,7 +114,7 @@ export function chestInfo(type: ChestType, slot?: number, after?: () => void) {
       const now = gameNow(), st = stateOf(ch, now), busy = unlocking(chests(), now);
       const cost = skipCost(chests(), slot, now);
       const row = el("div", { class: "ch-actions" });
-      if (st === "locked" && !busy) row.append(button(`Start unlock · ${clock(d.unlockMs)}`, "primary", () => { startUnlock(slot); o.remove(); after?.(); }));
+      if (st === "locked" && !busy) row.append(button(`Start unlock · ${clock(unlockMsOf(type))}`, "primary", () => { startUnlock(slot); o.remove(); after?.(); }));
       if (st === "locked" && busy) row.append(el("small", { class: "ch-note" }, ["Another chest is unlocking. One at a time."]));
       if (st !== "ready") row.append(button(["Open now ", gemPrice(cost)], `gold ${canAfford("gems", cost) ? "" : "short"}`, () => {
         const got = openWithGems(slot);
@@ -155,7 +156,7 @@ export function chestBar(): HTMLElement {
       const gem = el("span", { class: "ch-slot-gem" });
       const update = () => {
         const n = gameNow();
-        t.textContent = st === "ready" ? "Open!" : st === "unlocking" ? clock(msLeft(ch, n)) : busy ? clock(CHESTS[ch.type].unlockMs) : "Tap to unlock";
+        t.textContent = st === "ready" ? "Open!" : st === "unlocking" ? clock(msLeft(ch, n)) : busy ? clock(unlockMsOf(ch.type)) : "Tap to unlock";
         gem.replaceChildren(...(st === "ready" ? [] : [gemPrice(skipCost(chests(), i, n))]));
       };
       update();
@@ -194,7 +195,7 @@ export function chestEarned(r: WinResult, into?: HTMLElement | null) {
   const host = into ?? document.querySelector<HTMLElement>(".overlay .sheet > .results, .overlay .sheet > .boons");
   if (!host) return;
   const line = r.chest
-    ? el("div", { class: "ch-earned" }, [chestArt(r.chest.type, "ch-pop-in"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Chest earned!"]), el("small", {}, [`${CHESTS[r.chest.type].name} · ${clock(CHESTS[r.chest.type].unlockMs)}`])])])
+    ? el("div", { class: "ch-earned" }, [chestArt(r.chest.type, "ch-pop-in"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Chest earned!"]), el("small", {}, [`${CHESTS[r.chest.type].name} · ${clock(unlockMsOf(r.chest.type))}`])])])
     : el("div", { class: "ch-earned full" }, [chestArt("wood", "dim"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Slots full"]), el("small", {}, ["Open a chest to make room for the next one."])])]);
   if (r.crowns > 0) line.append(el("span", { class: `ch-crowns ${r.crownReady ? "ready" : ""}` }, [icon("crown"), r.crownReady ? "Ready!" : `${r.crowns}/${CROWNS_FOR_CHEST}`]));
   const before = host.querySelector(":scope > .btn, :scope > .boon-list, :scope > .td-result-btns");

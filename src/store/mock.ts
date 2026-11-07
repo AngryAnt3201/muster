@@ -3,7 +3,8 @@
 // What it "owns" lives in its own storage key, like an Apple ID that outlives a save reset.
 import { GEM_PACKS } from "../economy/gems";
 import { STARTER_PACK } from "./starter";
-import { STARTER, type BuyResult, type Product, type Purchase, type Store } from "./types";
+import { OFFER_TIERS } from "./offers"; // [pass]
+import { PASS, STARTER, type BuyResult, type Product, type Purchase, type Store } from "./types";
 
 export type MockMode = "ok" | "pending" | "cancelled" | "failed" | "offline";
 export const MOCK_MODES: MockMode[] = ["ok", "pending", "cancelled", "failed", "offline"];
@@ -15,9 +16,12 @@ export const MOCK_KEY = "muster.mockstore.v1";
 export const MOCK_PRODUCTS: Product[] = [
   { id: STARTER, title: "Starter Pack", description: "Gems, coins and unit cards to get your army going. One per player.", displayPrice: `$${STARTER_PACK.usd}`, price: STARTER_PACK.usd },
   ...GEM_PACKS.map((p) => ({ id: p.id, title: `${p.gems.toLocaleString("en")} Gems`, description: `A ${p.name.toLowerCase()} of ${p.gems.toLocaleString("en")} gems.`, displayPrice: `$${p.usd}`, price: p.usd })),
+  // [pass] War Pass Premium (once a season, app-enforced) and the special-offer price tiers.
+  { id: PASS, title: "War Pass Premium", description: "This season's premium reward track.", displayPrice: "$4.99", price: 4.99 },
+  ...Object.values(OFFER_TIERS).map((t) => ({ id: t.id, title: "Special Offer", description: "Limited-time bundle; contents shown in game", displayPrice: `$${t.usd}`, price: t.usd })),
 ];
-/** Every product Muster sells is a consumable today (gem packs and the Starter Pack). */
-const consumable = (id: string) => id === STARTER || GEM_PACKS.some((p) => p.id === id);
+/** Every product Muster sells is a consumable (gem packs, the Starter Pack, War Pass Premium, offer tiers). */
+const consumable = (id: string) => id === STARTER || id === PASS || id.startsWith("co.inflect.muster.offer.") || GEM_PACKS.some((p) => p.id === id);
 
 function memory(): KV {
   const m = new Map<string, string>();

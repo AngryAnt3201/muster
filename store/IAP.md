@@ -96,3 +96,70 @@ Gems are a consumable premium currency. Each pack gives the fixed number of gems
 Then on the 1.1.0 version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as the Starter Pack.
 
 Test: the simulator's `ios/App/Muster.storekit` already lists the five packs (US$0.99 to US$49.99), so buy, cancel, Ask to Buy and failure all work without an account. Debug > StoreKit > Manage Transactions shows each pack finished once its gems are saved.
+
+## 5. War Pass Premium (one consumable, 5 min)
+
+A consumable the app sells **once per 30-day season** (the app refuses a second purchase in the same season; if one ever arrives anyway, say an old Ask to Buy approved late, it pays 450 gems instead). It adds the season's premium reward track and is retroactive: tiers already reached become claimable at once. Credited once per App Store transaction and only then finished.
+
+Apps > Muster: Tactics > Monetization > **In-App Purchases** > **+** > Type **Consumable**.
+
+| Field | Enter | Limit |
+| --- | --- | --- |
+| Reference Name | `War Pass Premium` | 16/64 |
+| Product ID | `co.inflect.muster.pass` | must match the app exactly |
+| Base price | USD 4.99 | |
+| Display Name | `War Pass Premium` | 16/30 |
+| Description | `This season's premium reward track` | 34/45 |
+
+| Section | Field | Enter |
+| --- | --- | --- |
+| Availability | Countries or Regions | All countries and regions (same as the app) |
+| Price Schedule | Base price | the price above; let Apple set the other storefronts from it |
+| Family Sharing | | Not offered for consumables (the switch isn't shown). |
+| Tax Category | | Match to parent app (the default) |
+| Review Information | Screenshot | `outputs/review/pass/01-pass-free.png` (phone review shot; any iPhone screenshot of the screen with the price showing also works). Re-shoot with `node tools/pass-shots.mjs` while `npx vite --port 5594` runs. |
+| Review Information | Review Notes | the block below |
+| Promotional Image | | None |
+
+Review Notes:
+
+```
+War Pass Premium is a consumable the app sells once per 30-day season (the app refuses a second purchase in the same season). It adds a second reward track to the season's War Pass: gems, coins, chests, unit cards and a cosmetic keep skin, plus chests unlocking 20% faster. It is retroactive: rewards for tiers already reached become claimable at once. Every player progresses the pass for free through daily quests and wins, and the free track pays every player. Chest rewards show their odds (tap a chest). Nothing in battle changes and no content is locked: every level is free. It is credited once per transaction and only then finished. To find it: title screen > War Pass (or Pass tab), the Premium card below the daily quests.
+```
+733/4000.
+
+## 6. Special offers (four consumable price tiers, 15 min)
+
+Limited-time bundles in the Shop (gems + coins + cards for a named unit + one chest), 2 or 3 at a time, rotating every 2 days, each buyable once while it's up. They sell through these four generic price tiers: the game decides and shows each bundle's contents (`src/store/offers.ts`), so the App Store description stays generic and bundles can change without touching App Store Connect. The chest inside is random with its odds one tap away (Odds button on the offer). Credited once per transaction and only then finished.
+
+For each row: **+** > Type **Consumable**, the Reference Name and Product ID, **Create**, then fill the page.
+
+| Product ID | Reference Name | Price (US base) | Display Name | Description |
+| --- | --- | --- | --- | --- |
+| `co.inflect.muster.offer.t1` | `Special Offer Tier 1 (1.99)` (27/64) | USD 1.99 | `Special Offer` (13/30) | `Limited-time bundle; contents shown in game` (43/45) |
+| `co.inflect.muster.offer.t2` | `Special Offer Tier 2 (4.99)` (27/64) | USD 4.99 | `Special Offer` (13/30) | `Limited-time bundle; contents shown in game` (43/45) |
+| `co.inflect.muster.offer.t3` | `Special Offer Tier 3 (9.99)` (27/64) | USD 9.99 | `Special Offer` (13/30) | `Limited-time bundle; contents shown in game` (43/45) |
+| `co.inflect.muster.offer.t4` | `Special Offer Tier 4 (19.99)` (28/64) | USD 19.99 | `Special Offer` (13/30) | `Limited-time bundle; contents shown in game` (43/45) |
+
+The same on every tier:
+
+| Section | Field | Enter |
+| --- | --- | --- |
+| Availability | Countries or Regions | All countries and regions (same as the app) |
+| Price Schedule | Base price | the price above; let Apple set the other storefronts from it |
+| Family Sharing | | Not offered for consumables (the switch isn't shown). |
+| Tax Category | | Match to parent app (the default) |
+| Review Information | Screenshot | `outputs/review/pass/11-shop-offers.png` (phone review shot; any iPhone screenshot of the screen with the price showing also works). Re-shoot with `node tools/pass-shots.mjs` while `npx vite --port 5594` runs. |
+| Review Information | Review Notes | the block below |
+| Promotional Image | | None |
+
+Review Notes (same for every tier):
+
+```
+Special offers are limited-time bundles shown in the Shop: 2 or 3 at a time, rotating every 2 days, each buyable once while it is up. Each bundle's exact contents are shown before purchase: a fixed number of gems and coins, a fixed number of cards for a named unit, and one chest. The chest's contents are random; its odds are shown by the Odds button on the offer card. These four products are price tiers the bundles sell through, so their App Store description is generic. Every bundle is credited once per transaction and only then finished. No content is locked: every level is free. To find them: title screen > Shop, Special offers below the Starter Pack.
+```
+662/4000.
+
+Then on the 1.1.0 version page, **In-App Purchases and Subscriptions** > **+**: tick War Pass Premium and the four offer tiers too.
+
+Test: `ios/App/Muster.storekit` lists War Pass Premium (US$4.99) and the four tiers (US$1.99 to US$19.99), so buy, cancel, Ask to Buy and failure work in the simulator without an account. On the web, `?pass` and `?shop` with `&store=pending|cancelled|failed|offline` show each state.
