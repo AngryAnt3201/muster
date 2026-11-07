@@ -72,6 +72,9 @@ export function ascendedOf(e: BattleEvent, find: Find): Kick["callout"] | undefi
       return v ? at(`freeze${1 - v.side}`, e.x, e.y, (1 - v.side) as Side, "rime") : undefined;
     }
     case "shot": return e.kind === "arrow" ? asc(e.id, "outrider") : undefined;
+    case "soar": return e.second ? asc(e.id, "griffin", false) : undefined;
+    case "wave": return e.surf ? asc(e.from, "tide", false) : undefined;
+    case "laststand": return asc(e.id, "lion", false);
     default: return undefined;
   }
 }
@@ -92,6 +95,8 @@ export function kickFor(e: BattleEvent, find: Find): Kick {
       break;
     case "emerge": if (e.big) k.shake = 0.25; break;
     case "impale": k.stop = 3; k.shake = 0.2; break;
+    case "swoop": k.stop = 3; k.shake = 0.3; break;
+    case "wave": k.shake = 0.12; break;
     case "spawn": k.spawn = e.id; break;
     case "end": k.banner = e.winner; k.stop = 4; k.shake = 0.2; break;
     default: break;

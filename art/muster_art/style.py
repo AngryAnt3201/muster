@@ -47,7 +47,7 @@ ANIMS = {"idle": 2, "walk": 4, "attack": 3, "death": 3}
 # Bodies that never move reuse their idle frames for walk (manifest alias, nothing rendered).
 STATIC = {"mine", "ballista", "hive", "bombard", "turret"}
 # Built for the air: deaths tumble instead of toppling.
-FLYING = {"harrier"}
+FLYING = {"harrier", "griffin"}
 
 # ------------------------------------------------------------------ look
 INK = "#0b0f18"

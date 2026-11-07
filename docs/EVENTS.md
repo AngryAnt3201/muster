@@ -41,6 +41,11 @@ New in v2:
 - `ward {id, from, x, y, amt}`: Lamplighter `from` put a ward of `amt` on `id`.
 - `wardbreak {id, x, y, side, burst}`: `id`'s ward was used up. `burst` = a Beacon ward that went off, knocking foes back.
 - `revive {id, from, x, y}`: Ascended medic `from` brought `id` back at half health (no `death` was sent).
+- `soar {id, x, y, side, second}`: a Griffin Knight takes to the sky for a dive; `second` = Second Dive (Ascended, below half health).
+- `swoop {id, x, y, r, side, second}`: the griffin lands at (x, y), hitting and stunning ground foes within `r` (a `boom` of kind `swoop` follows).
+- `wave {id, from, x, y0, y1, w, dur, side, surf}`: Tidecaller `from` sent a wave `w` wide down the lane at x, from y0 to y1 over `dur` s (also in `battle.waves`). `surf` = Riptide: it leaves `zone` events of kind `surf`.
+- `rally {id, x, y, r, side, n}`: Lionheart `id` made a kill: `n` allies within `r` (him too) attack 25% faster for 3 s, and he heals.
+- `laststand {id, x, y, until}`: Ascended Lionheart took a killing blow and stays up on 1 health until battle time `until`.
 - `volley {id, x, y, a}`: an Ascended ranger loosed three arrows fanned around angle a.
 - `twin {id, x, y, a}`: an Ascended ballista fired two bolts.
 - `reset {id, x, y}`: Shadow Step: a kill readied the shade's blink.
@@ -65,7 +70,9 @@ New in v2:
 - Turrets are structures built in battle; they don't count as survivors (a side left with only turrets has lost).
 
 ## Battle fields
-- `zones: Zone[]`: burning ground or brambles now on the field: `{id, kind, x, y, r, side, until, dps}`. Removed when `time >= until`.
+- `zones: Zone[]`: burning ground, brambles or Riptide surf (kind `surf`: slows, no damage) now on the field: `{id, kind, x, y, r, side, until, dps}`. Removed when `time >= until`.
+- `waves: Wave[]`: Tidecaller waves rolling now: `{id, side, x, y, y0, y1, dir, w, speed, dmg, hits, surf}`; the front is at `y`. Draw a crest `w` wide.
+- Griffin Knight: `flying` while its `state` is `soar` (only anti-air reaches it), then `fight` low at `z` 0.6 with `flying` false. Lionheart: `budget` is the battle time its Last Stand ends.
 - `fuses: Fuse[]`: blasts still to go off: `{x, y, at, r, kind, side}` (bomblets, shrapnel, chain keg). Draw a sputtering bomb until `at`.
 
 ## Projectiles (`battle.projs`)

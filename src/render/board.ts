@@ -57,6 +57,9 @@ const AIR_SORT_EPS = 0.02;
 
 type TokenOpts = DrawOpts & { rank?: number; flat?: boolean; /** squash-and-stretch [sx, sy] about the feet (juice) */ sq?: readonly [number, number] };
 
+/** Drawn off the ground: flyers, and a Griffin Knight fighting low after its swoop (in reach of swords, still on the wing). */
+const aloft = (bd: Pick<Body, "flying" | "kind">) => bd.flying || bd.kind === "griffin";
+
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
@@ -391,7 +394,7 @@ export class BoardView {
       kick: (k: number) => this.onShake?.(k),
       lift: (id: number) => {
         const bd = battle?.bodies.find((b) => b.id === id);
-        return bd?.flying ? (bd.z ?? 1.2) * AIR : 0;
+        return bd && aloft(bd) ? (bd.z ?? 1.2) * AIR : 0;
       },
     };
   }
@@ -773,13 +776,14 @@ export class BoardView {
       const o = spread.get(bd.id);
       return [bd.px + (bd.x - bd.px) * a + (o?.[0] ?? 0), bd.py + (bd.y - bd.py) * a + (o?.[1] ?? 0)] as const;
     };
-    const height = (bd: Body) => (bd.flying ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
+    const height = (bd: Body) => (aloft(bd) ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
     const tex = vfxReady();
     // ---- ground decals
     for (const z of b.zones ?? []) {
       if (b.time >= z.until) continue;
       const left = Math.min(1, (z.until - b.time) / 0.6);
       if (z.kind === "thorn") { this.drawBrambles(z, left); continue; }
+      if (z.kind === "surf") { this.drawSurf(z, left); continue; }
       const fl = 0.75 + 0.25 * Math.sin(this.time * 17 + z.id);
       this.ground(z.x, z.y, (g) => {
         const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
@@ -887,6 +891,7 @@ export class BoardView {
     // ---- upright and air layers, painter-sorted by ground y
     const list: Drawable[] = [];
     for (const o of this.obstacles) list.push({ y: o.y, layer: 1, draw: () => this.drawRock(o) });
+    for (const w of b.waves ?? []) this.drawWave(w);
     for (const f of b.fuses ?? []) {
       if (b.time >= f.at) continue;
       // Thrown bomblets and dropped kegs are still in the air (an anim) for their first moments.
@@ -1000,7 +1005,7 @@ export class BoardView {
     for (const c of this.juice.callouts) {
       const bd = c.id >= 0 && b ? b.bodies.find((o) => o.id === c.id) : undefined;
       if (bd && bd.alive) { c.x = bd.x; c.y = bd.y; }
-      let head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, bd.flying ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : this.cam.project(c.x, c.y, 0.6).y - this.cam.scaleAt(c.y) * 0.9;
+      let head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, aloft(bd) ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : this.cam.project(c.x, c.y, 0.6).y - this.cam.scaleAt(c.y) * 0.9;
       // Two ribbons near each other stack instead of overlapping.
       const px = this.cam.project(c.x, c.y).x;
       if (prev && Math.abs(px - prev.x) < 130 && Math.abs(head - prev.y) < 26) head = prev.y - 26;
@@ -1025,7 +1030,7 @@ export class BoardView {
     // JUICE: the muster hop as the battle starts, a pop-in for summons, a recoil squash on each hit.
     const jz = this.juiceBody(b, bd);
     z += jz.z;
-    const scale = (bd.flying ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale * jz.scale;
+    const scale = (aloft(bd) ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale * jz.scale;
     const sq = mulSq(fall.sq, jz.sq);
     const decoy = bd.kind === "decoy";
     const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
@@ -1068,6 +1073,16 @@ export class BoardView {
       ctx.save(); ctx.globalAlpha = gl; ctx.fillStyle = "#fff6d6";
       ctx.beginPath(); ctx.arc(at.x + at.r * 0.8, at.y - at.r * 0.8, 2.5, 0, TAU); ctx.fill(); ctx.restore();
     }
+    if (bd.alive && bd.kind === "lion" && b.time < (bd.budget ?? 0)) {
+      // Last Stand: a golden blaze round him while nothing can kill him.
+      const pulse = 0.8 + 0.2 * Math.sin(this.time * 12);
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = "#ffd75e"; ctx.lineWidth = 3;
+      ctx.fillStyle = "rgba(255,215,94,0.22)";
+      ctx.beginPath(); ctx.ellipse(at.x, at.y - at.r * 0.35, at.r * 1.4 * pulse, at.r * 1.6 * pulse, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
     if (bd.alive && (bd.ward ?? 0) > 0) {
       // Lantern ward: a warm bubble that thins as it soaks up blows.
       const fade = Math.min(1, (bd.wardT ?? 1) / 0.5);
@@ -1101,6 +1116,55 @@ export class BoardView {
       }
     }
     if (bd.alive && bd.stun > 0.05) this.drawStun(at.x, at.y - at.r * 1.1, at.r, tex);
+  }
+
+  /** Riptide surf: a pale blue wash with foam rings that drift, left in a Tidecaller wave's lane. */
+  private drawSurf(z: { id: number; x: number; y: number; r: number; until: number }, left: number) {
+    this.ground(z.x, z.y, (g) => {
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r);
+      gr.addColorStop(0, `rgba(120,200,235,${0.42 * left})`);
+      gr.addColorStop(0.75, `rgba(80,170,215,${0.3 * left})`);
+      gr.addColorStop(1, "rgba(80,170,215,0)");
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(0, 0, z.r, 0, TAU); g.fill();
+      g.strokeStyle = `rgba(235,250,255,${0.7 * left})`; g.lineWidth = 0.035;
+      for (let i = 0; i < 2; i++) {
+        const k = (this.time * 0.6 + i * 0.5 + z.id * 0.13) % 1;
+        g.globalAlpha = 1 - k;
+        g.beginPath(); g.arc(0, 0, z.r * (0.3 + 0.6 * k), 0, TAU); g.stroke();
+      }
+    });
+  }
+
+  /** A Tidecaller wave: a foaming crest the width of its lane rolling forward, with a wet wake behind it. */
+  private drawWave(w: { id: number; x: number; y: number; y0: number; dir: number; w: number; side: number }) {
+    const wake = Math.min(2.2, Math.abs(w.y - w.y0));
+    this.ground(w.x, w.y, (g) => {
+      const hw = w.w / 2, d = w.dir;
+      // Wake: a fading wet band trailing back toward where it was called.
+      const gr = g.createLinearGradient(0, 0, 0, -d * wake);
+      gr.addColorStop(0, "rgba(70,170,220,0.55)");
+      gr.addColorStop(1, "rgba(70,170,220,0)");
+      g.fillStyle = gr;
+      g.fillRect(-hw, Math.min(0, -d * wake), w.w, wake);
+      // Crest: a deep blue body with a white foam lip at the front, wobbling.
+      g.fillStyle = "rgba(40,120,180,0.85)";
+      g.beginPath();
+      g.moveTo(-hw, -d * 0.35);
+      for (let i = 0; i <= 8; i++) {
+        const u = -hw + (w.w * i) / 8;
+        g.lineTo(u, d * (0.08 + 0.05 * Math.sin(this.time * 14 + i * 1.7 + w.id)));
+      }
+      g.lineTo(hw, -d * 0.35);
+      g.closePath(); g.fill();
+      g.strokeStyle = "rgba(245,252,255,0.95)"; g.lineWidth = 0.09; g.lineCap = "round";
+      g.beginPath();
+      for (let i = 0; i <= 8; i++) {
+        const u = -hw + (w.w * i) / 8, v = d * (0.08 + 0.05 * Math.sin(this.time * 14 + i * 1.7 + w.id));
+        if (i === 0) g.moveTo(u, v); else g.lineTo(u, v);
+      }
+      g.stroke();
+    });
   }
 
   /** A Thornweaver's bramble patch: a mossy ground stain with thorned runners curling across it. */

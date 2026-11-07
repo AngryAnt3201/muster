@@ -16,7 +16,7 @@ export const RARITY: Record<UnitKind, Rarity> = {
   harrier: "rare", hook: "rare", outrider: "rare",
   shade: "epic", sapper: "epic", hive: "epic", grave: "epic", bombard: "epic",
   trickster: "epic", thorn: "epic", ravager: "epic",
-  storm: "legendary", golem: "legendary",
+  storm: "legendary", golem: "legendary", griffin: "legendary", tide: "legendary", lion: "legendary",
 };
 export const rarityOf = (k: UnitKind): Rarity => RARITY[k];
 export const kindsOfRarity = (r: Rarity): UnitKind[] => UNIT_KINDS.filter((k) => RARITY[k] === r);

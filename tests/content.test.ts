@@ -38,8 +38,10 @@ describe("campaign", () => {
       if (l.unlock) expect(l.roster).toContain(l.unlock);
       if (l.id > 1) for (const k of LEVELS[l.id - 2].roster) expect(l.roster).toContain(k);
     }
-    expect(new Set(LEVELS[41].roster)).toEqual(new Set(UNIT_KINDS));
-    expect(new Set(LEVELS[47].roster)).toEqual(new Set(UNIT_KINDS));
+    // The three legendaries (Griffin Knight, Tidecaller, Lionheart) join the campaign with Acts 9-10, woven in at merge.
+    const campaignKinds = UNIT_KINDS.filter((k) => !["griffin", "tide", "lion"].includes(k));
+    expect(new Set(LEVELS[41].roster)).toEqual(new Set(campaignKinds));
+    expect(new Set(LEVELS[47].roster)).toEqual(new Set(campaignKinds));
     expect(LEVELS[29].roster).toHaveLength(12);
     expect(rosterAt(1)).toEqual(["blades", "ranger"]);
     // Acts 6 and 7 bring in one new unit a level, in the spec's order.

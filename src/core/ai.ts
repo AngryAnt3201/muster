@@ -30,12 +30,12 @@ export const DEFAULT_AI: AIProfile = { difficulty: 0.6, aggression: 0.5, tactic:
 
 export const TACTIC_WEIGHTS: Record<Tactic, Partial<Record<UnitKind, number>>> = {
   balanced: {},
-  swarm: { blades: 1.9, hive: 1.9, medic: 1.2, ranger: 0.8, golem: 0.6, ballista: 0.6, grave: 1.8, banner: 1.6, trickster: 1.3, bombard: 0.6, lamp: 1.3 },
-  fortress: { bulwark: 1.9, ballista: 1.9, medic: 1.4, mine: 1.4, lancer: 0.6, shade: 0.5, pikeman: 1.7, tinker: 1.8, bombard: 1.5, keg: 0.6, sapper: 0.6, ravager: 0.7, hook: 1.6, lamp: 1.5, outrider: 0.7 },
-  artillery: { ranger: 1.6, grenadier: 1.9, storm: 1.7, ballista: 1.4, bulwark: 1.3, blades: 0.7, lancer: 0.7, bombard: 1.9, rime: 1.6, pikeman: 1.2, tinker: 1.2, ravager: 0.7, thorn: 1.7, hook: 1.2 },
-  ambush: { mine: 2.4, shade: 1.9, lancer: 1.3, ballista: 0.8, golem: 0.7, sapper: 2.0, trickster: 1.8, keg: 1.4, harrier: 1.3, bombard: 0.7, thorn: 1.4, outrider: 1.3 },
-  blitz: { lancer: 2.0, shade: 1.6, blades: 1.5, ballista: 0.4, mine: 0.5, hive: 0.6, ravager: 1.8, harrier: 1.7, keg: 1.5, duelist: 1.3, banner: 1.2, bombard: 0.4, tinker: 0.5, outrider: 1.7, thorn: 0.6 },
-  siege: { golem: 2.2, hive: 1.4, bulwark: 1.3, storm: 1.2, mine: 0.6, bombard: 1.8, keg: 1.6, sapper: 1.4, grave: 1.3, harrier: 0.8, hook: 1.5, lamp: 1.2 },
+  swarm: { blades: 1.9, hive: 1.9, medic: 1.2, ranger: 0.8, golem: 0.6, ballista: 0.6, grave: 1.8, banner: 1.6, trickster: 1.3, bombard: 0.6, lamp: 1.3, lion: 1.4 },
+  fortress: { bulwark: 1.9, ballista: 1.9, medic: 1.4, mine: 1.4, lancer: 0.6, shade: 0.5, pikeman: 1.7, tinker: 1.8, bombard: 1.5, keg: 0.6, sapper: 0.6, ravager: 0.7, hook: 1.6, lamp: 1.5, outrider: 0.7, tide: 1.3, griffin: 0.7 },
+  artillery: { ranger: 1.6, grenadier: 1.9, storm: 1.7, ballista: 1.4, bulwark: 1.3, blades: 0.7, lancer: 0.7, bombard: 1.9, rime: 1.6, pikeman: 1.2, tinker: 1.2, ravager: 0.7, thorn: 1.7, hook: 1.2, tide: 1.6 },
+  ambush: { mine: 2.4, shade: 1.9, lancer: 1.3, ballista: 0.8, golem: 0.7, sapper: 2.0, trickster: 1.8, keg: 1.4, harrier: 1.3, bombard: 0.7, thorn: 1.4, outrider: 1.3, griffin: 1.6 },
+  blitz: { lancer: 2.0, shade: 1.6, blades: 1.5, ballista: 0.4, mine: 0.5, hive: 0.6, ravager: 1.8, harrier: 1.7, keg: 1.5, duelist: 1.3, banner: 1.2, bombard: 0.4, tinker: 0.5, outrider: 1.7, thorn: 0.6, griffin: 1.4, lion: 1.5, tide: 0.7 },
+  siege: { golem: 2.2, hive: 1.4, bulwark: 1.3, storm: 1.2, mine: 0.6, bombard: 1.8, keg: 1.6, sapper: 1.4, grave: 1.3, harrier: 0.8, hook: 1.5, lamp: 1.2, tide: 1.2 },
 };
 
 const FRONT: Role[] = ["tank", "melee", "siege", "cavalry"];
@@ -49,6 +49,7 @@ export const POWER: Record<UnitKind, number> = {
   sapper: 4.0, harrier: 4.0, banner: 2.8, rime: 4.0, ravager: 4.0, grave: 3.8,
   bombard: 3.8, tinker: 2.9, duelist: 3.0, pikeman: 3.0, keg: 2.8, trickster: 3.9,
   hook: 4.0, thorn: 4.0, outrider: 4.0, lamp: 2.9,
+  griffin: 5.0, tide: 5.0, lion: 5.0,
 };
 /** Shoots or casts at flyers itself, or builds something that does. */
 const antiAir = (k: UnitKind) => canHitAir(k) || k === "tinker";
@@ -144,6 +145,9 @@ export function valueOf(kind: UnitKind, mine: Piece[], theirs: Piece[], ai: AIPr
   if ((opp.kinds.bombard ?? 0) + (opp.kinds.grenadier ?? 0) + (opp.kinds.keg ?? 0) >= 2 && kind === "lamp") counter *= 1.35;
   // Slow tanks and flyers: an archer that keeps moving.
   if ((opp.tanks >= 2 || opp.air >= 1) && kind === "outrider") counter *= 1.25;
+  // Legendaries: a dive on a soft back line; a wave down a packed front; a hero among many allies.
+  if (opp.back >= 3 && kind === "griffin") counter *= 1.3;
+  if ((opp.swarm >= 2 || opp.tanks >= 2) && kind === "tide") counter *= 1.25;
   v *= 1 + (counter - 1) * sharp;
   // Temperament.
   const dmg = r === "melee" || r === "cavalry" || r === "assassin" || r === "siege" || r === "caster" || r === "air";

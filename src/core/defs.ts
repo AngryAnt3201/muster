@@ -14,7 +14,8 @@ export type UnitKind =
   | "shade" | "lancer" | "ballista" | "hive" | "storm" | "golem"
   | "sapper" | "harrier" | "banner" | "rime" | "ravager" | "grave"
   | "bombard" | "tinker" | "duelist" | "pikeman" | "keg" | "trickster"
-  | "hook" | "thorn" | "outrider" | "lamp";
+  | "hook" | "thorn" | "outrider" | "lamp"
+  | "griffin" | "tide" | "lion";
 /** Bodies that exist only in battle. */
 export type SpawnKind = "mite" | "golemling" | "thrall" | "turret" | "decoy" | "queen";
 export type BodyKind = UnitKind | SpawnKind;
@@ -67,6 +68,9 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   thorn: { kind: "thorn", name: "Thornweaver", short: "Sows brambles where the enemy is heading.", role: "caster", cost: 4, hp: 120, dmg: 22, range: 4.2, speed: 1.35, radius: 0.26, cooldown: 3.0, threat: 3 },
   outrider: { kind: "outrider", name: "Outrider", short: "Mounted bow. Rides rings round its prey.", role: "ranged", cost: 4, hp: 165, dmg: 19, range: 3.4, speed: 3.0, radius: 0.34, cooldown: 1.0, threat: 3 },
   lamp: { kind: "lamp", name: "Lamplighter", short: "Lantern wards soak the next blows.", role: "support", cost: 3, hp: 130, dmg: 10, range: 2.6, speed: 1.5, radius: 0.25, cooldown: 5.0, threat: 1 },
+  griffin: { kind: "griffin", name: "Griffin Knight", short: "Dives on their back line and stuns where it lands.", role: "air", cost: 5, hp: 260, dmg: 32, range: 0.25, speed: 2.6, radius: 0.32, cooldown: 1.15, threat: 4 },
+  tide: { kind: "tide", name: "Tidecaller", short: "Calls a wave down a lane that sweeps foes back.", role: "caster", cost: 5, hp: 170, dmg: 50, range: 5.0, speed: 1.35, radius: 0.27, cooldown: 3.4, threat: 4 },
+  lion: { kind: "lion", name: "Lionheart", short: "Hero duelist. Each kill rallies allies and heals him.", role: "melee", cost: 5, hp: 400, dmg: 34, range: 0.5, speed: 1.8, radius: 0.3, cooldown: 0.95, threat: 4 },
 };
 
 export interface BodyDef { name: string; hp: number; dmg: number; range: number; speed: number; radius: number; cooldown: number; threat: number; }
@@ -113,6 +117,9 @@ export const ABILITIES: Record<UnitKind, { name: string; text: string }> = {
   thorn: { name: "Bramble Crown", text: "Patches grow wider, last longer and seize whatever they sprout under." },
   outrider: { name: "Running Fire", text: "Looses two arrows a shot, at two different foes when it can." },
   lamp: { name: "Beacon", text: "Wards four allies, and a ward that breaks bursts and dazzles foes nearby." },
+  griffin: { name: "Second Dive", text: "Below half health it climbs and dives on their back line once more." },
+  tide: { name: "Riptide", text: "The wave leaves slowing surf along its lane." },
+  lion: { name: "Last Stand", text: "Once a battle, a fatal blow leaves him on 1 health, unkillable for 2.5 s." },
 };
 
 export const UNIT_KINDS = Object.keys(UNITS) as UnitKind[];

@@ -55,6 +55,15 @@ const CELLS: Cell[] = [
   ["reset", (x, y) => ({ t: "reset", id: 1, x, y })],
   ["shot bolt", (x, y) => ({ t: "shot", id: 1, kind: "bolt", x, y })],
   ["deploy", () => "drop"],
+  // Legendaries
+  ["soar", (x, y) => ({ t: "soar", id: 1, x, y, side: 0, second: false })],
+  ["second dive", (x, y) => ({ t: "soar", id: 1, x, y, side: 0, second: true })],
+  ["swoop", (x, y) => ({ t: "swoop", id: 1, x, y, r: 1.0, side: 0, second: false })],
+  B("swoop", 1.0),
+  ["wave", (x, y) => ({ t: "wave", id: 9, from: 1, x, y0: y + 0.6, y1: y - 0.6, w: 1.8, dur: 0.3, side: 0, surf: false })],
+  ["surf", (x, y) => ({ t: "zone", id: 1, x, y, r: 0.8, until: 6, side: 0, kind: "surf" })],
+  ["lion rally", (x, y) => ({ t: "rally", id: 1, x, y, r: 0.9, side: 0, n: 3 })],
+  ["last stand", (x, y) => ({ t: "laststand", id: 1, x, y, until: 3 })],
 ];
 
 const BODY: Record<number, { kind: BodyKind; side: Side }> = { 1: { kind: "ranger", side: 0 }, 2: { kind: "banner", side: 0 }, 3: { kind: "medic", side: 0 }, 4: { kind: "tinker", side: 0 }, 5: { kind: "ravager", side: 1 } };

@@ -61,13 +61,13 @@ CONTACT = os.path.join(HERE, "contact")
 INK = np.array([int(STYLE.INK[i:i + 2], 16) for i in (1, 3, 5)], np.float32) / 255
 TEAM = {k: {c: tuple(int(v[i:i + 2], 16) for i in (1, 3, 5)) for c, v in cols.items()} for k, cols in STYLE.TEAMS.items() if k != "neutral"}
 ORDER = ["mine", "blades", "ranger", "bulwark", "medic", "grenadier", "shade", "lancer", "ballista", "hive", "storm", "golem",
-         "sapper", "harrier", "banner", "rime", "ravager", "grave", "bombard", "tinker", "duelist", "pikeman", "keg", "trickster", "hook", "thorn", "outrider", "lamp",
+         "sapper", "harrier", "banner", "rime", "ravager", "grave", "bombard", "tinker", "duelist", "pikeman", "keg", "trickster", "hook", "thorn", "outrider", "lamp", "griffin", "tide", "lion",
          "mite", "golemling", "thrall", "turret", "decoy", "queen"]
 NAMES = {"mine": "Mine", "blades": "Blade Trio", "ranger": "Ranger", "bulwark": "Bulwark", "medic": "Medic", "grenadier": "Grenadier",
          "shade": "Shade", "lancer": "Lancer", "ballista": "Ballista", "hive": "Hive", "storm": "Stormcaller", "golem": "Stone Colossus",
          "sapper": "Sapper", "harrier": "Harrier", "banner": "Standard Bearer", "rime": "Rimecaller", "ravager": "Ravager",
          "grave": "Gravecaller", "bombard": "Bombard", "tinker": "Tinker", "duelist": "Duelist", "pikeman": "Pikeman", "keg": "Kegrunner",
-         "trickster": "Trickster", "hook": "Hookwarden", "thorn": "Thornweaver", "outrider": "Outrider", "lamp": "Lamplighter", "mite": "Mite", "golemling": "Shardling", "thrall": "Thrall", "turret": "Turret", "decoy": "Decoy",
+         "trickster": "Trickster", "hook": "Hookwarden", "thorn": "Thornweaver", "outrider": "Outrider", "lamp": "Lamplighter", "griffin": "Griffin Knight", "tide": "Tidecaller", "lion": "Lionheart", "mite": "Mite", "golemling": "Shardling", "thrall": "Thrall", "turret": "Turret", "decoy": "Decoy",
          "queen": "Brood Queen"}
 TIER_NAMES = {1: "Recruit", 2: "Veteran", 3: "Elite", 4: "Ascended"}
 

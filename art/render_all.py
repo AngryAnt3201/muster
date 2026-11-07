@@ -33,7 +33,7 @@ PORTRAIT = 256
 # portraits framed on the body (dense geometry) rather than the long pole/pike
 BODY_FRAME = {"banner": 7.0, "pikeman": 2.0, "duelist": 2.0, "lancer": 2.0}
 # portrait camera elevation per kind (flat things look better from higher up)
-PORTRAIT_EL = {"harrier": 48.0, "mine": 42.0, "hive": 34.0, "ballista": 34.0, "bombard": 32.0, "golem": 16.0, "turret": 30.0,
+PORTRAIT_EL = {"harrier": 48.0, "griffin": 30.0, "mine": 42.0, "hive": 34.0, "ballista": 34.0, "bombard": 32.0, "golem": 16.0, "turret": 30.0,
                "golemling": 26.0, "mite": 38.0, "queen": 38.0, "lancer": 18.0}
 BUGS = {"mite", "queen"}
 

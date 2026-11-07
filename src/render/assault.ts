@@ -16,9 +16,9 @@ export function styleOf(kind: BodyKind): Style {
     case "grenadier": case "thorn": return "lob";
     case "bombard": return "shell";
     case "storm": return "zap";
-    case "rime": return "shard";
+    case "rime": case "tide": return "shard";
     case "golem": case "golemling": return "slam";
-    case "harrier": return "dive";
+    case "harrier": case "griffin": return "dive";
     case "keg": return "keg";
     case "medic": case "hive": case "grave": case "mine": case "decoy": return "none";
     default: return "melee";
