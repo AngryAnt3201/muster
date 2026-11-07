@@ -28,7 +28,7 @@ import { GemShop } from "./store/gems";
 import { currencyBar } from "./ui/currency";
 import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
 // [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
-import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, withLevels } from "./progression/troops";
+import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, settleLegacyCoins, withLevels } from "./progression/troops";
 import { foeLevelForAct } from "./progression/economy";
 import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
 
@@ -651,6 +651,7 @@ async function boot() {
   void store.start();
   void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
   settleRewards(); // [gems] pay free gems for progress made before gems existed
+  settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
   // Deep links for checks (they skip the Full Army gates): ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop

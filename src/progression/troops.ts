@@ -7,8 +7,9 @@ import { MAX_LEVEL, clampLevel, type Levels } from "../core/levels";
 import type { MatchConfig } from "../core/match";
 import { earn, spend, wallet } from "../economy/wallet";
 import { load, save } from "../save";
+import { LEVELS } from "../core/campaign";
 import {
-  actsCleared, campaignReward, dailyReward, gauntletRivalReward, levelCap, levelsFor, skirmishReward, upgradeState,
+  FIRST_CLEAR, actsCleared, campaignReward, dailyReward, gauntletRivalReward, levelCap, levelsFor, skirmishReward, upgradeState,
   type Mode, type Reward, type UpgradeState,
 } from "./economy";
 
@@ -16,11 +17,13 @@ export interface ProgressionSave {
   levels: Levels;
   /** Skirmish coins paid today (for the daily cap). */
   skirmish?: { day: string; coins: number };
+  /** The one-off coins for campaign clears made before troop levels existed have been paid. */
+  legacyPaid?: boolean;
 }
 export const normalizeProgression = (p: Partial<ProgressionSave> | undefined): ProgressionSave => {
   const levels: Levels = {};
   for (const [k, v] of Object.entries(p?.levels ?? {})) if (clampLevel(v) > 1) levels[k as UnitKind] = clampLevel(v);
-  return { levels, ...(p?.skirmish ? { skirmish: p.skirmish } : {}) };
+  return { levels, ...(p?.skirmish ? { skirmish: p.skirmish } : {}), ...(p?.legacyPaid ? { legacyPaid: true } : {}) };
 };
 const prog = (): ProgressionSave => {
   const s = load();
@@ -51,6 +54,21 @@ export function withLevels(cfg: MatchConfig, mode: Mode, o: { act?: number; stag
 
 // ---------------------------------------------------------------- coin hooks (result screens)
 const pay = (r: Reward, why: string) => { if (r.coins > 0) earn("coins", r.coins, why); return r; };
+
+/** Coins a save would have earned as first clears before troop levels existed (campaign: level id -> best stars). */
+export function legacyCoins(campaign: Record<number, number>): number {
+  let coins = 0;
+  for (const l of LEVELS) if ((campaign[l.id] ?? 0) > 0) coins += FIRST_CLEAR(l.act);
+  return coins;
+}
+/** Once per save: pay those coins, so a returning player opens the Barracks with something to spend. */
+export function settleLegacyCoins(): number {
+  if (prog().legacyPaid) return 0;
+  const coins = legacyCoins(load().campaign);
+  save((s) => { s.progression = normalizeProgression(s.progression); s.progression.legacyPaid = true; });
+  if (coins > 0) earn("coins", coins, "campaign clears before troop levels");
+  return coins;
+}
 
 /** Call before the campaign's own star save, so a first clear is still known. */
 export function awardCampaign(l: LevelDef, won: boolean, stars: number): Reward {

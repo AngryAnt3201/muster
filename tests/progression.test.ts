@@ -185,3 +185,12 @@ describe("coin rewards", () => {
     expect(awardSkirmish(true, false, 1, [400, 400], new Date(2026, 10, 8, 12)).coins).toBe(80);
   });
 });
+
+describe("legacy coins for clears made before troop levels", () => {
+  it("pays each cleared level's first-clear coins once, by act", async () => {
+    const { legacyCoins } = await import("../src/progression/troops");
+    expect(legacyCoins({})).toBe(0);
+    // Levels 1-6 are Act 1 (125 each), level 7 is Act 2 (150); unplayed and zero-star entries pay nothing.
+    expect(legacyCoins({ 1: 3, 2: 1, 3: 2, 4: 3, 5: 1, 6: 3, 7: 2, 8: 0 })).toBe(6 * 125 + 150);
+  });
+});
