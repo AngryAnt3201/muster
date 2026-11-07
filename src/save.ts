@@ -6,6 +6,7 @@ import type { RewardSave } from "./economy/gems";
 import type { ProgressionSave } from "./progression/troops";
 import type { CollectionSave } from "./progression/collection";
 import type { ChestSave } from "./progression/chests";
+import type { CosmeticsSave } from "./progression/cosmetics";
 
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
@@ -27,6 +28,8 @@ export interface Save {
   collection?: CollectionSave;
   /** Chest slots, timers, the cycle and the free and crown chests (src/progression/chests.ts). */
   chests?: ChestSave;
+  /** Keep skins owned and equipped (src/progression/cosmetics.ts). */
+  cosmetics?: CosmeticsSave;
 }
 
 const KEY = "muster.save.v1";
