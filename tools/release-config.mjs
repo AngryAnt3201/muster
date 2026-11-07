@@ -2,7 +2,7 @@
 //   ios/app.xcconfig             display name, version, build, bundle id, team (Xcode reads it for Debug and Release)
 //   ios/App/ExportOptions.plist  App Store export with automatic signing for the team
 //   store/metadata.json          synced fields, then store/LISTING.md is regenerated from it
-//   store/IAP.md                 the Full Army in-app purchase fields for App Store Connect, from metadata.json inAppPurchase
+//   store/IAP.md                 the Starter Pack and gem pack fields for App Store Connect, from metadata.json inAppPurchase/gemPacks
 //   site/*.html, store/RELEASE-CHECKLIST.md   the old store name, email and site URL are replaced with the new ones,
 //                                and <span data-count="units">..</span> in site/*.html gets the current count
 // Copy placeholders: {{name}} plus the content counts from src/core ({{units}}, {{levels}}, {{acts}}, {{actsWord}}, ...,
@@ -219,9 +219,11 @@ ${meta.ageRating._why}
 
 ${iap ? `## In-app purchase
 
-One ${iap.type.toLowerCase()}: **${iap.displayName}** (\`${iap.productId}\`), ${iap.price}. Every field to enter in App Store Connect is in \`store/IAP.md\`.
+Free to play, every level open: nothing is locked behind a purchase, purchases only speed you up. All in-app purchases are consumables.
+
+**${iap.displayName}** (\`${iap.productId}\`, ${iap.type.toLowerCase()}, sold once per player), ${iap.price}. Every field to enter in App Store Connect is in \`store/IAP.md\`.
 ${gems ? `
-Plus ${gems.packs.length} consumable gem packs (\`${gems.packs[0].productId.replace(/\.[^.]+$/, ".*")}\`): ${gems.packs.map((g) => `${g.displayName} ${g.price.replace("USD ", "US$")}`).join(", ")}. Also in \`store/IAP.md\` (section 4). Restore Purchases covers the Full Army only; consumables can't be restored.
+Plus ${gems.packs.length} consumable gem packs (\`${gems.packs[0].productId.replace(/\.[^.]+$/, ".*")}\`): ${gems.packs.map((g) => `${g.displayName} ${g.price.replace("USD ", "US$")}`).join(", ")}. Also in \`store/IAP.md\` (section 4). No Restore Purchases: there are no non-consumables.
 ` : ""}
 ` : ""}## App Privacy
 
@@ -251,14 +253,16 @@ write("store/LISTING.md", md);
 if (iap) {
   const shot = join(root, iap.reviewScreenshot);
   const shotNote = existsSync(shot)
-    ? `\`${iap.reviewScreenshot}\` (the Shop screen with the Full Army price, 1320x2868). Re-shoot with \`node tools/store-shots.mjs --only=iap-review\` while \`npm run dev\` runs.`
+    ? `\`${iap.reviewScreenshot}\` (the Shop screen with the Starter Pack price, 1320x2868). Re-shoot with \`node tools/store-shots.mjs --only=iap-review\` while \`npm run dev\` runs.`
     : `\`${iap.reviewScreenshot}\`: **not shot yet.** With the Shop screen in the build, run \`npm run dev\` in one terminal, then \`node tools/store-shots.mjs --only=iap-review\`. Any iPhone screenshot of the Shop screen with the price showing also works.`;
-  write("store/IAP.md", `# ${meta.name}: in-app purchases (Full Army and gem packs)
+  write("store/IAP.md", `# ${meta.name}: in-app purchases (Starter Pack and gem packs)
 
-Generated from \`store/metadata.json\` (\`inAppPurchase\`) by \`npm run release:config\`. Edit that, not this file.
-What the player gets: the free download has Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles.
-**${iap.displayName}** opens every act, the Gauntlet and every Breakpoint puzzle for good, with one payment. Players who had already reached Act 3 keep it without buying.
+Generated from \`store/metadata.json\` (\`inAppPurchase\`, \`gemPacks\`) by \`npm run release:config\`. Edit that, not this file.
+Free to play, every level open: every campaign act, the Gauntlet, every Breakpoint puzzle, the Daily Challenge and Skirmish are free. Nothing is locked behind a purchase; purchases only speed you up.
+**${iap.displayName}** is a one-time offer: a ${iap.type.toLowerCase()} the app sells once per player (the Shop hides it after it's bought). It pays a fixed pack of gems, coins and unit cards (\`src/store/starter.ts\`), credited once per App Store transaction and only then finished, so an interrupted purchase is credited on the next launch.
 The app reads the price from the App Store (StoreKit 2), so changing the price here never needs a new build.
+**No Restore Purchases.** Every product is a consumable, so there is nothing to restore and the app has no Restore button.
+**Removed:** the old Full Army non-consumable (\`co.inflect.muster.fullarmy\`) is gone from the app. It was never created in App Store Connect; don't create it.
 
 ## 0. Once per account: Paid Apps Agreement (5 min, can take a day to go active)
 
@@ -304,9 +308,8 @@ Then submit the version as usual (\`store/RELEASE-CHECKLIST.md\` step 7). The pu
 
 ## 3. Test it before submitting (optional, 5 min)
 
-- **Simulator, no Apple account needed:** \`npm run ios:open\`, pick an iPhone simulator, press Run. The shared App scheme already uses \`ios/App/Muster.storekit\` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and Restore all work locally. Debug > StoreKit > Manage Transactions refunds or deletes the test purchase. The plugin's own StoreKit tests run from \`ios/MusterStore/TestHost\` (command at the top of its project.yml).
-- **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy Full Army from a TestFlight or Xcode build. Sandbox purchases are free.
-- **Restore:** delete the app, reinstall, open Shop > Restore Purchases. Full Army comes back. (Game progress does not; it lives on the device.)
+- **Simulator, no Apple account needed:** \`npm run ios:open\`, pick an iPhone simulator, press Run. The shared App scheme already uses \`ios/App/Muster.storekit\` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and failure all work locally. Debug > StoreKit > Manage Transactions shows the Starter Pack finished once its contents are saved. The plugin's own StoreKit tests run from \`ios/MusterStore/TestHost\` (command at the top of its project.yml).
+- **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy the Starter Pack from a TestFlight or Xcode build. Sandbox purchases are free. After it's bought the Shop shows "Owned" for a moment and the offer goes away.
 ${gems ? gemSection() : ""}`);
 }
 
@@ -320,7 +323,7 @@ function gemSection() {
 Gems are the optional premium currency: free players earn them by playing, and these packs sell them.
 The app decides how many gems each product id gives (\`src/economy/gems.ts\`) and shows StoreKit's own price, so prices can change here without a new build.
 Each pack is credited once per App Store transaction and only then finished, so an interrupted purchase is credited on the next launch.
-**Restore Purchases does not bring gems back.** Consumables are used up; the Shop says so under the packs.
+No Restore Purchases: gems are consumables and are used up when spent.
 
 For each row: Apps > ${meta.name} > Monetization > **In-App Purchases** > **+** > Type **${gems.type}**, then the Reference Name and Product ID, **Create**, then fill the page.
 
@@ -346,7 +349,7 @@ Review Notes (same for every pack):
 ${block(gems.reviewNotes)}
 ${count(gems.reviewNotes, 4000)}.
 
-Then on the ${meta.version} version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as Full Army.
+Then on the ${meta.version} version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as the Starter Pack.
 
 Test: the simulator's \`ios/App/Muster.storekit\` already lists the five packs (US$0.99 to US$49.99), so buy, cancel, Ask to Buy and failure all work without an account. Debug > StoreKit > Manage Transactions shows each pack finished once its gems are saved.
 `;

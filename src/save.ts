@@ -1,6 +1,6 @@
 // Progress on this device.
 import { blankDaily, type DailySave } from "./core/daily";
-import type { Entitlement } from "./store/entitlement";
+import type { StoreSave } from "./store/starter";
 import type { WalletSave } from "./economy/wallet";
 import type { RewardSave } from "./economy/gems";
 import type { ProgressionSave } from "./progression/troops";
@@ -14,8 +14,8 @@ export interface Save {
   settings: { sound: boolean; haptics: boolean; speed: number };
   seen: string[]; // unit kinds seen in a shop (NEW badge)
   lab?: unknown;
-  /** The Full Army unlock as last confirmed (cached so the game opens offline). */
-  store?: Entitlement;
+  /** Store purchases the game tracks: whether the one-time Starter Pack was bought (src/store/starter.ts). */
+  store?: StoreSave;
   /** Coins and gems (src/economy/wallet.ts). Older saves have none; the wallet fills it in. */
   wallet?: WalletSave;
   /** Free gem rewards already paid (src/economy/gems.ts). */

@@ -1,9 +1,11 @@
-# Muster: Tactics: in-app purchases (Full Army and gem packs)
+# Muster: Tactics: in-app purchases (Starter Pack and gem packs)
 
-Generated from `store/metadata.json` (`inAppPurchase`) by `npm run release:config`. Edit that, not this file.
-What the player gets: the free download has Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles.
-**Full Army** opens every act, the Gauntlet and every Breakpoint puzzle for good, with one payment. Players who had already reached Act 3 keep it without buying.
+Generated from `store/metadata.json` (`inAppPurchase`, `gemPacks`) by `npm run release:config`. Edit that, not this file.
+Free to play, every level open: every campaign act, the Gauntlet, every Breakpoint puzzle, the Daily Challenge and Skirmish are free. Nothing is locked behind a purchase; purchases only speed you up.
+**Starter Pack** is a one-time offer: a consumable the app sells once per player (the Shop hides it after it's bought). It pays a fixed pack of gems, coins and unit cards (`src/store/starter.ts`), credited once per App Store transaction and only then finished, so an interrupted purchase is credited on the next launch.
 The app reads the price from the App Store (StoreKit 2), so changing the price here never needs a new build.
+**No Restore Purchases.** Every product is a consumable, so there is nothing to restore and the app has no Restore button.
+**Removed:** the old Full Army non-consumable (`co.inflect.muster.fullarmy`) is gone from the app. It was never created in App Store Connect; don't create it.
 
 ## 0. Once per account: Paid Apps Agreement (5 min, can take a day to go active)
 
@@ -16,9 +18,9 @@ Apps > Muster: Tactics > Monetization > **In-App Purchases** > **+**
 
 | Field | Enter | Limit |
 | --- | --- | --- |
-| Type | **Non-Consumable** | |
-| Reference Name | `Full Army unlock` | 16/64, only you see it |
-| Product ID | `co.inflect.muster.fullarmy` | must match the app exactly; can never be changed or reused |
+| Type | **Consumable** | |
+| Reference Name | `Starter Pack` | 12/64, only you see it |
+| Product ID | `co.inflect.muster.starter` | must match the app exactly; can never be changed or reused |
 
 Click **Create**, then on the purchase's page:
 
@@ -26,41 +28,40 @@ Click **Create**, then on the purchase's page:
 | --- | --- | --- |
 | Availability | Countries or Regions | All countries and regions (same as the app) |
 | Price Schedule | Base price | USD 4.99 (United States base price; let Apple set the other storefronts from it) |
-| App Store Localization (English (U.S.)) | Display Name | `Full Army` (9/30) |
-| App Store Localization (English (U.S.)) | Description | `Every act, the Gauntlet and all puzzles` (39/45) |
-| Family Sharing | | Off. Turning Family Sharing on for a non-consumable cannot be undone, so leave it off unless you want families to share the unlock. |
+| App Store Localization (English (U.S.)) | Display Name | `Starter Pack` (12/30) |
+| App Store Localization (English (U.S.)) | Description | `1,200 gems, 6,000 coins and 142 cards` (37/45) |
+| Family Sharing | | Off (consumables can't be shared) |
 | Tax Category | | Match to parent app (the default) |
-| Review Information | Screenshot | `store/screenshots/iap-review.png` (the Shop screen with the Full Army price, 1320x2868). Re-shoot with `node tools/store-shots.mjs --only=iap-review` while `npm run dev` runs. |
+| Review Information | Screenshot | `store/screenshots/iap-review.png` (the Shop screen with the Starter Pack price, 1320x2868). Re-shoot with `node tools/store-shots.mjs --only=iap-review` while `npm run dev` runs. |
 | Review Information | Review Notes | the block below |
 | Promotional Image | | None (optional; only needed for App Store promotion or win-back offers) |
 
 Review Notes:
 
 ```
-Full Army is a one-time unlock. Without it, Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles are free. It opens every campaign act, the Gauntlet and every Breakpoint puzzle. To find it: title screen > Shop, or Campaign > the locked Act 3 card. Restore Purchases is on the Shop screen.
+Starter Pack is a one-time offer: a consumable that pays 1,200 gems, 6,000 coins and 142 unit cards (fixed contents, nothing random). The app sells it once per player and hides it after it is bought. It unlocks no content: every campaign act, the Gauntlet, the Daily Challenge, Skirmish and every Breakpoint puzzle are free to play, and purchases only speed progress up. It is credited once per transaction and only then finished. To find it: title screen > Shop, at the top.
 ```
-321/4000.
+475/4000.
 
 The purchase's status should now read **Ready to Submit**. If it says Missing Metadata, one of the fields above is empty.
 
 ## 2. Submit it with version 1.1.0
 
 Apple requires the first in-app purchase to go to review together with a new app version.
-On the iOS App > 1.1.0 page, scroll to **In-App Purchases and Subscriptions** > **+** > tick **Full Army** > Done.
+On the iOS App > 1.1.0 page, scroll to **In-App Purchases and Subscriptions** > **+** > tick **Starter Pack** > Done.
 Then submit the version as usual (`store/RELEASE-CHECKLIST.md` step 7). The purchase and the build are reviewed together.
 
 ## 3. Test it before submitting (optional, 5 min)
 
-- **Simulator, no Apple account needed:** `npm run ios:open`, pick an iPhone simulator, press Run. The shared App scheme already uses `ios/App/Muster.storekit` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and Restore all work locally. Debug > StoreKit > Manage Transactions refunds or deletes the test purchase. The plugin's own StoreKit tests run from `ios/MusterStore/TestHost` (command at the top of its project.yml).
-- **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy Full Army from a TestFlight or Xcode build. Sandbox purchases are free.
-- **Restore:** delete the app, reinstall, open Shop > Restore Purchases. Full Army comes back. (Game progress does not; it lives on the device.)
+- **Simulator, no Apple account needed:** `npm run ios:open`, pick an iPhone simulator, press Run. The shared App scheme already uses `ios/App/Muster.storekit` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and failure all work locally. Debug > StoreKit > Manage Transactions shows the Starter Pack finished once its contents are saved. The plugin's own StoreKit tests run from `ios/MusterStore/TestHost` (command at the top of its project.yml).
+- **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy the Starter Pack from a TestFlight or Xcode build. Sandbox purchases are free. After it's bought the Shop shows "Owned" for a moment and the offer goes away.
 
 ## 4. Gem packs (five consumables, 15 min)
 
 Gems are the optional premium currency: free players earn them by playing, and these packs sell them.
 The app decides how many gems each product id gives (`src/economy/gems.ts`) and shows StoreKit's own price, so prices can change here without a new build.
 Each pack is credited once per App Store transaction and only then finished, so an interrupted purchase is credited on the next launch.
-**Restore Purchases does not bring gems back.** Consumables are used up; the Shop says so under the packs.
+No Restore Purchases: gems are consumables and are used up when spent.
 
 For each row: Apps > Muster: Tactics > Monetization > **In-App Purchases** > **+** > Type **Consumable**, then the Reference Name and Product ID, **Create**, then fill the page.
 
@@ -88,10 +89,10 @@ The same on every pack:
 Review Notes (same for every pack):
 
 ```
-Gems are a consumable premium currency. Each pack gives the fixed number of gems in its name, credited the moment the purchase completes. Gems buy coin bundles (coins buy troop upgrades) and a once-per-run Gauntlet Rally; nothing gives random rewards. Gems are also earned free from three-star clears, bosses, Daily Challenge wins and streaks. To find them: title screen > Shop, the Gems section below Full Army. Restore Purchases restores the Full Army only, as consumables can't be restored; the Shop says so.
+Gems are a consumable premium currency. Each pack gives the fixed number of gems in its name, credited the moment the purchase completes. Gems buy coin bundles (coins buy troop upgrades) and a once-per-run Gauntlet Rally; nothing gives random rewards. Gems are also earned free from three-star clears, bosses, Daily Challenge wins and streaks. No content is locked behind them: every level is free. To find them: title screen > Shop, the Gems section below the Starter Pack.
 ```
-511/4000.
+474/4000.
 
-Then on the 1.1.0 version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as Full Army.
+Then on the 1.1.0 version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as the Starter Pack.
 
 Test: the simulator's `ios/App/Muster.storekit` already lists the five packs (US$0.99 to US$49.99), so buy, cancel, Ask to Buy and failure all work without an account. Debug > StoreKit > Manage Transactions shows each pack finished once its gems are saved.
