@@ -122,7 +122,7 @@ Strong (0.9) / mid (0.5) player AI win rate by act:
 |---|---|---|---|---|---|
 | **Expected pace** (`PLAYER_LEVEL=expected`, parity) | 67% / 83% | 67% / 33% | 67% / 42% | 58% / 33% | 58% / 42% |
 | **Under-levelled** (`PLAYER_LEVEL=1`, never upgrades) | 42% / 58% | **0% / 8%** | **0% / 0%** | 0% / 8% | 0% / 0% |
-| **One level behind** (`PLAYER_LEVEL=behind`) | BEHIND_A2 | BEHIND_A3 | BEHIND_A4 | BEHIND_A6 | BEHIND_A8 |
+| **One level behind** (`PLAYER_LEVEL=behind`) | 42% / 58% | 42% / 33% | 25% / 33% | 33% / 17% | 42% / 8% |
 
 - At the expected pace both sides are at the same level, so the campaign plays as tuned (the level-1 tuning run had
   strong at 71-77% by act on N=8; these N=6 cells are within noise of it). Note the expected run started before the
@@ -130,7 +130,9 @@ Strong (0.9) / mid (0.5) player AI win rate by act:
 - **An army left at level 1 stalls at the Act 2 boss / start of Act 3** (strong 17% on the Act 2 boss, 0% from Act 3
   on): upgrades are the gate. That's a little earlier than "Act 3-4"; the first Act 3 level is where a level-1 army
   stops winning.
-- BEHIND_NOTE
+- **One level behind** (L1 v L2 in Act 2 ... L7 v L8 in Act 8) roughly halves the strong player's win rate (25-42%)
+  and the mid player's falls to 8-33% from Act 3: still winnable with good play, but each upgrade is felt. That is where
+  a campaign-only free player sits in Acts 7-8 (see the pace table); chests, the Daily and the Gauntlet close it.
 
 ## Migration (old saves, once, at boot: `migrateArmy`)
 
