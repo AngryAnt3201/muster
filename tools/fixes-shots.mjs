@@ -77,5 +77,23 @@ for (const [name, path] of [["pill-title", ""], ["pill-shop", "?shop"], ["pill-b
   await p.context().close();
 }
 
+// 4. Barracks -> "Get coins" -> Shop -> back lands on the Barracks again.
+if (!skip("shop-back")) {
+  const p = await page();
+  await p.goto(`http://${host}:${port}/?barracks`);
+  await p.waitForTimeout(1800);
+  // Short of coins so a "Get coins" button shows.
+  await p.evaluate(async () => { const w = await import("/src/economy/wallet.ts"); w.spend("coins", w.wallet().coins, "shot"); });
+  await p.waitForTimeout(600);
+  await p.click(".pg-get");
+  await p.waitForTimeout(900);
+  await shot(p, "shop-from-barracks");
+  await p.click(".screen-head .back");
+  await p.waitForTimeout(900);
+  console.log("after back:", await p.evaluate(() => document.querySelector(".screen-head h1")?.textContent));
+  await shot(p, "shop-back-to-barracks");
+  await p.context().close();
+}
+
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();
