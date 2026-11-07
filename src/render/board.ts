@@ -1274,7 +1274,7 @@ export class BoardView {
           snd("upgrade", 0.6);
         }
       }
-      k.alpha += ((k.see ? 0.42 : 1) - k.alpha) * Math.min(1, dt * 10);
+      k.alpha += ((k.see ? 0.55 : 1) - k.alpha) * Math.min(1, dt * 10); // [keeps polish] was 0.42: the keep keeps more presence
       const state = keepState(this.keepHp[side]);
       if (k.state && state !== k.state && KEEP_STATES.indexOf(state) > KEEP_STATES.indexOf(k.state)) {
         // A stage of damage: masonry comes down.
