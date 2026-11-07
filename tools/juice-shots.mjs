@@ -1,7 +1,7 @@
 // Frame strips of the combat-feel effects (big hit, death, spawn, Ascended ability, deploy drop-in, round end) at
 // phone size (390x844 @2x), for before/after review:  PORT=5194 node tools/juice-shots.mjs <outdir> <tag>
 // Uses the 24-unit bench armies (ranks 1-4, so Ascended abilities fire), stops the game's rAF loop and drives the
-// battle frame by frame at 60 Hz, so each strip shows exact frames after the event. Writes <outdir>/<effect>-<tag>-fNN.png
+// battle frame by frame at 60 Hz, so each strip shows exact frames after the event (round end: tools/juice-end.mjs). Writes <outdir>/<effect>-<tag>-fNN.png
 // (cropped around the event) and <outdir>/<effect>-<tag>-full.png; tools/juice-strip.py stitches them into strips.
 import { chromium, devices } from "playwright";
 const [, , outDir = "outputs/review/polish2/juice", tag = "after"] = process.argv;
@@ -98,18 +98,7 @@ for (let guard = 0; guard < 2400 && done.size < Object.keys(wants).length; guard
   }
   if (hit.over) break;
 }
-// Round end: run the battle out (or a few seconds), then hand back to the game's own loop for the banner + assault.
-await page.evaluate(() => {
-  const g = window.__game, bt = g.battle;
-  for (let i = 0; i < 60 * 90 && !bt.done; i++) window.__drive(1);
-  // Finish: the remaining foes fall over 0 s so the round resolves with a winner.
-  if (!bt.done) window.__drive(60);
-  g.destroyed = false; g.lastT = performance.now(); g.raf = requestAnimationFrame(g.frame);
-});
-for (const ms of [100, 450, 900, 1300, 1800, 2600]) {
-  await page.waitForTimeout(ms === 100 ? 100 : ms - [100, 450, 900, 1300, 1800, 2600][[100, 450, 900, 1300, 1800, 2600].indexOf(ms) - 1]);
-  await page.screenshot({ path: `${outDir}/round-end-${tag}-t${String(ms).padStart(4, "0")}.png` });
-}
+// Round end: see tools/juice-end.mjs (plays a real level to its end on the game's own loop).
 console.log("captured:", [...done].join(", "));
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();
