@@ -9,6 +9,7 @@ import { KEEP_SCALE, keepImage, keepManifest, keepState } from "./keeps";
 import { frame, preload } from "./sprites";
 import { TD_SQUASH, TdCamera } from "./tdCamera";
 import { animFor, drawFrame, drawRank, drawUnit, spriteVis } from "./units";
+import { loadVfx, vfxFrame, vfxSheet } from "./vfx";
 
 const TEX_PPU = 56; // ground texture pixels per world unit (across)
 const TEX_M = 3.5; // forest margin baked around the map, world units
@@ -19,6 +20,8 @@ interface Particle { x: number; y: number; z: number; vx: number; vy: number; vz
 interface Float { x: number; y: number; text: string; life: number; color: string; }
 interface Ring { x: number; y: number; r: number; life: number; max: number; color: string; }
 interface Zap { pts: [number, number][]; life: number; }
+interface Sfx { sheet: string; x: number; y: number; z: number; size: number; t: number; max: number; tint?: string; }
+const MAX_SFX = 48;
 interface Corpse { x: number; y: number; kind: BodyKind; side: Side; face: number; rank: number; t: number; air: boolean; }
 
 function seeded(seed: number) {
@@ -48,6 +51,7 @@ export class TdView {
   private rings: Ring[] = [];
   private zaps: Zap[] = [];
   private corpses: Corpse[] = [];
+  private sfx: Sfx[] = [];
   private prev = new Map<number, [number, number]>();
   private shake = 0;
   private keepFlash = 0;
@@ -63,6 +67,13 @@ export class TdView {
     const kinds = new Set<string>();
     for (const w of run.waves) for (const g of w.groups) kinds.add(g.kind);
     preload([...kinds, "mite", "thrall", "golemling"], 1, [1, 2, 3, 4]);
+    void loadVfx();
+  }
+
+  /** A one-shot sprite effect from the shared VFX atlas (capped). */
+  private play(sheet: string, x: number, y: number, z: number, size: number, max: number, tint?: string) {
+    if (this.sfx.length >= MAX_SFX) return;
+    this.sfx.push({ sheet, x, y, z, size, t: 0, max, tint });
   }
 
   resize(w: number, h: number, dpr: number) {
@@ -85,10 +96,10 @@ export class TdView {
   absorb(events: TdEvent[]) {
     for (const e of events) {
       switch (e.t) {
-        case "hit": this.burst(e.x, e.y, e.air ? 0.6 : 0.3, e.enemy ? "#fff3c4" : "#ffb0a0", 2, 0.8); break;
-        case "boom": this.rings.push({ x: e.x, y: e.y, r: e.r, life: 0, max: 0.4, color: "#ffcf6a" }); this.burst(e.x, e.y, 0.2, "#c8a070", 6, 2); this.burst(e.x, e.y, 0.3, "#ffd36a", 4, 1.5); break;
-        case "zap": this.zaps.push({ pts: e.pts, life: 0.22 }); break;
-        case "heal": this.burst(e.x, e.y, 0.5, "#8ff0a0", 3, 0.6); break;
+        case "hit": this.burst(e.x, e.y, e.air ? 0.6 : 0.3, e.enemy ? "#fff3c4" : "#ffb0a0", 2, 0.8); if (this.sfx.length < MAX_SFX / 2) this.play("impact", e.x, e.y, e.air ? 0.7 : 0.35, 0.7, 0.22); break;
+        case "boom": this.rings.push({ x: e.x, y: e.y, r: e.r, life: 0, max: 0.4, color: "#ffcf6a" }); this.burst(e.x, e.y, 0.2, "#c8a070", 6, 2); this.play("fireball", e.x, e.y, 0, e.r * 2, 0.45); this.play("dust", e.x, e.y, 0, e.r * 2.2, 0.6); break;
+        case "zap": this.zaps.push({ pts: e.pts, life: 0.22 }); for (const [x, y] of e.pts.slice(1)) this.play("shock", x, y, 0.4, 0.9, 0.3); break;
+        case "heal": this.burst(e.x, e.y, 0.5, "#8ff0a0", 3, 0.6); this.play("heal", e.x, e.y, 0.2, 1, 0.5); break;
         case "die": this.corpses.push({ x: e.x, y: e.y, kind: e.kind, side: e.enemy ? 1 : 0, face: e.face, rank: e.rank, t: 0, air: e.air }); if (this.corpses.length > 30) this.corpses.shift(); break;
         case "gold": if (this.floats.length < MAX_FLOATS) this.floats.push({ x: e.x, y: e.y, text: `+${e.n}`, life: 0, color: "#ffd23f" }); break;
         case "leak": this.shake = 0.35; this.keepFlash = 0.5; break;
@@ -306,6 +317,22 @@ export class TdView {
         ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p.x, p.y); ctx.stroke();
       }
     }
+    // Sprite effects from the shared VFX atlas.
+    for (const fx of this.sfx) {
+      fx.t += dt;
+      if (!vis(fx.x, fx.y)) continue;
+      const sh0 = vfxSheet(fx.sheet);
+      if (!sh0) continue;
+      const src2 = vfxFrame(fx.sheet, Math.min(sh0.frames - 1, Math.floor((fx.t / fx.max) * sh0.frames)), fx.tint);
+      if (!src2) continue;
+      const sh = src2.sh;
+      const p = cam.toScreen(fx.x, fx.y, fx.z), w = fx.size * s, h = w * (sh.h / sh.w);
+      ctx.save();
+      if (sh.blend === "add") ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(src2.img, src2.sx, src2.sy, sh.w, sh.h, p.x - w * sh.anchor[0], p.y - h * sh.anchor[1], w, h);
+      ctx.restore();
+    }
+    this.sfx = this.sfx.filter((f) => f.t < f.max);
     // Lightning.
     ctx.lineJoin = "round";
     for (const z of this.zaps) {
@@ -357,7 +384,7 @@ export class TdView {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.drawMinimap();
-    this.stats = { units, culled, particles: this.parts.length };
+    this.stats = { units, culled, particles: this.parts.length + this.sfx.length };
   }
 
   private drawKeep(side: Side, x: number, y: number, state: Parameters<typeof keepImage>[1], scale: number) {

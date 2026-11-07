@@ -13,12 +13,12 @@
   },
   "perf": {
     "frames": 240,
-    "fps": 57.5,
-    "worstMs": 166.9,
+    "fps": 59.2,
+    "worstMs": 66.7,
     "maxUnitsOnScreen": 46,
     "enemies": 15,
     "defenders": 31,
-    "particles": 19
+    "particles": 30
   },
   "boss": {
     "wave": 18,
