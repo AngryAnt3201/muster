@@ -3,7 +3,7 @@
 //   LEVELS=1,6,12 N=16 PROCS=6 npx vite-node tools/balance.ts
 // Troop levels (default: everyone level 1, the game as tuned):
 //   FOE_LEVEL=act        foes at the campaign's level curve (src/progression/economy.ts EXPECTED_LEVEL_BY_ACT); or a number
-//   PLAYER_LEVEL=expected|cap|<n>   the player's whole army at the expected curve, at the level cap for that act, or n
+//   PLAYER_LEVEL=expected|cap|behind|<n>   the player's whole army at the expected curve, one above it, one below it, or n
 // Targets: strong wins every level at least sometimes (>= 40% on bosses, more elsewhere); mid falls off act by act.
 import { spawn } from "node:child_process";
 import { cpus } from "node:os";
@@ -14,7 +14,7 @@ import { ACTS, LEVELS, buildLevel } from "../src/core/campaign";
 import { levelConfig, starsFor, type LevelDef } from "../src/core/content";
 import { uniformLevels, type Levels } from "../src/core/levels";
 import { Match } from "../src/core/match";
-import { foeLevelForAct, levelCap } from "../src/progression/economy";
+import { foeLevelForAct } from "../src/progression/economy";
 
 export const PLAYERS: Record<string, AIProfile> = {
   strong: { ...DEFAULT_AI, difficulty: 0.9 },
@@ -44,7 +44,7 @@ const levelFor = (id: number) => (process.env.POWER ? buildLevel(id - 1, Number(
 /** The uniform troop level each side fields on a level, from PLAYER_LEVEL and FOE_LEVEL. */
 export function sideLevels(l: LevelDef): [number, number] {
   const pick = (v: string | undefined, act: number) =>
-    !v ? 1 : v === "act" || v === "expected" ? foeLevelForAct(act) : v === "cap" ? levelCap(act - 1) : Number(v) || 1;
+    !v ? 1 : v === "act" || v === "expected" ? foeLevelForAct(act) : v === "cap" ? foeLevelForAct(act) + 1 : v === "behind" ? Math.max(1, foeLevelForAct(act) - 1) : Number(v) || 1;
   return [pick(process.env.PLAYER_LEVEL, l.act), pick(process.env.FOE_LEVEL, l.act)];
 }
 

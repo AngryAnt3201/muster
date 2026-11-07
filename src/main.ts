@@ -27,10 +27,10 @@ import { creditPurchase } from "./economy/wallet";
 import { GemShop } from "./store/gems";
 import { currencyBar } from "./ui/currency";
 import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
-// [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
-import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, settleLegacyCoins, withLevels } from "./progression/troops";
-import { foeLevelForAct } from "./progression/economy";
-import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
+// [progression] troop levels (cards + coins), commander level, rewards and the Army (src/progression, src/ui/army.ts)
+import { armyLevel, awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, migrateArmy, settleLegacyCoins, withLevels } from "./progression/troops";
+import { recommendedLevel } from "./progression/economy";
+import { armyLabel, armyScreen, attachReward, commanderChip, underLevelledHint } from "./ui/army";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -79,6 +79,7 @@ function title() {
   const gLocked = gauntletGated(s);
   screen("title",
     currencyBar("title-cur"), // [gems] coin and gem counters
+    commanderChip(), // [progression] commander level and XP
     el("div", { class: "logo" }, [
       el("span", { class: "logo-word", "data-t": "MUSTER" }, [el("span", {}, ["MUSTER"])]),
       el("div", { class: "logo-sub" }, [ribbon("build · place · clash", "small")]),
@@ -98,7 +99,7 @@ function title() {
       btn(el("span", {}, ["Bastion", el("small", {}, ["hold the road"])]), "big bastion-btn", () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); }),
     ]),
     el("div", { class: "title-foot" }, [
-      btn(barracksLabel(), "ghost small", barracks), // [progression] badge when a troop can level up
+      btn(armyLabel(), "ghost small", army), // [progression] badge when a troop can level up
       btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, () => shopScreen()),
       btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
     ]),
@@ -239,7 +240,7 @@ function levelSheet(l: LevelDef) {
     el("span", { class: "tag" }, [cap(l.ai.tactic)]),
     el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
-    ...(foeLevelForAct(l.act) > 1 ? [el("span", { class: "tag" }, [`Troops Lv ${foeLevelForAct(l.act)}`])] : []), // [progression]
+    el("span", { class: `tag rec ${armyLevel(l.roster) < recommendedLevel(l.act) - 0.5 ? "low" : ""}` }, [`Recommended Lv ${recommendedLevel(l.act)}`]), // [progression]
   ]);
   const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${(l.unlocks ?? [l.unlock]).includes(k) ? "new" : ""}`).frame));
   sheet(el("div", {}, [
@@ -275,7 +276,8 @@ function playLevel(l: LevelDef, attempt = 0) {
           : ["Retry", () => playLevel(l, attempt + 1)],
         secondary: ["Campaign", () => campaign(l.act)],
       });
-      attachReward(coins, barracks); // [progression]
+      attachReward(coins, army); // [progression]
+      if (m.winner !== 0) underLevelledHint({ avg: armyLevel(l.roster), recommended: recommendedLevel(l.act), openArmy: army }); // [progression]
     },
     onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
@@ -489,7 +491,7 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
         primary: ["Daily", daily],
         secondary: ["Menu", title],
       });
-      attachReward(coins, barracks); // [progression]
+      attachReward(coins, army); // [progression]
     },
     onQuit: daily,
     ...(practice ? { onRestart: () => playDaily(key, true, attempt + 1) } : {}),
@@ -562,7 +564,7 @@ function playSkirmish(lab: Lab) {
         primary: ["Again", () => playSkirmish(lab)],
         secondary: ["AI lab", skirmish],
       });
-      attachReward(coins, barracks); // [progression]
+      attachReward(coins, army); // [progression]
     },
     onQuit: skirmish,
     onRestart: () => playSkirmish(lab),
@@ -586,12 +588,12 @@ function paywall() {
   } })]));
 }
 
-// ---------------------------------------------------------------- barracks
-// [progression] The Barracks lives in src/ui/barracks.ts: troop levels, upgrades with coins, "Get coins" to the Shop.
-function barracks() {
+// ---------------------------------------------------------------- army
+// [progression] The Army lives in src/ui/army.ts: the card collection, upgrades with cards + coins, "Get coins" to the Shop.
+function army() {
   clear();
-  here = barracks;
-  barracksScreen({ app, back: title, shop: () => shopScreen(barracks) });
+  here = army;
+  armyScreen({ app, back: title, shop: () => shopScreen(army) });
 }
 
 // ---------------------------------------------------------------- showcase (debug / store shots)
@@ -655,6 +657,7 @@ async function boot() {
   void store.start();
   void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
   settleRewards(); // [gems] pay free gems for progress made before gems existed
+  migrateArmy(); // [progression] once: old saves move to the card collection (found units, new-scale levels)
   settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
@@ -665,7 +668,7 @@ async function boot() {
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
   if (q.has("daily")) return daily();
-  if (q.has("barracks")) return barracks();
+  if (q.has("barracks") || q.has("army")) return army(); // [progression]
   if (q.has("shop")) return shopScreen();
   // [td] hook: ?td opens Bastion's map select, ?td=meadow|fords starts a run.
   if (q.has("td")) return void import("./ui/td").then((m) => (q.get("td") ? m.playBastion(app, q.get("td")!, title) : m.bastionMenu(app, title)));

@@ -1,12 +1,12 @@
-// Troop levels: a persistent 1-10 level per unit kind, bought with coins between matches (src/progression).
+// Troop levels: a persistent 1-12 level per unit kind, bought with cards plus coins between matches (src/progression).
 // A level scales the unit's health and damage (and the bodies it spawns) on top of its in-match rank.
 // Level 1 is a multiplier of exactly 1, so a level-1 army is the game as it was before levels existed.
 import { UNIT_KINDS, type UnitKind } from "./defs";
 
-export const MAX_LEVEL = 10;
-/** Each level past 1 adds this much health and damage (level 10 = +27%). Small on purpose: a uniform stat edge
- * compounds in a battle (more health and more damage), so +5% a level swung campaign win rates by ~30 points per level. */
-export const LEVEL_STEP = 0.03;
+export const MAX_LEVEL = 12;
+/** Each level past 1 adds this much health and damage (level 12 = +88%). Big on purpose: troop levels are the main
+ * gate, so every upgrade is felt, and campaign foes climb the same curve (src/progression/economy.ts). */
+export const LEVEL_STEP = 0.08;
 
 /** One side's levels. Missing kinds are level 1. */
 export type Levels = Partial<Record<UnitKind, number>>;
