@@ -137,3 +137,13 @@
 
 .ar-tile.ghost .ar-portrait.frame canvas { filter: grayscale(1) brightness(0.42) contrast(1.7); }
 .pg-r-cap { text-align: center; justify-content: center; flex-wrap: wrap; }
+
+/* ---- deck strip */
+.ar-deck { margin-bottom: 6px; }
+.ar-slots { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; margin-bottom: 10px; }
+.ar-slot { position: relative; aspect-ratio: 1; border-radius: 9px; padding: 0; display: grid; place-items: center; border: 2px solid var(--k-ink);
+  background: var(--k-panel); box-shadow: inset 0 0 0 2px var(--rd, transparent); cursor: pointer; font: inherit; }
+.ar-slot.empty { background: rgba(0,0,0,0.18); border-style: dashed; border-color: rgba(255,255,255,0.55); color: rgba(255,255,255,0.75); font: 400 18px/1 var(--display); cursor: default; }
+.ar-slot .ar-portrait.tiny.frame { width: 88%; height: 88%; }
+.ar-slot b { position: absolute; z-index: 2; right: -3px; bottom: -4px; padding: 0 4px; border-radius: 6px; background: var(--rd); color: #fff; font: 400 11px/1.3 var(--display); text-shadow: var(--ol-s); border: 1.5px solid var(--k-ink); }
+.ar-deckbtn { align-self: center; }

@@ -343,3 +343,33 @@ describe("legacy coins for clears made before troop levels", () => {
     expect(legacyCoins({ 1: 3, 2: 1, 3: 2, 4: 3, 5: 1, 6: 3, 7: 2, 8: 0 })).toBe(6 * 125 + 150);
   });
 });
+
+describe("the deck", () => {
+  beforeEach(() => resetSave());
+  it("narrows your in-match shop when it covers enough of the roster", async () => {
+    const { deckRoster, DECK_MIN } = await import("../src/progression/economy");
+    expect(deckRoster(["blades", "ranger", "mine"], [])).toBeUndefined(); // no deck: the whole roster, as tuned
+    expect(deckRoster(["blades", "ranger", "mine", "medic", "bulwark"], ["medic", "blades", "ranger", "golem"])).toBeUndefined(); // 3 < DECK_MIN
+    expect(DECK_MIN).toBe(4);
+    expect(deckRoster(["blades", "ranger", "mine", "medic", "bulwark"], ["medic", "blades", "ranger", "bulwark"])).toEqual(["blades", "ranger", "medic", "bulwark"]);
+  });
+  it("only found units, at most 8, applied to campaign, Gauntlet and Skirmish but never the Daily or puzzles", async () => {
+    const { deck, toggleDeck } = await import("../src/progression/troops");
+    expect(toggleDeck("golem")).toBe(false); // not found
+    const kinds = UNIT_KINDS.slice(0, 9);
+    for (const k of kinds) grantCards(k, 1, "test");
+    for (const k of kinds) toggleDeck(k);
+    expect(deck()).toEqual(kinds.slice(0, 8));
+    expect(toggleDeck(kinds[0])).toBe(false); // removed
+    expect(deck()).toHaveLength(7);
+    const l = LEVELS[LEVELS.length - 1];
+    const cfg = withLevels(levelConfig(l), "campaign", { act: l.act });
+    expect(cfg.roster?.[0]).toEqual(l.roster.filter((k) => deck().includes(k)));
+    expect(cfg.roster?.[1]).toEqual(levelConfig(l).roster?.[1]);
+    expect(withLevels({ seed: 1 }, "skirmish").roster?.[0]).toEqual(UNIT_KINDS.filter((k) => deck().includes(k)));
+    expect(withLevels({ seed: 1 }, "gauntlet", { stage: 1 }).roster?.[1]).toBeUndefined();
+    const d = dailyConfig(dailyBoard("2026-11-07"));
+    expect(withLevels(d, "daily")).toBe(d);
+    expect(withLevels({ seed: 1 }, "watch").roster).toBeUndefined();
+  });
+});

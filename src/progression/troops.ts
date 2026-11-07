@@ -2,7 +2,7 @@
 // result screens call. Coins move only through the shared wallet (src/economy/wallet.ts); cards only through the
 // collection (src/progression/collection.ts).
 import type { LevelDef } from "../core/content";
-import { START_HP, type UnitKind } from "../core/defs";
+import { START_HP, UNIT_KINDS, type UnitKind } from "../core/defs";
 import { dateKey } from "../core/daily";
 import { MAX_LEVEL, clampLevel, type Levels } from "../core/levels";
 import type { MatchConfig } from "../core/match";
@@ -11,7 +11,7 @@ import { load, save, type Save } from "../save";
 import { LEVELS } from "../core/campaign";
 import { cardsOf, foundKinds, grantCards, grantIn, isFound, normalizeCollection, spendCards } from "./collection";
 import {
-  FIRST_CLEAR, STARTER_KINDS, WIN_XP, actsCleared, armyLevelOf, campaignCards, campaignReward, commanderLevel, commanderProgress, dailyReward,
+  DECK_SIZE, FIRST_CLEAR, STARTER_KINDS, WIN_XP, actsCleared, armyLevelOf, deckRoster, campaignCards, campaignReward, commanderLevel, commanderProgress, dailyReward,
   gauntletRivalReward, keepBonus, levelCap, levelsFor, skirmishReward, unlockedKinds, upgradeState, upgradeXp,
   type Mode, type Reward, type UpgradeState,
 } from "./economy";
@@ -20,6 +20,8 @@ export interface ProgressionSave {
   levels: Levels;
   /** Commander XP (the player's level). */
   xp?: number;
+  /** The deck: up to 8 found units; the in-match shop offers only these in the campaign, Gauntlet and Skirmish. */
+  deck?: UnitKind[];
   /** 2 once the save has moved to the card collection (levels 1-12 at +8%); older saves are migrated at boot. */
   v?: number;
   /** Skirmish coins paid today (for the daily cap). */
@@ -33,8 +35,9 @@ export const normalizeProgression = (p: Partial<ProgressionSave> | undefined): P
   const levels: Levels = {};
   for (const [k, v] of Object.entries(p?.levels ?? {})) if (clampLevel(v) > 1) levels[k as UnitKind] = clampLevel(v);
   const xp = typeof p?.xp === "number" && Number.isFinite(p.xp) && p.xp > 0 ? Math.floor(p.xp) : 0;
+  const deck = [...new Set((p?.deck ?? []).filter((k) => typeof k === "string"))].slice(0, DECK_SIZE) as UnitKind[];
   return {
-    levels, ...(xp ? { xp } : {}), ...(p?.v ? { v: p.v } : {}),
+    levels, ...(xp ? { xp } : {}), ...(p?.v ? { v: p.v } : {}), ...(deck.length ? { deck } : {}),
     ...(p?.skirmish ? { skirmish: p.skirmish } : {}), ...(p?.replay ? { replay: p.replay } : {}), ...(p?.legacyPaid ? { legacyPaid: true } : {}),
   };
 };
@@ -117,6 +120,20 @@ export function upgradeTroop(k: UnitKind): UpgradeResult | null {
   return { level, xp, commanderUp: addXp(xp) };
 }
 
+/** The deck (found units only). */
+export const deck = (): UnitKind[] => (prog().deck ?? []).filter(isFound);
+/** Adds or removes a unit from the deck; returns whether it is in the deck now. A full deck refuses new units. */
+export function toggleDeck(k: UnitKind): boolean {
+  let inDeck = false;
+  save((s) => {
+    s.progression = normalizeProgression(s.progression);
+    const d = (s.progression.deck ?? []).filter((x) => x !== k);
+    inDeck = d.length === (s.progression.deck ?? []).length && d.length < DECK_SIZE && isFound(k);
+    s.progression.deck = inDeck ? [...d, k] : d;
+  });
+  return inDeck;
+}
+
 /** Adds the troop levels a mode uses to a match config (Daily and puzzles come back untouched), and in the campaign
  * and the Gauntlet the commander's keep health. */
 export function withLevels(cfg: MatchConfig, mode: Mode, o: { act?: number; stage?: number } = {}): MatchConfig {
@@ -124,6 +141,9 @@ export function withLevels(cfg: MatchConfig, mode: Mode, o: { act?: number; stag
   let out = levels ? { ...cfg, levels } : cfg;
   const bonus = mode === "campaign" || mode === "gauntlet" ? keepBonus(commander()) : 0;
   if (bonus > 0) out = { ...out, hp: [(cfg.hp?.[0] ?? START_HP) + bonus, cfg.hp?.[1] ?? START_HP] };
+  // The deck narrows your in-match shop (never the foe's, never the Daily or puzzles).
+  const mine = mode === "campaign" || mode === "gauntlet" || mode === "skirmish" ? deckRoster(cfg.roster?.[0] ?? UNIT_KINDS, deck()) : undefined;
+  if (mine) out = { ...out, roster: [mine, cfg.roster?.[1]] };
   return out;
 }
 

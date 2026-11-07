@@ -119,6 +119,17 @@ export const recommendedLevel = foeLevelForAct;
 /** Gauntlet rivals start at level 1 and gain one every 3 rivals, never above the player's cap. */
 export const gauntletFoeLevel = (stage: number, cap: number) => Math.max(1, Math.min(cap, 1 + Math.floor((Math.max(1, stage) - 1) / 3)));
 
+// ---------------------------------------------------------------- deck
+/** A deck needs at least this many of a match's units to apply; below it the full roster is offered (so a deck built
+ * from late units never empties an early level's shop). Without a deck the shop offers the whole roster, as tuned. */
+export const DECK_MIN = 4;
+/** The player's in-match roster with a deck: the roster's units that are in the deck, in roster order. */
+export function deckRoster(roster: readonly UnitKind[], deck: readonly UnitKind[]): UnitKind[] | undefined {
+  if (!deck.length) return undefined;
+  const mine = roster.filter((k) => deck.includes(k));
+  return mine.length >= DECK_MIN ? mine : undefined;
+}
+
 // ---------------------------------------------------------------- campaign cards
 /** Units every new player starts with. */
 export const STARTER_KINDS: UnitKind[] = ["blades", "ranger", "mine", "medic"];

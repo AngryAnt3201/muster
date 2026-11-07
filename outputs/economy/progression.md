@@ -134,6 +134,16 @@ Strong (0.9) / mid (0.5) player AI win rate by act:
   and the mid player's falls to 8-33% from Act 3: still winnable with good play, but each upgrade is felt. That is where
   a campaign-only free player sits in Acts 7-8 (see the pace table); chests, the Daily and the Gauntlet close it.
 
+## Deck (stretch, opt-in)
+
+- Up to 8 found units (`DECK_SIZE`), picked from a unit's card in the Army ("Add to deck"); the deck strip sits under
+  the commander plate.
+- With a deck, your in-match shop offers only the deck units that are in that match's roster (campaign, Gauntlet,
+  Skirmish), via the match config's `roster` for your side (`deckRoster`). The foe's shop is untouched.
+- If fewer than 4 deck units are in a match's roster (`DECK_MIN`), or there is no deck, the shop offers the whole
+  roster as tuned, so a deck of late units never empties an early level and every balance number above still holds.
+- Never in the Daily, Breakpoint puzzles or watch mode (tested).
+
 ## Migration (old saves, once, at boot: `migrateArmy`)
 
 - Old levels (1-10 at +3%) become the new level with at least the same stats: `1 + ceil((old - 1) x 3 / 8)`, so old 2
@@ -144,13 +154,13 @@ Strong (0.9) / mid (0.5) player AI win rate by act:
 
 ## Main.ts hooks (all marked `// [progression]`)
 
-Imports; the title's commander chip; the "Army" title button with its upgrade-ready badge; the level card's
-"Recommended Lv N" tag; the campaign defeat's under-levelled hint; `army()` replacing `barracks()` (and `?army`, with
-`?barracks` kept); `migrateArmy()` at boot. Reward lines (`attachReward`) now open the Army.
+Two import lines; the title's commander chip; the "Army" title button with its upgrade-ready badge; the level card's
+"Recommended Lv N" tag; the campaign defeat's under-levelled hint (queued after the result sheet); `barracks()` opening the Army (and `?army`, with
+`?barracks` kept); `migrateArmy()` at boot. To merge cleanly beside the chests hooks, the old import lines and
+`barracks()` keep their names (`src/ui/barracks.ts` re-exports the Army as `barracksScreen`/`barracksLabel`). Reward lines (`attachReward`) now open the Army.
 
 ## Not done
 
-- The deck (stretch): not built. The in-match shop still offers the whole roster; picking 8 would change balance and
-  needs its own pass.
+- The deck is opt-in and was not balance-tested with the AI (the balance tool plays whole rosters). See the Deck section.
 - Chests and shop card offers: the chests agent's (they call `grantCards`).
 - `outputs/economy/coins.md` still describes the old coin-only curve; this page supersedes its cost, cap and foe tables.

@@ -10,8 +10,8 @@ import { currencyBar } from "./currency";
 import { buzz } from "../native";
 import { unlockAudio, sfx } from "../audio/sfx";
 import { RARITY, isFound, onCollectionChange, type Rarity } from "../progression/collection";
-import { KEEP_HP_PER_LEVEL, MAX_COMMANDER, levelCap, type Reward } from "../progression/economy";
-import { commander, commanderBar, readyCount, troopState, upgradeTroop } from "../progression/troops";
+import { DECK_MIN, DECK_SIZE, KEEP_HP_PER_LEVEL, MAX_COMMANDER, levelCap, type Reward } from "../progression/economy";
+import { commander, commanderBar, deck, readyCount, toggleDeck, troopState, upgradeTroop } from "../progression/troops";
 import { abilityOf, framedPortrait, ribbon } from "./game";
 import { el, fmt } from "./dom";
 import { ROLE_LABEL, icon, roleBadge } from "./kit";
@@ -105,8 +105,9 @@ export function armyScreen(o: ArmyOpts) {
   const tiles = new Map<UnitKind, HTMLElement>();
   const grid = el("div", { class: "ar-grid" }, found.map((k) => { const t = tile(k); tiles.set(k, t); return t; }));
   const ghosts = el("div", { class: "ar-grid ghosts" }, unfound.map(ghost));
+  let deckRow = deckStrip();
   const scr = el("div", { class: "screen barracks-screen ar-army" }, [
-    head, cmd,
+    head, cmd, deckRow,
     el("div", { class: "ar-sec" }, [el("b", {}, ["Found"]), el("span", {}, [`${found.length}/${UNIT_KINDS.length}`])]),
     grid,
     ...(unfound.length ? [el("div", { class: "ar-sec" }, [el("b", {}, ["Not found yet"]), el("span", {}, ["Win cards in the campaign and chests"])]), ghosts] : []),
@@ -129,6 +130,25 @@ export function armyScreen(o: ArmyOpts) {
     t.addEventListener("click", () => { unlockAudio(); sfx("tap"); showDetail(k); });
     return t;
   }
+
+  /** The deck: 8 slots of found units; the in-match shop offers only these (campaign, Gauntlet, Skirmish). */
+  function deckStrip(): HTMLElement {
+    const d = deck();
+    const slots = Array.from({ length: DECK_SIZE }, (_, i) => {
+      const k = d[i];
+      if (!k) return el("div", { class: "ar-slot empty" }, ["+"]);
+      const s = el("button", { class: `ar-slot r-${RARITY[k]}` }, [framedPortrait(k, 1, "ar-portrait tiny").frame, el("b", {}, [String(troopState(k).level)])]);
+      s.addEventListener("click", () => { unlockAudio(); sfx("tap"); showDetail(k); });
+      return s;
+    });
+    const note = !d.length ? "No deck: every unit you meet can be bought in a match"
+      : d.length < DECK_MIN ? `Add ${DECK_MIN - d.length} more to use your deck` : "Your match shop offers only these";
+    return el("div", { class: "ar-deck" }, [
+      el("div", { class: "ar-sec" }, [el("b", {}, [`Deck ${d.length}/${DECK_SIZE}`]), el("span", {}, [note])]),
+      el("div", { class: "ar-slots" }, slots),
+    ]);
+  }
+  const redeck = () => { const n = deckStrip(); deckRow.replaceWith(n); deckRow = n; };
 
   function ghost(k: UnitKind): HTMLElement {
     const r = RARITY[k];
@@ -173,7 +193,16 @@ export function armyScreen(o: ArmyOpts) {
       stats,
       ...(ab ? [el("div", { class: "pg-ability ar-ability" }, [el("b", {}, [`Ascended: ${ab.name}`]), " ", ab.text])] : []),
       action(k),
+      deckButton(k),
     );
+  }
+
+  function deckButton(k: UnitKind): HTMLElement {
+    const inDeck = deck().includes(k), full = deck().length >= DECK_SIZE;
+    const b = el("button", { class: `btn small ${inDeck ? "" : "ghost"} ar-deckbtn` }, [inDeck ? "In deck: remove" : full ? "Deck full" : "Add to deck"]);
+    if (!inDeck && full) b.setAttribute("disabled", "");
+    b.addEventListener("click", () => { unlockAudio(); sfx("tap"); toggleDeck(k); redeck(); paintDetail(k); });
+    return b;
   }
 
   function action(k: UnitKind): HTMLElement {

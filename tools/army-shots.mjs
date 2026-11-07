@@ -16,7 +16,7 @@ const found = ["blades", "ranger", "mine", "medic", "bulwark", "lancer", "grenad
 // Part-way into Act 3: commander 4, a mixed collection with some cards ready.
 const mid = {
   ...base, campaign: cleared(14),
-  progression: { v: 2, xp: 250, legacyPaid: true, levels: { blades: 3, ranger: 4, bulwark: 2, mine: 2, lancer: 3, medic: 2 } },
+  progression: { v: 2, xp: 250, legacyPaid: true, levels: { blades: 3, ranger: 4, bulwark: 2, mine: 2, lancer: 3, medic: 2 }, deck: ["blades", "ranger", "bulwark", "lancer", "medic", "shade"] },
   collection: { found, cards: { blades: 9, ranger: 11, mine: 3, medic: 6, bulwark: 5, lancer: 2, grenadier: 1, ballista: 3, shade: 1, hive: 0, storm: 1 } },
 };
 const SAVES = {
