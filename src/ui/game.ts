@@ -758,13 +758,34 @@ export class GameScreen {
     this.paused = true;
     const s = load().settings;
     const m = this.h.menu;
+    const mt = this.match, you = mt.sides[0], foe = mt.sides[1];
+    const toggle = (name: string, on: boolean, fn: () => void) => {
+      const b = button("", `ghost toggle ${on ? "on" : ""}`, fn);
+      b.replaceChildren(el("span", {}, [name]), el("i", { class: "switch" }, [el("b")]));
+      b.setAttribute("aria-pressed", String(on));
+      return b;
+    };
+    // The score so far: both keeps' health, the round, and what's at stake.
+    const side = (cls: string, name: string, hp: number, max: number) => el("div", { class: `pause-side ${cls}` }, [
+      el("span", { class: "pause-name" }, [name]),
+      el("div", { class: `hpbar ${cls}` }, [el("b", { style: `width:${Math.max(0, (hp / max) * 100)}%` }), el("i", { style: `width:${Math.max(0, (hp / max) * 100)}%` }), el("span", {}, [String(Math.max(0, Math.round(hp)))])]),
+    ]);
     m.replaceChildren(el("div", { class: "sheet pause-sheet" }, [
       ribbon("Paused"),
-      button("Resume", "primary", () => this.closeMenu()),
-      ...(this.o.onRestart ? [button("Restart", "", () => { this.closeMenu(); this.o.onRestart!(); })] : []),
-      button(`Sound: ${s.sound ? "on" : "off"}`, "ghost", () => { save((x) => { x.settings.sound = !x.settings.sound; }); import("../audio/sfx").then((a) => a.setSound(load().settings.sound)); this.openMenu(); }),
-      button(`Haptics: ${s.haptics ? "on" : "off"}`, "ghost", () => { save((x) => { x.settings.haptics = !x.settings.haptics; }); import("../native").then((n) => n.setHaptics(load().settings.haptics)); this.openMenu(); }),
-      button("Quit", "danger", () => { this.closeMenu(); this.o.onQuit(); }),
+      el("div", { class: "pause-info" }, [
+        el("div", { class: "pause-title" }, [el("b", {}, [this.o.title ?? "Battle"]), el("span", {}, [this.o.mode === "puzzle" ? "Breakpoint" : `Round ${mt.round}`])]),
+        side("you", "You", this.hpShown[0], you.maxHp),
+        side("foe", foe.name, this.hpShown[1], foe.maxHp),
+      ]),
+      button("Resume", "primary big", () => this.closeMenu()),
+      el("div", { class: "pause-row" }, [
+        ...(this.o.onRestart ? [button("Restart", "", () => { this.closeMenu(); this.o.onRestart!(); })] : []),
+        button("Quit", "danger", () => { this.closeMenu(); this.o.onQuit(); }),
+      ]),
+      el("div", { class: "pause-row toggles" }, [
+        toggle("Sound", s.sound, () => { save((x) => { x.settings.sound = !x.settings.sound; }); import("../audio/sfx").then((a) => a.setSound(load().settings.sound)); this.openMenu(); }),
+        toggle("Haptics", s.haptics, () => { save((x) => { x.settings.haptics = !x.settings.haptics; }); import("../native").then((n) => n.setHaptics(load().settings.haptics)); this.openMenu(); }),
+      ]),
     ]));
     m.classList.remove("hidden");
   }
@@ -786,7 +807,7 @@ export function statsLine(kind: UnitKind) {
 }
 
 function button(label: string, cls: string, fn: () => void) {
-  const b = el("button", { class: `btn ${cls}` }, [label]);
+  const b = el("button", { class: `btn ${cls}` }, label ? [label] : []);
   b.addEventListener("click", () => { sfx("tap"); fn(); });
   return b;
 }
