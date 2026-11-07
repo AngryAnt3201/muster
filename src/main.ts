@@ -608,8 +608,10 @@ function showcase(n: number) {
     [["hook", 3.2, 4.6, 4], ["hook", 6.2, 4.4, 2], ["outrider", 1.2, 3.0, 4], ["thorn", 4.5, 1.6, 4], ["lamp", 6.6, 1.4, 4], ["outrider", 7.8, 2.6, 1]],
     // The three legendaries, Ascended and not.
     [["lion", 3.4, 4.6, 4], ["lion", 6.0, 4.6, 1], ["griffin", 1.4, 3.0, 4], ["griffin", 7.6, 3.0, 2], ["tide", 4.5, 1.4, 4], ["tide", 6.8, 1.6, 3]],
+    // Tier line-up: each legendary at ranks 1-4, left to right.
+    (["lion", "griffin", "tide"] as const).flatMap((k, row) => [1, 2, 3, 4].map((r): [string, number, number, number] => [k, 1.3 + (r - 1) * 2.1, 4.8 - row * 1.7, r])),
   ];
-  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : n === 3 ? [sets[2], sets[0]] : n === 4 ? [sets[3], sets[0]] : sets;
+  const [mine, theirs] = n === 2 ? [sets[1], sets[0]] : n === 3 ? [sets[2], sets[0]] : n === 4 ? [sets[3], sets[0]] : n === 5 ? [sets[4], sets[0]] : sets;
   const start = (list: [string, number, number, number][]) => list.map(([kind, lx, depth, rank]) => ({ kind: kind as UnitKind, lx, depth, rank }));
   const ai = (t: Tactic): AIProfile => ({ ...DEFAULT_AI, difficulty: 0.6, tactic: t, economy: 1 });
   game = new GameScreen(app, {
