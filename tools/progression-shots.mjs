@@ -105,5 +105,14 @@ const settle = (p, ms = 900) => p.waitForTimeout(ms);
   await p.waitForTimeout(1800);
   await p.screenshot({ path: `${out}/gauntlet-coins.png` });
 }
+{
+  // The level sheet names the foe troop level (Act 3 here: level 2).
+  const p = await page("capped");
+  await p.goto(`http://127.0.0.1:${port}/?campaign=3`);
+  await settle(p, 1400);
+  await p.locator(".node.current").first().click();
+  await settle(p, 700);
+  await p.screenshot({ path: `${out}/level-sheet-foe-level.png` });
+}
 await browser.close();
 console.log(errors.length ? `ERRORS:\n${errors.join("\n")}` : "no page errors");

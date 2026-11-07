@@ -22,6 +22,7 @@ import { GameScreen, framedPortrait, paintPortrait, ribbon } from "./ui/game";
 import { applyUIStyle, icon } from "./ui/kit";
 // [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
 import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, withLevels } from "./progression/troops";
+import { foeLevelForAct } from "./progression/economy";
 import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
 
 const app = document.getElementById("app")!;
@@ -226,6 +227,7 @@ function levelSheet(l: LevelDef) {
     el("span", { class: "tag" }, [cap(l.ai.tactic)]),
     el("span", { class: "tag" }, [icon("shield"), `${l.hp[1]}`]),
     ...(l.boss ? [el("span", { class: "tag boss" }, [icon("crown"), "Boss"])] : []),
+    ...(foeLevelForAct(l.act) > 1 ? [el("span", { class: "tag" }, [`Troops Lv ${foeLevelForAct(l.act)}`])] : []), // [progression]
   ]);
   const roster = el("div", { class: "roster" }, l.roster.map((k) => framedPortrait(k, 1, `roster-unit ${(l.unlocks ?? [l.unlock]).includes(k) ? "new" : ""}`).frame));
   sheet(el("div", {}, [

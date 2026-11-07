@@ -122,6 +122,8 @@ BALANCE_TABLE
 
 ## Not done yet / notes
 
+- Campaign replays aren't capped. A replay pays the win and that match's stars again (Act 8, 3 stars: 139 coins), so someone grinding three hours makes about 3,500. If that turns out too generous, the lever is a daily replay cap like Skirmish's 300 (`skirmishReward` shows the pattern).
+
 - The in-match unit popover (`statsLine` in `src/ui/game.ts`) still shows level 1 base stats. Health bars in battle use the real levelled values.
 - Gauntlet rival levels haven't been run through `tools/gauntlet.ts` yet. The rule is mild (+1 every 4 rivals, capped at your cap), but it does make deep runs harder for a player who never upgrades.
 - The coin pill in the Barracks header is local (`coinPill()` in `src/ui/barracks.ts`). Swap it for the HUD kit's pill once that lands.
