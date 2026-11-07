@@ -239,7 +239,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
   let vel: { x: number; y: number; t: number }[] = [];
   const local = (e: PointerEvent) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
   canvas.addEventListener("pointerdown", (e) => {
-    canvas.setPointerCapture(e.pointerId);
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
     const p = local(e);
     pts.set(e.pointerId, { ...p, x0: p.x, y0: p.y, t0: performance.now() });
     view.cam.stop();

@@ -50,6 +50,18 @@ ok(Math.abs(z1 - z0) > 0.3, `double tap zooms (${z0.toFixed(2)} -> ${z1.toFixed(
 await page.mouse.move(empty.x, empty.y); await page.mouse.wheel(0, -4000); await page.waitForTimeout(200);
 const z2 = await page.evaluate(() => [window.__td.view.cam.zoom, window.__td.view.cam.maxZoom]);
 ok(z2[0] <= z2[1] + 1e-6, `zoom clamps at max (${z2[0].toFixed(2)})`);
+// Pinch (two synthetic pointers spreading apart) zooms in around their midpoint.
+const pz = await page.evaluate(async () => {
+  const t = window.__td, c = document.querySelector(".td-canvas");
+  t.view.cam.zoom = 1.0; t.view.cam.clamp();
+  const z0 = t.view.cam.zoom;
+  const ev = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, isPrimary: id === 1 }));
+  ev("pointerdown", 1, 180, 400); ev("pointerdown", 2, 210, 400);
+  for (let i = 1; i <= 8; i++) { ev("pointermove", 1, 180 - i * 10, 400); ev("pointermove", 2, 210 + i * 10, 400); await new Promise((r) => setTimeout(r, 16)); }
+  ev("pointerup", 1, 100, 400); ev("pointerup", 2, 290, 400);
+  return [z0, t.view.cam.zoom];
+});
+ok(pz[1] > pz[0] * 1.5, `pinch zooms in (${pz[0].toFixed(2)} -> ${pz[1].toFixed(2)})`);
 // Call the wave.
 await page.click(".td-call");
 await page.waitForTimeout(1500);
