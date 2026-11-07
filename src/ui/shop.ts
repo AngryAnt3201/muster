@@ -11,6 +11,7 @@ import { coinIcon, flyInto, gemIcon } from "./currency";
 import { el } from "./dom";
 import { framedPortrait, ribbon } from "./game";
 import { icon } from "./kit";
+import "./shop.css";
 
 function button(label: string | Node, cls: string, fn: () => void) {
   const b = el("button", { class: `btn ${cls}` }, [label]) as HTMLButtonElement;
