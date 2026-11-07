@@ -1,0 +1,16 @@
+/* The Starter Pack offer at the top of the Shop (src/ui/shop.ts), and the chests mount below it. */
+.starter-offer { position: relative; transition: opacity 0.35s ease, transform 0.35s ease; }
+.starter-offer .starter-flag { top: 14px; left: auto; right: 14px; transform: rotate(6deg); font-size: 15px; padding: 5px 10px 6px; z-index: 3; }
+.starter-offer .shop-hero { position: relative; }
+.starter-count { position: absolute; right: -4px; bottom: -8px; z-index: 2; padding: 2px 6px 3px; border-radius: 8px; border: 2px solid var(--k-ink);
+  background: var(--gloss), #5b6b7a; color: #fff; font: 400 13px/1 var(--display); text-shadow: var(--ol-s); }
+.starter-count.r-rare { background: var(--gloss), #2f7fd8; }
+.starter-count.r-epic { background: var(--gloss), #9a45d6; }
+.starter-count.r-legendary { background: var(--gloss), #e0a020; }
+.starter-perks li { align-items: center; }
+.starter-perks .gem, .starter-perks .coin { flex: none; width: 22px; height: 22px; }
+.starter-offer.owned .shop-heroes { filter: saturate(1.15); }
+.starter-offer[data-state="pending"] .shop-status { color: var(--k-ink); }
+.starter-offer.starter-gone { opacity: 0; transform: scale(0.94); }
+/* Filled later by the chest and daily card offers; takes no space while empty. */
+.shop-chests:empty { display: none; }

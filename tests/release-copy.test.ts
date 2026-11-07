@@ -1,4 +1,5 @@
-// Release 1.1 copy: the listing, IAP guide and site describe a free game with one Full Army unlock,
+// Release 1.1 copy: the listing, IAP guide and site describe a free-to-play game with every level open, where
+// optional purchases (a one-time Starter Pack and gem packs) only speed you up,
 // never quote stale content counts, and never hard-code the price the app reads from StoreKit.
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -41,12 +42,19 @@ describe("release 1.1 listing", () => {
     for (const f of [...siteFiles, "store/LISTING.md"]) expect(read(f), f).not.toMatch(NO_IAP);
   });
 
-  it("still promises no ads and no tracking, and explains the free tier and the unlock", () => {
+  it("still promises no ads and no tracking, and says it's free to play with every level open", () => {
     expect(meta.description).toMatch(/no ads, no tracking/i);
-    expect(meta.description).toMatch(/Full Army/);
-    expect(meta.reviewNotes).toMatch(/Acts 1 and 2/);
-    expect(meta.reviewNotes).toMatch(/Restore Purchases/);
+    expect(meta.description).toMatch(/free to play, every level open/i);
+    expect(meta.description).toMatch(/Starter Pack/);
+    expect(meta.description).toMatch(/only speed you up/);
+    expect(meta.reviewNotes).toMatch(/Nothing is locked behind a purchase/);
     expect(meta.reviewNotes).toContain(meta.inAppPurchase.productId);
+  });
+
+  it("no longer mentions the Full Army, a locked act or Restore Purchases as a button the game has", () => {
+    const all = [copy, meta.inAppPurchase.reviewNotes, meta.gemPacks.reviewNotes, meta.price, read("store/IAP.md").replace(/^\*\*Removed:\*\*.*$/m, ""), read("store/LISTING.md"), read("store/RELEASE-CHECKLIST.md"), ...siteFiles.map(read)].join("\n");
+    expect(all).not.toMatch(/Full Army|fullarmy|Acts 1 and 2|locked Act/);
+    expect(all).not.toMatch(/Shop > Restore Purchases|Restore Purchases (brings|restores|is on)/);
   });
 
   it("takes unit, level, act and puzzle counts from placeholders, not hard-coded numbers", () => {
@@ -66,11 +74,11 @@ describe("release 1.1 listing", () => {
   });
 });
 
-describe("Full Army in-app purchase fields", () => {
+describe("Starter Pack in-app purchase fields", () => {
   const iap = meta.inAppPurchase;
   it("matches the product the app sells", () => {
-    expect(iap.productId).toBe("co.inflect.muster.fullarmy");
-    expect(iap.type).toBe("Non-Consumable");
+    expect(iap.productId).toBe("co.inflect.muster.starter");
+    expect(iap.type).toBe("Consumable");
     expect(iap.price).toMatch(/^USD 4\.99\b/);
   });
   it("fits App Store Connect's limits", () => {
@@ -85,6 +93,7 @@ describe("Full Army in-app purchase fields", () => {
     const md = read("store/IAP.md");
     for (const v of [iap.referenceName, iap.productId, iap.displayName, iap.description, iap.type]) expect(md).toContain(v);
     expect(md).toMatch(/Paid Apps/);
-    expect(md).toMatch(/Restore Purchases/);
+    expect(md).toMatch(/once per player/i);
+    expect(md).toMatch(/No Restore Purchases/);
   });
 });

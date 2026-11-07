@@ -1,19 +1,21 @@
-// The Shop screen: Full Army at the top (cash only), then gem packs (App Store consumables), then coin bundles
-// bought with gems. Plus the two small gem moments elsewhere: the free-gem strip on result screens and the
+// The Shop screen: the one-time Starter Pack at the top while it's unbought, then the chests mount
+// (<div id="shop-chests">, filled by the chests work), then gem packs (App Store consumables), then coin bundles
+// bought with gems. Nothing sold here unlocks content: every level and mode is free, purchases speed things up. Plus the two small gem moments elsewhere: the free-gem strip on result screens and the
 // Gauntlet Rally. Prices are always StoreKit's displayPrice; gem amounts come from src/economy/gems.ts.
+import { chestShop } from "./chests";
 import { sfx, unlockAudio } from "../audio/sfx";
 import {
   COIN_BUNDLES, GEM_NAME, GEM_PACKS, RALLY_GEMS, applyRally, bestValue, canRally, coinBonus, packBonus, type RallyRun, type Reward,
 } from "../economy/gems";
 import { canAfford, earn, spend } from "../economy/wallet";
 import { buzz } from "../native";
-import type { StoreController } from "../store";
 import type { GemShop } from "../store/gems";
+import type { StarterShop } from "../store/starter";
 import type { Product } from "../store/types";
 import { currencyBar, flyInto, gemIcon, coinIcon, rewardStrip } from "./currency";
 import { el } from "./dom";
 import { ribbon } from "./game";
-import { fullArmyOffer } from "./shop";
+import { starterOffer } from "./shop";
 
 const fmt = (n: number) => n.toLocaleString("en");
 function button(label: string | Node, cls: string, fn: () => void) {
@@ -30,7 +32,7 @@ export const shopCounters = () => currencyBar("shop-cur");
 const counter = (c: "gems" | "coins") => document.querySelector<HTMLElement>(`.shop-cur .cur-${c}`) ?? document.createElement("span");
 
 /** Everything under the Shop header. */
-export function shopView(store: StoreController, gems: GemShop) {
+export function shopView(starter: StarterShop, gems: GemShop) {
   const status = el("p", { class: "gem-status", role: "status", "aria-live": "polite" });
   const say = (text: string, tone: "" | "warn" | "good" = "") => { status.textContent = text; status.className = `gem-status ${tone}`; };
   let busy = false;
@@ -127,8 +129,12 @@ export function shopView(store: StoreController, gems: GemShop) {
   refreshCoins();
 
   load();
+  // The Starter Pack sits at the top until it's bought, then shows "Owned" for a moment and removes itself.
+  const offer = starterOffer(starter, { onGone: refreshCoins });
   return el("div", { class: "gem-shop" }, [
-    fullArmyOffer(store, { restoreNote: `Restore Purchases brings back the Full Army. ${GEM_NAME} are consumable and can't be restored.` }),
+    ...(offer ? [offer] : []),
+    // [chests] Chest offers for gems (with odds) and the daily card deals for coins.
+    el("div", { id: "shop-chests", class: "shop-chests" }, [chestShop()]),
     el("section", { class: "gem-section panel" }, [
       ribbon(GEM_NAME, "gem-ribbon"),
       el("p", { class: "gem-lead" }, [`Spend ${GEM_NAME.toLowerCase()} on coins for troop upgrades or a Gauntlet Rally. Every Daily win, boss and three-star clear earns them free.`]),
@@ -140,7 +146,7 @@ export function shopView(store: StoreController, gems: GemShop) {
       ...coinRows.map((c) => c.row),
     ]),
     el("p", { class: "gem-fine" }, [
-      `Every pack and bundle gives exactly what it says: no random rewards. ${GEM_NAME} are used up when spent and aren't restored. No ads, no tracking.`,
+      `Every level and mode is free to play: purchases only speed you up. Every pack and bundle gives exactly what it says. No ads, no tracking.`,
     ]),
   ]);
 }

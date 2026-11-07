@@ -6,9 +6,9 @@ import Capacitor
 ///   getProducts({ ids })  -> { products: [{ id, title, description, displayPrice, price }] }
 ///   purchase({ id })      -> { status: "purchased" | "pending" | "cancelled" | "failed", message?, txId?, productId? }
 ///                            a consumable comes back with txId and stays unfinished until finish({ txId })
-///   restore()             -> { owned: [id] }      rejects when AppStore.sync() fails (non-consumables only)
+///   restore()             -> { owned: [id] }      rejects when AppStore.sync() fails (non-consumables only; Muster sells none today, so the game has no Restore button)
 ///   owned()               -> { owned: [id] }
-///   unfinished()          -> { purchases: [{ txId, productId }] }   paid gem packs not finished yet
+///   unfinished()          -> { purchases: [{ txId, productId }] }   paid consumables (Starter Pack, gem packs) not finished yet
 ///   finish({ txId })      -> { finished: bool }   after the game has saved the credit
 ///   event "ownedChanged"  -> { owned: [id] }      from Transaction.updates
 ///   event "purchase"      -> { txId, productId }  a consumable from Transaction.updates (retained until a listener)

@@ -9,7 +9,6 @@ import {
 import { Match, type RoundReport } from "../src/core/match";
 import { PUZZLES, SOLUTIONS } from "../src/core/puzzles";
 import { Battle } from "../src/core/battle";
-import { actGated, levelGated } from "../src/store/entitlement";
 import { fromStart, naive, pieceCost, playPuzzle, solve } from "../tools/solver";
 
 describe("campaign", () => {
@@ -136,15 +135,6 @@ describe("Act 8: The Mirelight Fen", () => {
     expect(boss.mods?.[1]?.litStart).toBe(true);
     // Only this boss has it.
     expect(LEVELS.filter((l) => l.mods?.[1]?.litStart).map((l) => l.id)).toEqual([48]);
-  });
-
-  it("is behind the Full Army, and open once it is owned", () => {
-    const free = { campaign: {}, puzzles: {} };
-    const owned = { campaign: {}, puzzles: {}, store: { fullArmy: true } };
-    expect(actGated(free, 8)).toBe(true);
-    for (const l of fen) expect(levelGated(free, l)).toBe(true);
-    expect(actGated(owned, 8)).toBe(false);
-    for (const l of fen) expect(levelGated(owned, l)).toBe(false);
   });
 
   it("litStart: each of that side's units starts warded (mines and the other side don't), and stays deterministic", () => {

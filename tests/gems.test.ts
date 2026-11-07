@@ -10,7 +10,7 @@ import {
 import { blankWallet, creditPurchaseIn, spendIn } from "../src/economy/wallet";
 import { GemShop } from "../src/store/gems";
 import { MockStore } from "../src/store/mock";
-import { FULL_ARMY, type Purchase } from "../src/store/types";
+import { STARTER, type Purchase } from "../src/store/types";
 
 const ctx = { levels: LEVELS, acts: ACTS.length };
 const blankSave = (): EarnSave => ({ campaign: {}, puzzles: {}, gauntlet: { best: 0, runs: 0 }, daily: { streak: 0, bestStreak: 0, wins: 0 } });
@@ -40,7 +40,7 @@ describe("gem packs", () => {
 
   it("pay out from the app's catalogue, never from the store's text", () => {
     expect(gemsFor(GEM_PACKS[1].id)).toBe(450);
-    expect(gemsFor(FULL_ARMY)).toBe(0);
+    expect(gemsFor(STARTER)).toBe(0);
     expect(gemsFor("co.inflect.muster.gems.free")).toBe(0);
   });
 
@@ -52,7 +52,8 @@ describe("gem packs", () => {
       expect(got.type).toBe("Consumable");
       expect(Number(got.displayPrice)).toBe(p.usd);
     }
-    expect(sk.products.find((x: { productID: string }) => x.productID === FULL_ARMY).type).toBe("NonConsumable");
+    expect(sk.products.find((x: { productID: string }) => x.productID === STARTER).type).toBe("Consumable");
+    expect(sk.products.filter((x: { type: string }) => x.type === "NonConsumable")).toEqual([]);
   });
 });
 
@@ -124,7 +125,7 @@ describe("buying gems", () => {
     expect(w.gems).toBe(450);
   });
 
-  it("lists the packs cheapest first with store prices, and Restore never brings back consumables", async () => {
+  it("lists the packs cheapest first with store prices, and nothing is ever owned or restored", async () => {
     const store = new MockStore();
     const { gems } = shop(store);
     const ps = await gems.packs();
@@ -136,7 +137,7 @@ describe("buying gems", () => {
 
   it("refuses products that aren't gem packs", async () => {
     const { gems, w } = shop();
-    expect((await gems.buy(FULL_ARMY)).status).toBe("failed");
+    expect((await gems.buy(STARTER)).status).toBe("failed");
     expect(w.gems).toBe(0);
   });
 });
@@ -259,11 +260,11 @@ describe("gem packs in the App Store Connect copy", () => {
       expect(g.description).not.toMatch(/\$|USD|\d+\.\d\d/);
     }
   });
-  it("is written into store/IAP.md and says Restore covers the Full Army only", () => {
+  it("is written into store/IAP.md and says there is nothing to restore", () => {
     const md = read("store/IAP.md");
     for (const g of meta.gemPacks.packs) for (const v of [g.productId, g.referenceName, g.displayName, g.description]) expect(md).toContain(v);
-    expect(md).toMatch(/Restore Purchases does not bring gems back/);
-    expect(meta.reviewNotes).toMatch(/consumables are used up and cannot be restored/);
+    expect(md).toMatch(/No Restore Purchases/);
+    expect(meta.reviewNotes).toMatch(/no non-consumables, so there is no Restore Purchases button/);
   });
   it("still promises no ads, no tracking and no random rewards", () => {
     expect(meta.description).toMatch(/no ads, no tracking/i);
