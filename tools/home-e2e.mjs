@@ -1,0 +1,48 @@
+// Home check on the dev server: tabs, swipe between tabs, the bar hiding on sub-screens and under in-screen sheets,
+// back buttons returning to the tab they came from, the settings sheet, the Battle button. PORT=5591 node tools/home-e2e.mjs [outDir]
+import { chromium, devices } from "playwright";
+import { mkdirSync } from "node:fs";
+const out = process.argv[2] ?? "outputs/review/home/e2e";
+mkdirSync(out, { recursive: true });
+const PORT = process.env.PORT || "5591";
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ ...devices["iPhone 13"], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
+const page = await ctx.newPage();
+const errors = [];
+page.on("pageerror", (e) => errors.push(String(e)));
+const ok = (c, m) => { console.log(`${c ? "PASS" : "FAIL"} ${m}`); if (!c) process.exitCode = 1; };
+const active = () => page.getAttribute(".tb-tab.on", "data-tab");
+await page.goto(`http://localhost:${PORT}/?safe=59,34`); await page.waitForTimeout(1500);
+ok(await active() === "battle", "opens on Battle");
+// swipe left on the battle stage -> modes
+const swipe = async (x0, x1, y) => { await page.mouse.move(x0, y); await page.mouse.down(); for (let i = 1; i <= 6; i++) await page.mouse.move(x0 + (x1 - x0) * i / 6, y); await page.mouse.up(); await page.waitForTimeout(400); };
+await swipe(320, 80, 400);
+ok(await active() === "modes", "swipe left goes to Modes");
+await swipe(80, 320, 400);
+ok(await active() === "battle", "swipe right back to Battle");
+await swipe(80, 320, 400);
+ok(await active() === "army", "swipe right to Army");
+await page.click(".ar-tile >> nth=0"); await page.waitForTimeout(500);
+const tr = await page.evaluate(() => getComputedStyle(document.querySelector(".tb-bar")).transform);
+ok(tr !== "none", `tab bar steps down under the unit sheet (${tr})`);
+await page.screenshot({ path: `${out}/army-detail.png` });
+await page.mouse.click(195, 120); await page.waitForTimeout(400);
+await page.click('.tb-tab[data-tab="modes"]'); await page.waitForTimeout(400);
+await page.click(".daily-btn"); await page.waitForTimeout(600);
+ok(!(await page.locator(".tb-bar").count()), "Daily hides the bar");
+await page.click(".screen-head .back"); await page.waitForTimeout(500);
+ok(await active() === "modes", "Daily back returns to Modes");
+await page.click('.tb-tab[data-tab="battle"]'); await page.waitForTimeout(400);
+await page.click(".hm-map"); await page.waitForTimeout(800);
+ok(await page.locator(".map-screen").count() === 1 && !(await page.locator(".tb-bar").count()), "Map opens the campaign without the bar");
+await page.click(".map-head .back"); await page.waitForTimeout(500);
+ok(await active() === "battle", "Map back returns to Battle");
+await page.click(".hm-gear"); await page.waitForTimeout(400);
+await page.click(".hm-set-sound"); await page.click(".hm-speed .chip >> nth=2");
+const st = await page.evaluate(() => JSON.parse(localStorage.getItem("muster.save.v1")).settings);
+ok(st.speed === 3, `settings save speed and sound (${JSON.stringify(st)})`);
+await page.click(".hm-settings-wrap .btn.primary"); await page.waitForTimeout(300);
+await page.click(".hm-play", { force: true }); await page.waitForTimeout(1500);
+ok(!!(await page.evaluate(() => !!window.__game)) && !(await page.locator(".tb-bar").count()), "Battle starts the next level, bar hidden");
+ok(!errors.length, `no page errors ${errors.join(" | ")}`);
+await browser.close();
