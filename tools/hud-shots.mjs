@@ -161,5 +161,22 @@ if (tag !== "before") await still("daily-streak", "streak", "?daily");
 await still("paywall", "free", "", { click: ".menu .gauntlet-btn" });
 await still("barracks", "owner", "?barracks");
 await still("title", "free", "");
+// The kit's currency pill (not wired to data yet): coin and gem counters on a plate, for the title and battle bars.
+if (!skip("currency-pill") && tag !== "before") {
+  const p = await page("free");
+  await p.goto(`http://${host}:${port}/?barracks`);
+  await p.waitForTimeout(1800);
+  await p.evaluate(async () => {
+    const kit = await import("/src/ui/kit.ts");
+    const bar = document.createElement("div");
+    bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:99;display:flex;gap:10px;justify-content:center;padding:70px 12px 18px;background:#3f7d34";
+    bar.append(kit.currencyPill("coin", 12480), kit.currencyPill("gem", 320));
+    document.body.append(bar);
+  });
+  await p.waitForTimeout(300);
+  await p.screenshot({ path: `${out}/currency-pill-${tag}.png`, clip: { x: 0, y: 0, width: 390, height: 140 } });
+  console.log("shot currency-pill");
+  await p.context().close();
+}
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();
