@@ -1,7 +1,7 @@
 // App Store screenshots for iPhone 6.9" (1320 x 2868, portrait, no alpha) from the dev server.
 //   npm run store:shots                      all scenes, with a caption band, into store/screenshots/
 //   node tools/store-shots.mjs --only=battle,ascended --no-caption --out=some/dir --base=http://127.0.0.1:5180
-//   node tools/store-shots.mjs --only=iap-review     the Shop screen for the Full Army review screenshot (store/IAP.md), no caption
+//   node tools/store-shots.mjs --only=iap-review     the Shop screen for the Starter Pack review screenshot (store/IAP.md), no caption
 // Uses the running dev server (npm run dev, port 5180) or starts one for the run. Re-run any time the art changes.
 // Scenes are built through the game's own modules (Vite serves them by URL) and the GameScreen on window.__game,
 // so what you see is the real game UI and renderer; only the setup (rounds played, gold for the Ascend) is scripted.
@@ -31,7 +31,7 @@ const SCENES = [
   { id: "04-campaign", caption: ["A <em>{{levels}}-level</em> campaign", "{{actsWord}} acts · a boss at the end of each"], save: { campaign: stars(11), puzzles: { 1: 3, 2: 2, 3: 3 }, gauntlet: { best: 7, runs: 4 } }, run: campaign },
   { id: "05-breakpoint", caption: ["<em>Breakpoint</em> puzzles", "one battle · fixed gold"], run: breakpoint },
   { id: "06-ai-lab", caption: ["Rivals you can <em>tune</em>", "or set two AIs on each other"], run: lab },
-  // Not a listing screenshot: App Review's screenshot of the Full Army purchase. Only runs when asked for by --only.
+  // Not a listing screenshot: App Review's screenshot of the Starter Pack purchase. Only runs when asked for by --only.
   { id: "iap-review", extra: true, run: shop },
 ];
 // Counts in captions come from src/core, so they match the game that ships.
@@ -154,18 +154,18 @@ async function lab(page) {
   await page.waitForTimeout(900);
 }
 
-/** The Shop screen with the Full Army offer: ?shop if the app supports it, else the title screen's Shop button. */
+/** The Shop screen with the Starter Pack offer: ?shop if the app supports it, else the title screen's Shop button. */
 async function shop(page) {
   await page.goto(`${BASE}/?shop`);
   await page.waitForSelector(".screen");
   await page.waitForTimeout(600);
-  if (!(await page.getByText("Full Army").count())) {
+  if (!(await page.getByText("Starter Pack").count())) {
     await page.goto(`${BASE}/`);
     await page.waitForSelector(".screen");
     const button = page.getByRole("button", { name: /shop/i }).first();
-    if (!(await button.count())) throw Error("no Shop screen in this build yet (the Full Army store item adds it)");
+    if (!(await button.count())) throw Error("no Shop screen in this build yet ");
     await button.click();
-    await page.getByText("Full Army").first().waitFor({ timeout: 5000 });
+    await page.getByText("Starter Pack").first().waitFor({ timeout: 5000 });
   }
   await page.waitForTimeout(900); // the mock store answers with a price
 }

@@ -641,7 +641,8 @@ async function boot() {
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
   // [store] A Starter Pack paid but never finished (or approved later) is credited, then the screen redraws.
-  starter.onCredit(() => { if (!sheetEl) here?.(); });
+  // The Shop's own Starter Pack panel shows "Owned" and removes itself, so the Shop isn't redrawn under it.
+  starter.onCredit(() => { if (!sheetEl && !document.querySelector('[data-offer="starter"]')) here?.(); });
   void starter.start();
   void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
   settleRewards(); // [gems] pay free gems for progress made before gems existed
