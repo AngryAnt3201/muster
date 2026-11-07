@@ -116,9 +116,24 @@ FOE_LEVEL=act                  foes at the campaign curve (or a number)
 PLAYER_LEVEL=expected|cap|<n>  the player's whole army at the expected curve, at the cap for that act, or level n
 ```
 
-Both default to 1, which is the game as it was tuned. Run on Acts 3, 5 and 8 (18 levels, N=8 seeds per player AI, strong 0.9 and mid 0.5). The targets are the tool's own: strong wins at least 50% of each level (40% on bosses), and mid falls off act by act.
+Both default to 1, which is the game as it was tuned. `tools/gauntlet.ts` also takes `PLAYER_LEVEL` and `GAUNTLET_LEVELS=1`. Run on Acts 3, 5 and 8 (18 levels, N=8 seeds per player AI, strong 0.9 and mid 0.5). The targets are the tool's own: strong wins at least 50% of each level (40% on bosses), and mid falls off act by act.
 
-BALANCE_TABLE
+| Setup | Player / foe level (Act 3, 5, 8) | Act 3 strong / mid | Act 5 strong / mid | Act 8 strong / mid | Levels under target (strong) |
+| --- | --- | --- | --- | --- | --- |
+| Everyone level 1 (as tuned; identical to main) | 1/1, 1/1, 1/1 | 77% / 67% | 73% / 71% | 71% / 50% | none |
+| On the curve: player at the expected level, foe at the curve | 2/2, 3/3, 5/5 | 75% / 65% | 79% / 63% | 73% / 44% | none |
+| Never upgrades: player level 1, foe at the curve | 1/2, 1/3, 1/5 | 79% / 54% | 50% / 46% | 33% / 29% | L18 38%, L25 25%, L28 25%, L29 38%, L43 38%, L44 25%, L45 25%, L47 38%, L48 25% |
+| Maxed: player at the cap, foe at the curve | 4/2, 6/3, 9/5 | 85% / 88% | 92% / 85% | 92% / 77% | none |
+| (first try, +5% a level) Never upgrades | 1/2, 1/3, 1/5 | 46% / 44% | 35% / 25% | 23% / 8% | L13 38%, L14 38%, L17 38%, L18 13%, L25 38%, L26 38%, L28 13%, L30 25%, L43 13%, L44 25%, L45 38%, L46 38%, L47 25%, L48 0% |
+
+What the table shows:
+- **Level 1 is unchanged.** I ran `LEVELS=14,30 N=3` on `main` (631eb4d) and on this branch, and every match result (win, stars, rounds, hp, losses) is identical. The level 1 row is the tool's usual output.
+- **On the curve, the campaign plays as tuned.** Every level meets its target, and the act averages sit within a few points of level 1 (Act 8 mid player 44% against 50%, which is within N=8 noise).
+- **A player who never upgrades** is fine in Act 3 (foe +3%) but falls well short from Act 5 on (foe +6% to +12%). That's the push to visit the Barracks. A player who spends coins as they come stays on the curve.
+- **A player at the cap** has an easier time (85-92% strong win, 2.0-3.0 stars) but doesn't sweep: the Act 3 boss is still 50% and the Act 5 boss 75%.
+- **Level 45:** N=8 is noisy. In the first try (+5% a level), the on-curve run showed 13% there, so I re-ran it with N=24 (strong only): 75% at level 1 and 50% on the curve, both on target. In the +3% on-curve run it is 50% (strong), which is on target. Raw outputs are in `outputs/economy/balance/`.
+- The tool's "mid win rate rises" check compares the acts it ran. With Acts 3, 5 and 8 only, that's 3 to 5, so a small rise there isn't a real flag. I also fixed it to name the real acts.
+
 
 ## Not done yet / notes
 
