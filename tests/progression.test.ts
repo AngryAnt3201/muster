@@ -9,7 +9,7 @@ import { Match } from "../src/core/match";
 import { PUZZLES } from "../src/core/puzzles";
 import { wallet, earn } from "../src/economy/wallet";
 import {
-  BASE_CAP, COINS_TO_MAX, EXPECTED_LEVEL_BY_ACT, SKIRMISH_DAILY_CAP, UPGRADE_COINS, actsCleared, campaignReward, coinsBetween,
+  BASE_CAP, CAMPAIGN_WIN, COINS_TO_MAX, EXPECTED_LEVEL_BY_ACT, REPLAY_DAILY_CAP, SKIRMISH_DAILY_CAP, UPGRADE_COINS, actsCleared, campaignReward, coinsBetween,
   dailyReward, foeLevelForAct, gauntletFoeLevel, gauntletRivalReward, levelCap, levelsFor, skirmishReward, unlockedKinds, upgradeCoins, upgradeState,
 } from "../src/progression/economy";
 import { awardCampaign, awardSkirmish, troopLevel, troopState, upgradeTroop, withLevels } from "../src/progression/troops";
@@ -168,6 +168,26 @@ describe("coin rewards", () => {
     save((s) => { s.campaign[l.id] = 2; });
     expect(awardCampaign(l, true, 3).parts.map(([t]) => t)).not.toContain("First clear");
     expect(wallet().coins).toBe(38 + 30 + 125 + 38 + 45);
+  });
+  it("caps replay coins a day; first clears are never capped and don't count", () => {
+    expect(campaignReward({ act: 8, won: true, stars: 3, prevStars: 3, replayEarnedToday: REPLAY_DAILY_CAP }).coins).toBe(0);
+    // Part-spent: the win is paid first, then what's left of the stars.
+    const tail = campaignReward({ act: 1, won: true, stars: 3, prevStars: 3, replayEarnedToday: REPLAY_DAILY_CAP - 50 });
+    expect(tail.coins).toBe(50);
+    expect(tail.parts).toEqual([["Victory", 38], ["3 stars", 12]]);
+    expect(campaignReward({ act: 1, won: true, stars: 3, prevStars: 0, replayEarnedToday: REPLAY_DAILY_CAP }).coins).toBe(38 + 45 + 125);
+
+    const l = LEVELS[LEVELS.length - 1];
+    save((s) => { s.campaign[l.id] = 3; });
+    const day = new Date(2026, 10, 7, 12);
+    let total = 0;
+    for (let i = 0; i < 20; i++) total += awardCampaign(l, true, 3, day).coins;
+    expect(total).toBe(REPLAY_DAILY_CAP);
+    // A first clear the same day still pays in full, and doesn't eat into tomorrow.
+    const fresh = LEVELS[0];
+    save((s) => { delete s.campaign[fresh.id]; });
+    expect(awardCampaign(fresh, true, 3, day).coins).toBe(38 + 45 + 125);
+    expect(awardCampaign(l, true, 3, new Date(2026, 10, 8, 12)).coins).toBe(CAMPAIGN_WIN(l.act) + 45);
   });
   it("gauntlet, daily and skirmish", () => {
     expect(gauntletRivalReward(1).coins).toBe(40);

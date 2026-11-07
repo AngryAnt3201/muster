@@ -102,13 +102,24 @@ const reward = (parts: [string, number][], capTo?: number): Reward => {
 export const CAMPAIGN_WIN = (act: number) => 30 + 8 * act;
 export const STAR_COINS = 15;
 export const FIRST_CLEAR = (act: number) => 100 + 25 * act;
-/** A campaign result. `prevStars` is the best before this match (0 = never won). Losses pay nothing. */
-export function campaignReward(o: { act: number; won: boolean; stars: number; prevStars: number; boss?: boolean; actsClearedBefore?: number }): Reward {
+/** Replays (wins on a level already cleared) pay at most this a day, so grinding one level can't outrun the curve.
+ * First clears are never capped and don't count toward it. */
+export const REPLAY_DAILY_CAP = 400;
+/** A campaign result. `prevStars` is the best before this match (0 = never won). Losses pay nothing.
+ * `replayEarnedToday` is what replays have already paid today (see REPLAY_DAILY_CAP). */
+export function campaignReward(o: { act: number; won: boolean; stars: number; prevStars: number; boss?: boolean; actsClearedBefore?: number; replayEarnedToday?: number }): Reward {
   if (!o.won) return reward([]);
   const first = o.prevStars <= 0;
   const capTo = first && o.boss && o.actsClearedBefore !== undefined && levelCap(o.actsClearedBefore + 1) > levelCap(o.actsClearedBefore)
     ? levelCap(o.actsClearedBefore + 1) : undefined;
-  return reward([["Victory", CAMPAIGN_WIN(o.act)], [`${o.stars} star${o.stars === 1 ? "" : "s"}`, STAR_COINS * o.stars], ["First clear", first ? FIRST_CLEAR(o.act) : 0]], capTo);
+  let win = CAMPAIGN_WIN(o.act), stars = STAR_COINS * o.stars;
+  if (!first) {
+    // The win is paid before the stars, so a nearly-spent cap still shows the "Victory" line.
+    let left = Math.max(0, REPLAY_DAILY_CAP - (o.replayEarnedToday ?? 0));
+    win = Math.min(win, left); left -= win;
+    stars = Math.min(stars, left);
+  }
+  return reward([["Victory", win], [`${o.stars} star${o.stars === 1 ? "" : "s"}`, stars], ["First clear", first ? FIRST_CLEAR(o.act) : 0]], capTo);
 }
 
 /** A Gauntlet rival beaten (stage = the rival's number, 1-based). */
