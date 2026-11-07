@@ -1,0 +1,163 @@
+/* The War Pass screen (src/ui/pass.ts) and the Shop's special offers (src/ui/gemshop.ts offersSection).
+   Uses the kit tokens from src/styles.css; --season / --season-d come from the season theme. */
+.pass-screen { --season: #f08cb0; --season-d: #7b2d52; background: radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, var(--season) 55%, transparent), transparent 70%), linear-gradient(180deg, var(--season-d), #2a1c2e 70%); }
+.pass-screen .screen-head { background: linear-gradient(180deg, var(--season-d), color-mix(in srgb, var(--season-d) 80%, transparent)); }
+.pass-scroll { width: min(440px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+/* hero */
+.pass-hero { position: relative; padding: 14px 14px 12px; border: 3px solid var(--k-ink); border-radius: 18px; color: #fff;
+  background: var(--gloss), linear-gradient(160deg, var(--season), var(--season-d)); box-shadow: 0 5px 0 var(--k-ink); overflow: hidden; }
+.pass-hero::before { content: ""; position: absolute; right: -30px; top: -40px; width: 160px; height: 160px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.35), transparent 65%); }
+.ph-season small { font: 400 13px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.9; text-shadow: var(--ol-s); }
+.ph-season h2 { margin: 2px 0 2px; font: 400 28px/1.05 var(--display); text-shadow: var(--ol); }
+.ph-season p { margin: 0; font-size: 13px; opacity: 0.92; max-width: 75%; }
+.ph-timer { position: absolute; right: 12px; top: 12px; display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 12px; border: 2px solid var(--k-ink);
+  background: rgba(0,0,0,0.42); font: 400 14px/1 var(--display); }
+.ph-timer .icon { width: 14px; height: 14px; }
+.ph-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.ph-tier { flex: none; width: 58px; height: 58px; display: grid; place-items: center; align-content: center; border: 3px solid var(--k-ink); border-radius: 50%;
+  background: var(--gloss), var(--k-accent); color: var(--k-ink); box-shadow: 0 3px 0 var(--k-ink); }
+.ph-tier small { font: 400 10px/1 var(--display); text-transform: uppercase; }
+.ph-tier b { font: 400 26px/1 var(--display); }
+.ph-bar { position: relative; flex: 1; height: 26px; border: 2.5px solid var(--k-ink); border-radius: 13px; background: rgba(0,0,0,0.45); overflow: hidden; }
+.ph-fill { position: absolute; inset: 0 auto 0 0; background: var(--gloss), linear-gradient(90deg, #7be35a, #c8ff6a); transition: width 0.6s cubic-bezier(.2,1.2,.4,1); }
+.ph-bar span { position: relative; display: block; text-align: center; font: 400 15px/21px var(--display); text-shadow: var(--ol-s); }
+.ph-skip { flex: none; padding: 7px 10px 8px; }
+.ph-skip-in { display: inline-flex; gap: 4px; align-items: center; font: 400 15px/1 var(--display); white-space: nowrap; }
+.ph-skip-in .gem-ico { font-size: 15px; }
+.btn.gem { --b: var(--gem, #c06bff); color: #fff; }
+.ph-premium-on { margin-top: 10px; display: flex; gap: 6px; align-items: center; justify-content: center; padding: 5px 10px; border-radius: 10px; background: rgba(0,0,0,0.35); font: 400 14px/1 var(--display); color: var(--k-accent); }
+.ph-premium-on .icon { width: 16px; height: 16px; }
+
+/* quests */
+.pass-quests { padding: 34px 12px 10px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+.pass-quests > .ribbon { position: absolute; top: -14px; left: 0; right: 0; }
+.pq-new { align-self: center; color: var(--k-muted); font-size: 12px; }
+.pq-row { display: grid; grid-template-columns: 1fr auto 64px; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--k-well); }
+.pq-row.done { background: color-mix(in srgb, var(--k-go) 22%, transparent); }
+.pq-row.got { opacity: 0.6; }
+.pq-row.pop { animation: passPop 0.5s cubic-bezier(.2,1.6,.4,1); }
+.pq-what b { display: block; font: 400 16px/1.1 var(--display); }
+.pq-bar { position: relative; height: 14px; margin-top: 5px; border: 2px solid var(--k-ink); border-radius: 7px; background: rgba(0,0,0,0.18); overflow: hidden; }
+.pq-bar i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--k-go), #a6f07a); }
+.pq-bar span { position: relative; display: block; text-align: center; font: 400 11px/10px var(--display); color: #fff; text-shadow: var(--ol-s); }
+.pq-pay { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font: 400 14px/1 var(--display); }
+.pq-pay > span { display: inline-flex; gap: 4px; align-items: center; }
+.pq-pay .coin.icon-only { width: 16px; height: 16px; }
+.pq-xp { color: #fff; background: var(--season, #8b5bd3); border: 2px solid var(--k-ink); border-radius: 8px; padding: 2px 6px; text-shadow: var(--ol-s); }
+.pq-check { justify-self: center; color: var(--k-go); }
+.pq-check .icon { width: 26px; height: 26px; }
+.pq-claim { justify-self: stretch; animation: claimPulse 1.2s ease-in-out infinite; }
+
+/* premium card */
+.pass-premium { position: relative; padding: 42px 14px 12px; display: flex; flex-direction: column; gap: 8px;
+  background: var(--gloss), linear-gradient(170deg, #ffe9a8, #f2b632 60%, #c4831c); }
+.pass-premium > .ribbon { position: absolute; top: -14px; left: 0; right: 0; }
+.pp-body { display: flex; gap: 12px; align-items: center; }
+.pp-keep { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 90px; text-align: center; font-size: 11px; font-weight: 700; }
+.pp-perks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+.pp-perks li { display: flex; gap: 6px; align-items: center; }
+.pp-perks .icon { width: 16px; height: 16px; color: var(--k-go); flex: none; }
+.pp-perks .gem-ico { font-size: 16px; }
+.pp-retro { margin: 0; text-align: center; font: 400 15px/1.2 var(--display); color: #6b2410; }
+.pp-buy { animation: claimPulse 1.6s ease-in-out infinite; }
+.pp-status { margin: 0; min-height: 0; text-align: center; font-size: 13px; }
+.pp-status.warn { color: var(--k-danger); }
+.pp-fine { margin: 0; text-align: center; font-size: 11px; opacity: 0.75; }
+
+/* keep badge */
+.pr-keep { display: grid; place-items: center; width: 44px; height: 44px; border: 3px solid var(--k-ink); border-radius: 12px 12px 6px 6px;
+  background: var(--gloss), linear-gradient(180deg, #ffe17a, #d6941e); box-shadow: 0 3px 0 var(--k-ink); color: #fff; }
+.pr-keep .icon { width: 24px; height: 24px; filter: var(--ol-f); }
+.pr-keep.big { width: 72px; height: 72px; border-radius: 18px 18px 8px 8px; }
+.pr-keep.big .icon { width: 40px; height: 40px; }
+.s-blossom .pr-keep { background: var(--gloss), linear-gradient(180deg, #ffc4dc, #e0679a); }
+
+/* tracks */
+.pass-tracks { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
+.pt-head { position: relative; z-index: 2; display: grid; grid-template-columns: 1fr 40px 1fr; gap: 6px; text-align: center; padding: 6px 0;
+  font: 400 18px/1 var(--display); color: #fff; text-shadow: var(--ol); }
+.pt-head .premium { color: var(--k-accent); display: inline-flex; gap: 4px; align-items: center; justify-content: center; }
+.pt-head .icon { width: 16px; height: 16px; }
+.pt-row { position: relative; display: grid; grid-template-columns: 1fr 40px 1fr; gap: 6px; align-items: stretch; }
+.pt-row::before { content: ""; position: absolute; left: 50%; top: -6px; bottom: -6px; width: 8px; margin-left: -4px; background: rgba(0,0,0,0.4); }
+.pt-row.reached::before { background: linear-gradient(180deg, #7be35a, #c8ff6a); }
+.pt-node { position: relative; z-index: 1; align-self: center; display: grid; place-items: center; width: 36px; height: 36px; border: 3px solid var(--k-ink); border-radius: 50%;
+  background: #5a4a5e; color: #fff; font: 400 16px/1 var(--display); text-shadow: var(--ol-s); justify-self: center; }
+.pt-row.reached .pt-node { background: var(--gloss), var(--k-accent); color: var(--k-ink); text-shadow: none; }
+.pt-row.next .pt-node { box-shadow: 0 0 0 4px rgba(255,255,255,0.5); }
+.pt-cell { position: relative; appearance: none; min-height: 66px; padding: 5px 6px 6px; border: 2.5px solid var(--k-ink); border-radius: 14px; cursor: pointer;
+  display: grid; place-items: center; color: var(--k-text); background: var(--gloss), var(--k-panel); box-shadow: 0 3px 0 var(--k-ink); font: inherit; touch-action: manipulation; }
+.pt-cell.premium { background: var(--gloss), linear-gradient(170deg, #ffe9a8, #f2c25a); }
+.pt-cell.locked { filter: saturate(0.5) brightness(0.8); }
+.pt-cell.got { opacity: 0.5; filter: saturate(0.3); }
+.pt-cell.can { box-shadow: 0 3px 0 var(--k-ink), 0 0 0 3px #fff, 0 0 18px 6px color-mix(in srgb, var(--k-accent) 80%, transparent); animation: cellGlow 1.4s ease-in-out infinite; }
+.pt-cell:not(.reached):not(.got) { background: var(--gloss), color-mix(in srgb, var(--k-panel) 70%, #555); }
+.pt-cell.premium:not(.reached):not(.got) { background: var(--gloss), color-mix(in srgb, #f2c25a 70%, #555); }
+.pt-cell.claiming { animation: claimBurst 0.52s cubic-bezier(.2,1.6,.4,1) forwards; }
+.pt-badge { position: absolute; right: -5px; top: -7px; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border: 2px solid var(--k-ink); border-radius: 11px;
+  font: 400 12px/1 var(--display); color: #fff; text-shadow: var(--ol-s); }
+.pt-badge .icon { width: 13px; height: 13px; }
+.pt-badge.can { background: var(--k-go); }
+.pt-badge.got { background: var(--k-go); }
+.pt-badge.lock { background: #5a4a5e; }
+.pt-fine { margin: 6px 0 0; text-align: center; font-size: 12px; color: rgba(255,255,255,0.85); }
+
+/* reward faces */
+.pr-face { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
+.pr-face b { font: 400 17px/1 var(--display); }
+.pr-face small { font-size: 11px; font-weight: 700; line-height: 1.1; }
+.pr-ico { display: flex; align-items: center; justify-content: center; height: 34px; }
+.pr-coins .coin.icon-only { width: 26px; height: 26px; }
+.pr-coins .coin.icon-only + .coin.icon-only { margin-left: -12px; margin-top: -8px; }
+.pr-gems .gem-ico { font-size: 30px; }
+.pr-card { display: grid; place-items: center; width: 34px; height: 40px; border: 2.5px solid var(--k-ink); border-radius: 7px; background: #9aa6b8; overflow: hidden; }
+.pr-cards.r-rare .pr-card { background: #f2a33a; }
+.pr-cards.r-epic .pr-card { background: #b36bff; }
+.pr-cards.r-legendary .pr-card { background: linear-gradient(135deg, #ff7ad9, #ffd84a, #6bf5ff); }
+.pr-chest .pr-chest-art { width: 46px; height: 40px; }
+.pr-chest .ch-art svg { width: 100%; height: 100%; }
+
+/* toast */
+.pass-toast { position: fixed; left: 50%; bottom: calc(var(--sb) + 18px); z-index: 30; display: flex; gap: 8px; align-items: center; padding: 10px 16px; max-width: calc(100% - 32px);
+  border: 3px solid var(--k-ink); border-radius: 16px; background: var(--k-plate); color: #fff; font: 400 16px/1.15 var(--display);
+  transform: translate(-50%, 140%); opacity: 0; transition: transform 0.35s cubic-bezier(.2,1.4,.4,1), opacity 0.2s; pointer-events: none; }
+.pass-toast.show { transform: translate(-50%, 0); opacity: 1; }
+.pass-toast.warn { background: #7a2a1e; }
+.pass-toast .icon { width: 20px; height: 20px; color: var(--k-accent); }
+.pass-screen.premium-burst .pass-tracks .pt-cell.premium { animation: premiumWave 1.2s ease-out; }
+
+@keyframes passPop { 0% { transform: scale(1); } 40% { transform: scale(1.05); } 100% { transform: scale(1); } }
+@keyframes claimPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+@keyframes cellGlow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.12); } }
+@keyframes claimBurst { 0% { transform: scale(1); } 35% { transform: scale(1.18) rotate(-3deg); filter: brightness(1.6); } 100% { transform: scale(0.94); opacity: 0.55; } }
+@keyframes premiumWave { 0% { filter: brightness(1); } 30% { filter: brightness(1.7) saturate(1.4); transform: scale(1.04); } 100% { filter: brightness(1); transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pt-cell.can, .pq-claim, .pp-buy { animation: none; } }
+
+/* ---- Shop: special offers */
+.offers-section { position: relative; padding: 40px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.offers-section > .ribbon { position: absolute; top: -14px; left: 0; right: 0; }
+.of-timer { align-self: center; display: inline-flex; gap: 5px; align-items: center; font: 400 14px/1 var(--display); color: var(--k-danger); }
+.of-card { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 2.5px solid var(--k-ink); border-radius: 14px;
+  background: var(--gloss), linear-gradient(170deg, #fff1c8, #f7d58a); box-shadow: 0 3px 0 var(--k-ink); }
+.of-card.t3, .of-card.t4 { background: var(--gloss), linear-gradient(170deg, #e8d4ff, #b48cf0); }
+.of-card.bought { opacity: 0.6; filter: saturate(0.4); }
+.of-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.of-head b { font: 400 19px/1.05 var(--display); }
+.of-items { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.of-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 6px 2px; border-radius: 10px; background: rgba(255,255,255,0.5); text-align: center; }
+.of-item b { font: 400 15px/1 var(--display); }
+.of-item small { font-size: 10px; font-weight: 700; line-height: 1.1; }
+.of-item .gem-ico { font-size: 26px; }
+.of-item .coin.icon-only { width: 24px; height: 24px; }
+.of-item .ch-art { width: 40px; height: 34px; }
+.of-item .ch-art svg { width: 100%; height: 100%; }
+.of-odds { padding: 2px 8px 3px; font-size: 11px; }
+.of-foot { display: flex; gap: 8px; align-items: center; }
+.of-foot .btn { flex: 1; }
+.of-done { flex: 1; text-align: center; font: 400 18px/1 var(--display); color: var(--k-go); }
+.of-fine { margin: 0; text-align: center; font-size: 11px; opacity: 0.75; }
+.of-status { margin: 0; text-align: center; font-size: 13px; }
+.of-status.warn { color: var(--k-danger); }
+.of-status.good { color: var(--k-go); }
+.of-waiting { display: flex; justify-content: center; }

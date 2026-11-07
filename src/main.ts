@@ -42,6 +42,8 @@ import { startPass } from "./progression/pass";
 import { passEvent } from "./progression/passEvents";
 import { settleQuests } from "./progression/quests";
 import { usePassStore } from "./store/pass";
+import { seedPassDemo } from "./progression/pass";
+import { seedQuestDemo } from "./progression/quests";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -687,6 +689,8 @@ async function boot() {
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
   if (q.has("chests")) { const k = q.get("chests") ?? ""; if (k !== "result") seedDemo(); if (k === "result" || k === "full") { gemDemo("reward"); return chestEarned(winChest(3)); } title(); return chestDemo(k); } // [chests] review shots: ?chests=title|result|full|info|open|shop
+  // [pass] debug route: ?pass opens the War Pass; ?pass=free|premium|claim seeds a mid-season save for review shots.
+  if (q.has("pass")) { const k = q.get("pass") ?? ""; if (k) { seedPassDemo(k); seedQuestDemo(); } return void import("./ui/pass").then((m) => { clear(); m.passScreen(app, { back: title }); }); }
   if (q.has("gemdemo")) return gemDemo(q.get("gemdemo") ?? ""); // [gems] review shots of the result-screen moments
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });
