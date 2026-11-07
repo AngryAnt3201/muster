@@ -2,6 +2,7 @@
 // (<div id="shop-chests">, filled by the chests work), then gem packs (App Store consumables), then coin bundles
 // bought with gems. Nothing sold here unlocks content: every level and mode is free, purchases speed things up. Plus the two small gem moments elsewhere: the free-gem strip on result screens and the
 // Gauntlet Rally. Prices are always StoreKit's displayPrice; gem amounts come from src/economy/gems.ts.
+import { skinShop } from "./skins";
 import { chestShop } from "./chests";
 import { sfx, unlockAudio } from "../audio/sfx";
 import {
@@ -155,6 +156,7 @@ export function shopView(starter: StarterShop, gems: GemShop) {
       ribbon("Coins", "gold small"),
       ...coinRows.map((c) => c.row),
     ]),
+    skinShop(), // [skins] keep skins for gems; the War Pass skins say where they come from
     el("p", { class: "gem-fine" }, [
       `Every level and mode is free to play: purchases only speed you up. Every pack and bundle gives exactly what it says. No ads, no tracking.`,
     ]),

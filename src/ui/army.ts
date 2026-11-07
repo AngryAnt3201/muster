@@ -1,6 +1,7 @@
 // The Army: the card collection. Found units in rarity frames with a card bar (cards held / cards the next level
 // needs), their level and stats, and an Upgrade button that costs cards plus coins; unfound units as silhouettes.
 // The commander level bar sits on top. Also the reward line on result screens. Rules live in src/progression.
+import { skinPicker } from "./skins";
 import "./barracks.css";
 import "./army.css";
 import { UNITS, UNIT_KINDS, type UnitKind } from "../core/defs";
@@ -111,6 +112,7 @@ export function armyScreen(o: ArmyOpts) {
     el("div", { class: "ar-sec" }, [el("b", {}, ["Found"]), el("span", {}, [`${found.length}/${UNIT_KINDS.length}`])]),
     grid,
     ...(unfound.length ? [el("div", { class: "ar-sec" }, [el("b", {}, ["Not found yet"]), el("span", {}, ["Win cards in the campaign and chests"])]), ghosts] : []),
+    skinPicker({ onShop: o.shop }), // [skins] keep skins: owned ones to equip, locked ones with where they come from
   ]);
   o.app.append(scr);
 
