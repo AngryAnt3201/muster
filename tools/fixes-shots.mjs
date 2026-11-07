@@ -132,5 +132,16 @@ if (!skip("gauntlet-boons")) {
   await p.context().close();
 }
 
+// 8. Bastion's result card with the shared coin line.
+if (!skip("bastion-result")) {
+  const p = await page();
+  await p.goto(`http://${host}:${port}/?td=meadow`);
+  await p.waitForTimeout(2500);
+  await p.evaluate(() => { const r = window.__td.run; r.wave = r.waveCount; r.phase = "won"; });
+  await p.waitForTimeout(2600);
+  await shot(p, "bastion-result");
+  await p.context().close();
+}
+
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();

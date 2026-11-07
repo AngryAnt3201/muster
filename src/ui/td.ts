@@ -11,6 +11,7 @@ import { whenPortrait } from "../render/sprites";
 import { TdView } from "../render/tdView";
 import { el, stars } from "./dom";
 import { ROLE_LABEL, coin, icon, roleBadge } from "./kit";
+import { attachReward } from "./barracks";
 
 const KEY = "muster.td.v1";
 interface TdSave { stars: Record<string, number>; best: Record<string, number>; }
@@ -352,7 +353,13 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
     if (finished) return;
     finished = true;
     const won = run.phase === "won", st = run.stars();
+    const waveCoins = coins;
     if (won) { const c = coinsForWin(st); coins += c; earn("coins", c, `bastion ${mapId} win ${st}`); }
+    // The same coin line as the other modes' result screens (paid already: per wave during the run, the win here).
+    const winCoins = won ? coinsForWin(st) : 0;
+    const parts: [string, number][] = ([["Waves held", waveCoins], ["Victory", won ? coinsForWin(0) : 0], [`${st} star${st === 1 ? "" : "s"}`, winCoins - coinsForWin(0)]] as [string, number][])
+      .filter(([, n]) => n > 0);
+    const reward = { coins, parts };
     saveTd((s) => { s.stars[mapId] = Math.max(s.stars[mapId] ?? 0, st); s.best[mapId] = Math.max(s.best[mapId] ?? 0, won ? run.wave : run.wave - 1); });
     closeSheet();
     setTimeout(() => {
@@ -365,7 +372,6 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
             el("div", {}, [el("span", {}, ["Waves held"]), el("b", {}, [`${won ? run.wave : run.wave - 1}/${run.waveCount}`])]),
             el("div", {}, [el("span", {}, ["Keep"]), el("b", {}, [`${run.keepHp}/${KEEP_HP}`])]),
             el("div", {}, [el("span", {}, ["Foes felled"]), el("b", {}, [String(run.kills)])]),
-            el("div", {}, [el("span", {}, ["Coins earned"]), el("b", {}, [coin(coins, "td-coin")])]),
           ]),
           el("div", { class: "td-result-btns" }, [
             button("Maps", "ghost", () => { stop(); bastionMenu(app, exit); }),
@@ -374,6 +380,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
         ]),
       ]);
       root.append(panel);
+      attachReward(reward, undefined, panel.querySelector<HTMLElement>(".td-result-card")!);
     }, 900);
   }
   function stop() { alive = false; ro.disconnect(); }

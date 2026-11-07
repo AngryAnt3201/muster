@@ -193,9 +193,10 @@ export function barracksLabel(): Node {
  * Adds the coins a result paid (and the troop level cap) to the result sheet on screen. Call right after the result
  * sheet is shown. `openBarracks` opens the Barracks from the line.
  */
-export function attachReward(r: Reward, openBarracks?: () => void) {
+/** `into` is the result card to add the coin line to; by default the result sheet that's open (campaign, Gauntlet, ...). */
+export function attachReward(r: Reward, openBarracks?: () => void, into?: HTMLElement) {
   if (r.coins <= 0) return;
-  const sheet = document.querySelector<HTMLElement>(".overlay .sheet > .results, .overlay .sheet > .boons");
+  const sheet = into ?? document.querySelector<HTMLElement>(".overlay .sheet > .results, .overlay .sheet > .boons");
   if (!sheet) return;
   const amount = el("b", {}, ["+0"]);
   const ready = UNIT_KINDS.filter((k) => troopState(k).why === null).length;
@@ -213,7 +214,7 @@ export function attachReward(r: Reward, openBarracks?: () => void) {
     go.addEventListener("click", () => { unlockAudio(); sfx("tap"); document.querySelector(".overlay")?.remove(); openBarracks(); });
     row.append(go);
   }
-  const before = sheet.querySelector(":scope > .btn, :scope > .boon-list");
+  const before = sheet.querySelector(":scope > .btn, :scope > .boon-list, :scope > .td-result-btns");
   sheet.insertBefore(row, before);
   setTimeout(() => { tick(amount, 0, r.coins, 700, 0, "+"); setTimeout(() => sfx("buy"), 700); }, 450);
 }

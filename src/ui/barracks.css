@@ -114,3 +114,4 @@
 .pg-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; border: 2px solid var(--k-ink);
   background: var(--k-danger); color: #fff; font: 400 13px/1 var(--display); font-style: normal; text-shadow: var(--ol-s); animation: pgPulse 1.6s ease-in-out infinite; }
 @keyframes pgPulse { 50% { transform: scale(1.12); } }
+.td-result-card > .pg-reward { margin-bottom: 14px; } /* Bastion result card (src/ui/td.ts) */
