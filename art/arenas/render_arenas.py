@@ -50,15 +50,17 @@ ACTS = {
     2: dict(name="Ash Fields", g=dict(grass="#c3b85c", grass_dk="#a89c48", grass_lt="#d9cf7a", strip="#d8b98a", strip_dk="#b99a68",
                                        foliage="#e8913c", foliage_dk="#c0612c", path="#e6c48e", path_dk="#c69b62", moss="#b2a04a"),
             border="hedge", trees=("broad", "broad", "dead"), scatter="embers", obstacle="charstump", footing=True,
-            dress=dict(wear=True, clumps="dry", n_clumps=24, tufts=60, cracks=26, banners=("#e8dcc0", "#c0612c")), fg="canopy"),
+            dress=dict(wear=True, clumps="dry", n_clumps=26, tufts=60, cracks=30, banners=("#e8dcc0", "#c0612c"),
+                       cobbles=("#b99a68", "#a88a5a", "#c4a675", "#9c7f52"), cobble_size=0.64, cobble_gap=0.07), fg="canopy"),
     3: dict(name="Hollow Wood", g=dict(grass="#6cb552", grass_dk="#54993f", grass_lt="#8ccb63", foliage="#46a04c", foliage_dk="#2e7a3a",
                                        strip="#c9b083", strip_dk="#a98f63"),
             border="hedge", trees=("broad", "pine", "broad"), scatter="mushrooms", obstacle="stump",
-            dress=dict(wear=True, clumps="ferns", n_clumps=30, tufts=90, moss=16, roots=True), fg="canopy"),
+            dress=dict(wear=True, clumps="ferns", n_clumps=30, tufts=90, moss=16, roots=True, rings=True,
+                       cobbles=("#9fa88c", "#8e9a7c", "#aab39a", "#b5ab8c"), cobble_size=0.62, cobble_gap=0.08), fg="canopy"),
     4: dict(name="Iron Pass", g=dict(grass="#a2bd72", grass_dk="#88a35d", grass_lt="#bcd38e", path="#ddd2b8", path_dk="#b8aa8c",
                                      strip="#cfc6b2", strip_dk="#aea38c", foliage="#4f9a5e", foliage_dk="#2f6f45", rock="#b4b0a8", rock_dk="#7d7972"),
             border="rocks", trees=("pine", "pine", "crag"), scatter="pebbles", obstacle="crag",
-            dress=dict(wear=True, clumps="heather", n_clumps=26, tufts=40, gravel=18, cracks=12, banners=("#cfd8e3", "#4f6f9a")), fg="pines"),
+            dress=dict(wear=True, clumps="heather", n_clumps=26, tufts=40, gravel=18, cracks=12, banners=("#cfd8e3", "#4f6f9a"), rails=True), fg="pines"),
     5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#cf5446", path_dk="#9c3a30",
                                      strip="#86c25a", strip_dk="#6aa947", court="#dcc6a0", court_dk="#a88d68"),
             court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar",
@@ -67,7 +69,8 @@ ACTS = {
     6: dict(name="Frozen Reach", g=dict(grass="#eef5fb", grass_dk="#d3e2ef", grass_lt="#ffffff", path="#c5d7e8", path_dk="#9fb7cf",
                                         strip="#dbe7f2", strip_dk="#b9cde0", foliage="#3f8f6a", foliage_dk="#2b6b52", rock="#a9b4c2", rock_dk="#76828f",
                                         moss="#f4f9ff", edge="#8aa2bb"),
-            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock", relief="snow", fg="snowpines"),
+            border="snow", trees=("snowpine",), scatter="ice", obstacle="icerock", relief="snow", fg="snowpines",
+            dress=dict(clumps="frost", n_clumps=20, banners=("#e9f2fb", "#5b7fb0"))),
     7: dict(name="Sky Throne", g=dict(grass="#bfe0ff", grass_dk="#a6d0f7", grass_lt="#e6f3ff", path="#6f8fe0", path_dk="#4c69bd",
                                       strip="#efe3c8", strip_dk="#cdbd9a", court="#f5efe3", court_dk="#d9cdb6", rock="#f2ece0", rock_dk="#c9bfae"),
             court=True, border="rail", trees=("cloud",), scatter="none", obstacle="obelisk",
@@ -354,6 +357,13 @@ def main():
                 if i % 3 == 0:
                     wk.cyl(0.03, 0.1, K.toon("#f3ead0"), loc=B(x + 0.16, y + 0.1, 0.05), outline=0.006)
                     wk.sphere(0.07, K.toon("#e2483a"), loc=B(x + 0.16, y + 0.1, 0.11), scale=(1, 1, 0.6), seg=12, rings=6, outline=0.006)
+            elif kind == "frost":
+                wk.ball(0.2, K.toon("#ffffff"), loc=B(x, y, 0.0), scale=(1.4, 1.1, 0.4), subdiv=2, outline=0.004)
+                for j in range(2 + i % 2):
+                    aa = j * 2.3 + i
+                    wk.crystal(0.05, 0.2 + 0.06 * j, K.toon("#bfe9ff", spec=0.6), loc=B(x + math.cos(aa) * 0.1, y + math.sin(aa) * 0.07, 0.02), rot=(14 * math.cos(aa), 14 * math.sin(aa), 0))
+                if i % 4 == 0:  # a frozen grass stalk
+                    wk.cone(0.03, 0.16, toon("foliage"), loc=B(x - 0.12, y + 0.05, 0.08), seg=5, outline=0.004)
             elif kind == "heather":
                 wk.ball(0.15, toon("foliage_dk"), loc=B(x, y, 0.02), scale=(1.3, 1.1, 0.45), subdiv=2, outline=0.004)
                 for j in range(5):
@@ -405,7 +415,27 @@ def main():
                         n += 1
             if ds.get("cobbles"):
                 # An old road across the neutral strip: low raised cobbles, the path crossing it.
-                flagstones(0.0, ZD + 0.08, W, H - ZD - 0.08, 0.46, ds["cobbles"], 7, gap=0.045)
+                flagstones(0.0, ZD + 0.08, W, H - ZD - 0.08, ds.get("cobble_size", 0.46), ds["cobbles"], 7, gap=ds.get("cobble_gap", 0.045))
+            if ds.get("rails"):
+                # An old ore-cart track across the pass: sleepers and two iron rails.
+                y = H / 2
+                wood, iron = K.toon("#7a5232"), K.toon("#8a94a2", spec=0.5)
+                xx = 0.15
+                while xx < W:
+                    wk.box((0.13, 0.95, 0.035), wood, loc=B(xx, y, 0.03), rot=(0, 0, (rnd(int(xx * 10), 231) - 0.5) * 6), bevel=0.01, outline=0.004)
+                    xx += 0.36
+                for dy in (-0.3, 0.3):
+                    wk.box((W + 0.4, 0.06, 0.05), iron, loc=B(W / 2, y + dy, 0.07), bevel=0.01, outline=0.004)
+            if ds.get("rings"):
+                # A fairy ring of toadstools in each deploy zone.
+                for (cx, cy) in ((1.7, 3.6), (7.2, H - 3.4)):
+                    for j in range(9):
+                        aa = j * math.tau / 9
+                        x, y = cx + math.cos(aa) * 0.55, cy + math.sin(aa) * 0.42
+                        wk.cyl(0.03, 0.1, K.toon("#f3ead0"), loc=B(x, y, 0.05), outline=0.006)
+                        wk.sphere(0.07 + 0.02 * (j % 2), K.toon("#e2483a" if j % 3 else "#f2a03a"), loc=B(x, y, 0.11), scale=(1, 1, 0.6), seg=12, rings=6, outline=0.006)
+                    with wk.at(B(cx, cy, 0.006), scale=(1.3, 1.0, 1)):
+                        wk.cyl(0.5, 0.004, K.flat(g["grass_lt"], alpha=0.45), seg=24, outline=0)
             if ds.get("wear"):
                 for n in range(int((H + 1.0) / 0.22)):
                     y = -0.4 + n * 0.22

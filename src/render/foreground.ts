@@ -9,7 +9,7 @@ import { backdropRect, type Arena } from "./arena";
 import type { Camera, Rect } from "./camera";
 
 /** Alpha of a foreground cell with a unit under it. */
-export const FG_FADED = 0.28;
+export const FG_FADED = 0.4;
 
 /** Screen rects of the foreground cells (stored as fractions of the backdrop) for a backdrop drawn at `r`. */
 export function fgCells(cells: readonly (readonly number[])[], r: Rect): Rect[] {
@@ -21,6 +21,19 @@ const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y
 /** Target alpha per cell: FG_FADED where any unit box overlaps it, else 1. */
 export function fadeTargets(cells: readonly Rect[], boxes: readonly Rect[], faded = FG_FADED): number[] {
   return cells.map((c) => (boxes.some((b) => overlaps(c, b)) ? faded : 1));
+}
+
+/** The part of a cell under the figures overlapping it: the cell clipped to their bounding box (null if none). */
+export function clipTo(cell: Rect, boxes: readonly Rect[]): Rect | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const b of boxes) {
+    if (!overlaps(cell, b)) continue;
+    x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y); x1 = Math.max(x1, b.x + b.w); y1 = Math.max(y1, b.y + b.h);
+  }
+  if (x1 < x0) return null;
+  x0 = Math.max(x0, cell.x); y0 = Math.max(y0, cell.y);
+  x1 = Math.min(x1, cell.x + cell.w); y1 = Math.min(y1, cell.y + cell.h);
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 }
 
 /** Eases alphas toward their targets in place: out quickly (a unit walked under), back in slowly. */
@@ -93,7 +106,7 @@ export class ArenaLayers {
     ctx.restore();
   }
 
-  /** Soft cloud wisps drifting past the courtyard, outside the board. */
+  /** Soft cloud wisps drifting through the sky beyond the far and near rails (outside the board, so no clip). */
   private clouds(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number) {
     const r = backdropRect(a.m, cam.k, cam.cx, cam.cy);
     if (!this.wisp) {
@@ -107,18 +120,18 @@ export class ArenaLayers {
       }
       this.wisp = c;
     }
-    const tl = cam.project(-0.9, -0.9), tr = cam.project(W + 0.9, -0.9), bl = cam.project(-0.9, H + 0.9), br = cam.project(W + 0.9, H + 0.9);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(r.x, r.y, r.w, r.h);
-    ctx.moveTo(tl.x, tl.y); ctx.lineTo(bl.x, bl.y); ctx.lineTo(br.x, br.y); ctx.lineTo(tr.x, tr.y); ctx.closePath();
-    ctx.clip("evenodd");
+    const far = cam.project(0, -0.9).y, near = cam.project(0, H + 0.9).y;
     const span = r.w + 240;
-    for (let i = 0; i < 7; i++) {
-      const sp = 7 + 6 * rnd(i, 3), y = r.y + r.h * (0.04 + 0.92 * rnd(i, 5)), w = 150 + 110 * rnd(i, 9);
-      const x = r.x - 200 + ((rnd(i, 1) * span + time * sp) % span);
-      ctx.globalAlpha = 0.45 + 0.3 * rnd(i, 17);
-      ctx.drawImage(this.wisp, x, y - w * 0.25, w, w * 0.5);
+    ctx.save();
+    for (let i = 0; i < 6; i++) {
+      const top = i % 2 === 0;
+      const y0 = top ? r.y : near, y1 = top ? far : r.y + r.h;
+      const w = 120 + 90 * rnd(i, 9), hh = w * 0.5;
+      if (y1 - y0 < hh * 0.6) continue;
+      const y = y0 + hh * 0.3 + (y1 - y0 - hh * 0.6) * rnd(i, 5) - hh / 2;
+      const x = r.x - 200 + ((rnd(i, 1) * span + time * (7 + 6 * rnd(i, 3))) % span);
+      ctx.globalAlpha = 0.4 + 0.3 * rnd(i, 17);
+      ctx.drawImage(this.wisp, x, y, w, hh);
     }
     ctx.restore();
   }
@@ -135,12 +148,15 @@ export class ArenaLayers {
     const dt = this.last < 0 ? 0 : Math.max(0, Math.min(0.1, time - this.last));
     this.last = time;
     easeAlphas(this.alpha, target, dt);
+    // The backdrop already holds this canopy at full strength, so drawing it again only shows where a figure was drawn
+    // over it: each cell redraws just the part covering the figures under it, at the cell's eased alpha.
     const sx = img.naturalWidth / r.w, sy = img.naturalHeight / r.h;
     ctx.save();
     for (let i = 0; i < cells.length; i++) {
-      const c = cells[i], al = this.alpha[i];
-      if (al <= 0.01) continue;
-      ctx.globalAlpha = al;
+      if (target[i] >= 1) continue;
+      const c = clipTo(cells[i], boxes);
+      if (!c) continue;
+      ctx.globalAlpha = this.alpha[i];
       ctx.drawImage(img, (c.x - r.x) * sx, (c.y - r.y) * sy, c.w * sx, c.h * sy, c.x, c.y, c.w, c.h);
     }
     ctx.restore();

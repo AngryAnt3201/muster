@@ -64,7 +64,8 @@ function load(url: string): Promise<HTMLImageElement | null> {
   return new Promise((res) => {
     const i = new Image();
     i.decoding = "async";
-    i.onload = () => { images.set(url, i); res(i); };
+    // Decode up front so the first frame that draws it (the foreground, mid-battle) doesn't hitch.
+    i.onload = () => { images.set(url, i); (i.decode ? i.decode().catch(() => undefined) : Promise.resolve()).then(() => res(i)); };
     i.onerror = () => { images.set(url, null); res(null); };
     i.src = url;
   });

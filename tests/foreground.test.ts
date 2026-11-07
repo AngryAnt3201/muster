@@ -74,3 +74,13 @@ describe("arena foreground", () => {
     }
   });
 });
+
+describe("foreground redraw region", () => {
+  it("clips a cell to the figures under it, and skips cells with none", async () => {
+    const { clipTo } = await import("../src/render/foreground");
+    const cell = { x: 0, y: 0, w: 100, h: 100 };
+    expect(clipTo(cell, [{ x: 90, y: 40, w: 30, h: 20 }])).toEqual({ x: 90, y: 40, w: 10, h: 20 });
+    expect(clipTo(cell, [{ x: 10, y: 10, w: 10, h: 10 }, { x: 50, y: 60, w: 10, h: 10 }])).toEqual({ x: 10, y: 10, w: 50, h: 60 });
+    expect(clipTo(cell, [{ x: 200, y: 0, w: 10, h: 10 }])).toBeNull();
+  });
+});
