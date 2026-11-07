@@ -1,6 +1,7 @@
 // Progress on this device.
 import { blankDaily, type DailySave } from "./core/daily";
 import type { Entitlement } from "./store/entitlement";
+import type { WalletSave } from "./economy/wallet";
 
 export interface Save {
   campaign: Record<number, number>; // level id -> best stars
@@ -12,6 +13,8 @@ export interface Save {
   lab?: unknown;
   /** The Full Army unlock as last confirmed (cached so the game opens offline). */
   store?: Entitlement;
+  /** Coins and gems (src/economy/wallet.ts). Older saves have none; the wallet fills it in. */
+  wallet?: WalletSave;
 }
 
 const KEY = "muster.save.v1";
