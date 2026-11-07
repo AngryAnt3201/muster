@@ -13,6 +13,8 @@ camera (`src/render/camera.ts`), plus the props that obstacles stand up as.
 | 6 | Frozen Reach | snow, frozen stream, frost clumps with ice crystals, boot prints | snow banks, snowy pines, banners; snowy pine boughs | snow-capped rock with ice crystals |
 | 7 | Sky Throne | warm marble courtyard, lapis-and-gold rosettes and edge bands, gold sandstone strip, blue runner | gold-finial balustrade, lapis banners; banner pillars and cloud banks, drifting wisps | crystal obelisk on a gold and marble plinth |
 | 8 | Mirelight Fen | fen grass, mere with boardwalk, tussocks, puddles, glinting water | reeds and lantern posts; willow curtains | peat mound with a lantern |
+| 9 | Saltwind Coast | clifftop grass, sandy strip, sea-thrift clumps, gravel, path wear; a storm sea a cliff's height below the far and right edges with surf, whitecaps and sea stacks | driftwood posts strung with rope and buoys, wind-bent pines and gorse, the red-banded lighthouse and keeper's cottage on the headland; wind-bent pines and gorse leaning in, spray rising off the sides; cool storm grade | barnacled sea rock with turf (one with a buoy, one with driftwood and a gull) |
+| 10 | Crownfall Citadel | dusk sandstone flagstones, overgrown sunken lawn strip, gold seal and trim, rubble clumps, cracks | broken low walls, ruined pillars and wall stretches, braziers, the ruined keep beyond the far gate (curtain wall, cracked arch, broken towers, torn violet banners); broken pillars with torn banners, wall-top braziers and dead trees, embers rising; amber-to-violet dusk grade | snapped column, toppled drums with the fallen gold crown, rubble under a torn banner |
 
 Every arena keeps the same layout so the board reads the same everywhere: a sandy neutral strip between the two
 deploy zones with a kerb on each zone line, a path from keep to keep, a paved plaza under each keep and a low border
@@ -37,8 +39,8 @@ just outside the board. Shapes and palettes are original and built from primitiv
   path wear and pebbles, flower/fern/heather/dry-grass clumps, tufts, moss, gravel, cracks, banners, and for the Sky
   Throne lapis-and-gold rosettes and edge bands. All of it is low so units stand over it, and it stays off the path
   and the keep plazas. Obstacles still come only from the sim and stand up as props.
-- Ambient motion (`foreground.ts`, drawn under the units): water glints on the Fen's mere and cloud wisps drifting
-  past the Sky Throne outside the board.
+- Ambient motion (`foreground.ts`, drawn under the units): water glints on the Fen's mere, cloud wisps drifting
+  past the Sky Throne, spray off the Saltwind cliffs and embers from the Crownfall braziers (the last three outside the board).
 - The board lays a light team wash over each deploy zone and a glowing back line on top of the art.
 - If the art is missing or was rendered for a different camera, the board falls back to its drawn terrain.
 

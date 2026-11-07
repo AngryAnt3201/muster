@@ -5,9 +5,11 @@ import { ACT_MAPS, MAP_SIZE } from "../src/ui/mapdata";
 import { mapForAct, nodeFractions, nodePositions, pathUpTo, pointAt } from "../src/ui/maplayout";
 
 describe("campaign act maps", () => {
-  it("has a painted map for each of the eight acts, and one for every act in ACTS", () => {
-    expect(ACT_MAPS.length).toBe(8);
+  it("has a painted map for each of the ten acts, and one for every act in ACTS", () => {
+    expect(ACT_MAPS.length).toBe(10);
     expect(ACT_MAPS[7].id).toBe("fen");
+    expect(ACT_MAPS[8].id).toBe("coast");
+    expect(ACT_MAPS[9].id).toBe("citadel");
     expect(ACTS.length).toBeLessThanOrEqual(ACT_MAPS.length);
     expect(new Set(ACT_MAPS.map((m) => m.id)).size).toBe(ACT_MAPS.length);
     ACTS.forEach((_, i) => expect(mapForAct(i)).toBe(ACT_MAPS[i]));

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { H, W, ZONE_DEPTH } from "../src/core/defs";
 import { ARENA_COUNT, backdropRect, type ArenaManifest } from "../src/render/arena";
 import { Camera } from "../src/render/camera";
-import { FG_FADED, easeAlphas, fadeTargets, fgCells, glintSpots, sceneFigures, unitBox } from "../src/render/foreground";
+import { FG_FADED, easeAlphas, fadeTargets, fgCells, glintSpots, sceneFigures, sideSpots, unitBox } from "../src/render/foreground";
 
 const DIR = join(__dirname, "..", "public", "arenas");
 const man = JSON.parse(readFileSync(join(DIR, "manifest.json"), "utf8")) as ArenaManifest;
@@ -61,6 +61,12 @@ describe("arena foreground", () => {
     const bodies = [{ x: 1, y: 1, alive: true }, { x: 2, y: 2, alive: false }, { x: 3, y: 3, alive: true, burrowed: true }];
     expect(sceneFigures({ mode: "battle", battle: { bodies } })).toHaveLength(1);
     expect(sceneFigures({ mode: "deploy", pieces: [{ x: 1, y: 1 }], ghost: { x: 2, y: 2 } })).toHaveLength(2);
+  });
+
+  it("rises the Coast's spray and the Citadel's embers off the side edges, never over the board", () => {
+    const m = sideSpots();
+    expect(m.length).toBeGreaterThan(8);
+    for (const p of m) expect(p.x < 0 || p.x > W).toBe(true);
   });
 
   it("puts the Fen's water glints on the mere, off the boardwalk", () => {
