@@ -52,8 +52,8 @@ export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, k: number, fl
   const dx = -f.ax * k, dy = -f.ay * k, dw = f.w * k, dh = f.h * k;
   ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
   if (flash > 0) {
-    // A true white hit flash: the frame's silhouette filled white (one small scratch canvas, reused), laid over the
-    // sprite and fading with the sim's flash timer. Falls back to brightening the sprite if the scratch is unavailable.
+    // A true white hit flash: the frame's silhouette filled white (cached per frame cell), laid over the sprite and
+    // fading with the sim's flash timer. Falls back to brightening the sprite if a canvas can't be made.
     const k = Math.min(1, flash);
     const sil = whiteSilhouette(f);
     if (sil) {
@@ -69,26 +69,33 @@ export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, k: number, fl
   ctx.restore();
 }
 
-let scratch: HTMLCanvasElement | null | undefined;
-let sctx: CanvasRenderingContext2D | null = null;
-/** The frame's alpha filled with white, in a shared scratch canvas (valid until the next call). */
+/** White silhouettes of atlas frames, made once per frame cell and reused (a hit flash replays the same few frames),
+ *  so a flash costs one drawImage. Cleared wholesale past SIL_MAX entries (~10 MB worst case). */
+const SIL_MAX = 72;
+const silCache = new Map<object, Map<number, HTMLCanvasElement>>();
+let silCount = 0;
+let silOk = typeof document !== "undefined";
 function whiteSilhouette(f: Frame): HTMLCanvasElement | null {
-  if (scratch === undefined) {
-    try { scratch = document.createElement("canvas"); scratch.width = 256; scratch.height = 256; sctx = scratch.getContext("2d"); } catch { scratch = null; }
-    if (!sctx) scratch = null;
-  }
-  if (!scratch || !sctx) return null;
-  const w = Math.ceil(f.w), h = Math.ceil(f.h);
-  if (w > scratch.width || h > scratch.height) { scratch.width = Math.max(scratch.width, w); scratch.height = Math.max(scratch.height, h); }
-  const g = sctx;
-  g.globalCompositeOperation = "source-over";
-  g.clearRect(0, 0, w + 1, h + 1);
-  g.drawImage(f.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
-  g.globalCompositeOperation = "source-in";
-  g.fillStyle = "#ffffff";
-  g.fillRect(0, 0, w + 1, h + 1);
-  g.globalCompositeOperation = "source-over";
-  return scratch;
+  if (!silOk) return null;
+  let m = silCache.get(f.img);
+  const key = f.x * 65536 + f.y;
+  const hit = m?.get(key);
+  if (hit) return hit;
+  if (silCount >= SIL_MAX) { silCount = 0; m = undefined; silCache.clear(); }
+  try {
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(f.w); c.height = Math.ceil(f.h);
+    const g = c.getContext("2d");
+    if (!g) { silOk = false; return null; }
+    g.drawImage(f.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    g.globalCompositeOperation = "source-in";
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, c.width, c.height);
+    if (!m) silCache.set(f.img, (m = new Map()));
+    m.set(key, c);
+    silCount++;
+    return c;
+  } catch { silOk = false; return null; }
 }
 
 const TAU = Math.PI * 2;
