@@ -218,8 +218,8 @@ const WARD_TIME = 6;
 const SNARE = 0.45; // speed kept inside brambles
 const SWOOP_R = 1.0; // Griffin Knight landing reach
 const SWOOP_STUN = 0.6;
-const WAVE_W = 1.5; // Tidecaller wave: lane width, length, speed, shove
-const WAVE_LEN = 6;
+const WAVE_W = 1.8; // Tidecaller wave: lane width, length, speed, shove
+const WAVE_LEN = 7;
 const WAVE_SPEED = 5.5;
 const WAVE_PUSH = 4.2;
 const SURF_TIME = 3;
@@ -1985,19 +1985,20 @@ export class Battle {
 
   // ------------------------------------------------------------ legendaries
   /**
-   * Griffin Knight: soars over the fight onto their back line, lands with a stunning swoop, then fights low in the air.
+   * Griffin Knight: soars over the fight onto their back line (only shots and spells reach it up there), lands with a
+   * stunning swoop, then fights low on the wing where swords reach it too.
    * Second Dive (Ascended): the first time it drops below half health it climbs and dives again.
    */
   private actGriffin(b: Body, dt: number): [number, number] {
     if (b.rank >= 4 && !b.once && b.state === "fight" && b.hp < b.maxHp * 0.5) {
       b.once = true;
-      b.state = "soar"; b.t = 0; b.target = -1;
+      b.state = "soar"; b.t = 0; b.target = -1; b.flying = true;
       this.emit({ t: "soar", id: b.id, x: b.x, y: b.y, side: b.side, second: true });
     }
     if (b.state === "soar") {
       let t = this.byId(b.target);
       if (!t || !this.targetable(b, t) || t.flying) { t = this.diveMark(b); b.target = t ? t.id : -1; }
-      if (!t) { b.state = "fight"; b.t = 0; return [0, 0]; }
+      if (!t) { b.state = "fight"; b.t = 0; b.flying = false; return [0, 0]; }
       const d = this.dist(b, t);
       // High over the fight, then down onto the mark over the last stretch.
       b.z = Math.max(0.2, Math.min(Math.min(1.5, b.z + dt * 2.5), (d - t.radius) * 0.6 + 0.2));
@@ -2036,10 +2037,11 @@ export class Battle {
     this.emit({ t: "boom", x: t.x, y: t.y, r: SWOOP_R, kind: "swoop", side: b.side });
     b.swing = this.time; b.swingA = Math.atan2(t.y - b.y, t.x - b.x);
     for (const e of this.enemiesNear(b.side, t.x, t.y, SWOOP_R)) {
-      this.damage(e, e === t ? b.dmg * 1.6 : b.dmg * 0.6, { x: t.x, y: t.y }, b.side, true);
+      this.damage(e, e === t ? b.dmg * 1.5 : b.dmg * 0.6, { x: t.x, y: t.y }, b.side, true);
       if (e.alive && !e.structure) e.stun = Math.max(e.stun, SWOOP_STUN);
     }
-    b.state = "fight"; b.t = 0; b.cd = b.cooldown; b.aux = 1.0;
+    // Down among them now: it fights low, on the wing but in reach of swords and blasts.
+    b.state = "fight"; b.t = 0; b.cd = b.cooldown; b.aux = 1.0; b.flying = false;
     b.target = t.alive ? t.id : -1;
   }
 

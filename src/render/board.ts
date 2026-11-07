@@ -55,6 +55,9 @@ const AIR_SORT_EPS = 0.02;
 
 type TokenOpts = DrawOpts & { rank?: number; flat?: boolean; /** squash-and-stretch [sx, sy] about the feet (juice) */ sq?: readonly [number, number] };
 
+/** Drawn off the ground: flyers, and a Griffin Knight fighting low after its swoop (in reach of swords, still on the wing). */
+const aloft = (bd: Pick<Body, "flying" | "kind">) => bd.flying || bd.kind === "griffin";
+
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
@@ -384,7 +387,7 @@ export class BoardView {
       kick: (k: number) => this.onShake?.(k),
       lift: (id: number) => {
         const bd = battle?.bodies.find((b) => b.id === id);
-        return bd?.flying ? (bd.z ?? 1.2) * AIR : 0;
+        return bd && aloft(bd) ? (bd.z ?? 1.2) * AIR : 0;
       },
     };
   }
@@ -766,7 +769,7 @@ export class BoardView {
       const o = spread.get(bd.id);
       return [bd.px + (bd.x - bd.px) * a + (o?.[0] ?? 0), bd.py + (bd.y - bd.py) * a + (o?.[1] ?? 0)] as const;
     };
-    const height = (bd: Body) => (bd.flying ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
+    const height = (bd: Body) => (aloft(bd) ? (as?.pose(bd.id)?.z ?? bd.z ?? 1.2) * AIR : 0);
     const tex = vfxReady();
     // ---- ground decals
     for (const z of b.zones ?? []) {
@@ -995,7 +998,7 @@ export class BoardView {
     for (const c of this.juice.callouts) {
       const bd = c.id >= 0 && b ? b.bodies.find((o) => o.id === c.id) : undefined;
       if (bd && bd.alive) { c.x = bd.x; c.y = bd.y; }
-      let head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, bd.flying ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : this.cam.project(c.x, c.y, 0.6).y - this.cam.scaleAt(c.y) * 0.9;
+      let head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, aloft(bd) ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : this.cam.project(c.x, c.y, 0.6).y - this.cam.scaleAt(c.y) * 0.9;
       // Two ribbons near each other stack instead of overlapping.
       const px = this.cam.project(c.x, c.y).x;
       if (prev && Math.abs(px - prev.x) < 130 && Math.abs(head - prev.y) < 26) head = prev.y - 26;
@@ -1020,7 +1023,7 @@ export class BoardView {
     // JUICE: the muster hop as the battle starts, a pop-in for summons, a recoil squash on each hit.
     const jz = this.juiceBody(b, bd);
     z += jz.z;
-    const scale = (bd.flying ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale * jz.scale;
+    const scale = (aloft(bd) ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale * jz.scale;
     const sq = mulSq(fall.sq, jz.sq);
     const decoy = bd.kind === "decoy";
     const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;

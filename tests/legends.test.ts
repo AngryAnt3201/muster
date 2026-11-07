@@ -63,6 +63,9 @@ describe("Griffin Knight", () => {
     expect(med.hp).toBeLessThan(med.maxHp);
     expect(wall.hp).toBe(wall.maxHp);
     expect(g.state).toBe("fight");
+    // Down among them it fights low: swords reach it now.
+    expect(g.flying).toBe(false);
+    expect(b.nearestEnemy(med, { taunt: false })?.kind).toBe("griffin");
     run(b, 1);
     expect(g.z).toBeLessThan(0.7);
     expect(g.z).toBeGreaterThan(0.5);
