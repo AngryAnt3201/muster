@@ -15,6 +15,8 @@ import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint,
 // [keeps polish] hit squash, collapse and victory banner
 import { VICTORY_HOLD, bannerRaise, collapsePose, drawVictoryBanner, keepSquash } from "./keeps";
 import { spreadOffsets, type SpreadBody } from "./spread";
+import { Juice, landSquash, popScale } from "./juice";
+import { drawBanner, drawCallout, drawFloat, drawTrail, hpBar, shadowRing } from "./juicedraw";
 
 export type { Rect } from "./camera";
 
@@ -50,7 +52,7 @@ export const FLYER_Z = 0.6;
 /** An effect at a body's own row draws just after (over) that body. */
 const AIR_SORT_EPS = 0.02;
 
-type TokenOpts = DrawOpts & { rank?: number; flat?: boolean };
+type TokenOpts = DrawOpts & { rank?: number; flat?: boolean; /** squash-and-stretch [sx, sy] about the feet (juice) */ sq?: readonly [number, number] };
 
 export class BoardView {
   readonly canvas: HTMLCanvasElement;
@@ -87,6 +89,17 @@ export class BoardView {
     hitT: 9, hitK: 0, fallT: -1, winT: -1 }));
   /** [keeps polish] The rival's keep is the crowned boss variant (set for campaign boss levels). */
   bossKeep = false;
+  // ---- JUICE (combat feel, src/render/juice.ts + juicedraw.ts): hit-stop, camera shake, callouts, HP lag, banner.
+  /** Hit-stop, trauma shake, Ascended callouts, HP-bar lag and the round-end flourish. */
+  readonly juice = new Juice();
+  /** Calm mode (the game's reduce-motion setting, or the OS's): no hit-stop, shake or screen-wide flourishes. */
+  get reducedMotion() { return this.juice.reduced; }
+  set reducedMotion(v: boolean) { this.juice.reduced = v; if (v) { this.juice.stop = 0; this.juice.trauma = 0; } }
+  /** True while a hit-stop holds the frame (a game loop may also hold its sim steps while this is set). */
+  get hitStopping() { return this.juice.frozen; }
+  /** Recent screen points of each straight shot in flight, for its trail. */
+  private trails = new WeakMap<Proj, { x: number; y: number; z: number }[]>();
+  // ---- /JUICE
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -377,6 +390,8 @@ export class BoardView {
 
   private onEvent(e: BattleEvent, battle: Battle) {
     playEvent(this.fx, e, this.vfxEnv(battle));
+    // JUICE: hit-stop, shake and Ascended callouts from the same event.
+    this.juice.onEvent(e, (id) => battle.bodies.find((b) => b.id === id));
   }
 
   /** A blast (the round-end assault's hits on a keep use the battle's own explosions). */
@@ -394,12 +409,13 @@ export class BoardView {
   }
 
   /** Drop-in state for a piece id: world height it is still falling from, and a landing squash scale. */
-  private dropping(id: number): { z: number; scale: number } {
+  private dropping(id: number): { z: number; scale: number; sq?: readonly [number, number] } {
     const t0 = this.drop.get(id);
     if (t0 === undefined) return { z: 0, scale: 1 };
     const u = (this.time - t0) / DROP_TIME;
-    if (u < 1) return { z: DROP_HEIGHT * (1 - u * u), scale: 1 };
-    if (u < 2.2) return { z: 0, scale: 1 + 0.16 * Math.sin(((u - 1) / 1.2) * Math.PI) * (2.2 - u) };
+    // JUICE: stretched tall as it falls, squashed wide on landing, one springy wobble (juice.ts landSquash).
+    if (u < 1) return { z: DROP_HEIGHT * (1 - u * u), scale: 1, sq: this.juice.reduced ? undefined : landSquash(-1) };
+    if (u < 2.2) return { z: 0, scale: 1, sq: this.juice.reduced ? undefined : landSquash((u - 1) / 1.2) };
     this.drop.delete(id);
     return { z: 0, scale: 1 };
   }
@@ -470,6 +486,9 @@ export class BoardView {
   }
 
   update(dt: number) {
+    // JUICE: hit-stop and shake clocks. The effects keep ageing through a stop (the sim does too, it runs in game.ts):
+    // only the picture is held (see render), so nothing piles up while the frame is frozen.
+    this.juice.update(dt);
     this.time += dt;
     this.fx.update(dt);
     if (this.showKeeps) this.updateKeeps(dt);
@@ -477,11 +496,16 @@ export class BoardView {
 
   render(scene: Scene) {
     const ctx = this.ctx;
+    // JUICE: hit-stop. The impact frame is drawn once, then held on screen until the stop ends.
+    if (this.juice.frozen && this.juice.drawn && scene.mode === "battle") return;
+    this.juice.drawn = true;
     if (!this.bg) this.bg = this.paintBackground();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    const sh = this.fx.shake * this.s * 0.14;
-    const dx = sh ? frand(-sh, sh) : 0, dy = sh ? frand(-sh, sh) : 0;
+    // JUICE: a smooth trauma shake (the effects' own kicks feed in through fx.shake).
+    // Whole device pixels only: a sub-pixel offset resamples the full-screen background blit every frame.
+    const [sx, sy] = this.juice.offset(this.s * 0.16, this.fx.shake * 0.75);
+    const dx = Math.round(sx * this.dpr) / this.dpr, dy = Math.round(sy * this.dpr) / this.dpr;
     ctx.setTransform(1, 0, 0, 1, dx * this.dpr, dy * this.dpr);
     ctx.drawImage(this.bg, 0, 0);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, dx * this.dpr, dy * this.dpr);
@@ -497,10 +521,15 @@ export class BoardView {
     if (this.fx.flash > 0) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = this.fx.flash * 0.5;
+      ctx.globalAlpha = this.fx.flash * (this.juice.reduced ? 0.15 : 0.5); // JUICE: calm mode dims full-screen flashes
       ctx.fillStyle = this.fx.flashColor;
       ctx.fillRect(this.area.x, this.area.y, this.area.w, this.area.h);
       ctx.restore();
+    }
+    // JUICE: the board half of the round-end banner, steady (outside the shake).
+    if (this.juice.banner && scene.mode === "battle") {
+      ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+      drawBanner(ctx, this.juice.banner, this.area, this.cssH, this.juice.reduced);
     }
   }
 
@@ -560,6 +589,7 @@ export class BoardView {
     const feet = this.cam.project(fx, fy, z);
     ctx.save();
     ctx.translate(feet.x, feet.y);
+    if (o.sq) ctx.scale(o.sq[0], o.sq[1]); // JUICE: squash-and-stretch about the feet
     // Death frames play out first, then the body fades over the last part of the window.
     ctx.globalAlpha *= (o.alpha ?? 1) * Math.min(1, alive * 2.5);
     if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
@@ -652,9 +682,9 @@ export class BoardView {
         y: p.y, layer: mine ? 0 : 1, draw: () => {
           if (p.kind === "blades") {
             this.footprints("blades", p.x, p.y, p.side === 0 ? -1 : 1).forEach(([x, y], i) =>
-              this.token("blades", p.side, x, y, fall.z, def.radius * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank }));
+              this.token("blades", p.side, x, y, fall.z, def.radius * pop, face, { t: this.time, id: p.id * 3 + i, rank: p.rank, sq: fall.sq }));
           } else {
-            this.token(p.kind, p.side, p.x, p.y, fall.z, def.radius * pop, face, { t: this.time, id: p.id, hidden: mine, flat: mine, own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank });
+            this.token(p.kind, p.side, p.x, p.y, fall.z, def.radius * pop, face, { t: this.time, id: p.id, hidden: mine, flat: mine, own: p.side === 0 || !!sc.showEnemyMines, rank: p.rank, sq: fall.sq });
           }
           const at = mine ? this.bodyAt(p.x, p.y, 0, def.radius, true) : this.headAt(p.kind, p.rank, p.x, p.y, 0, def.radius);
           drawRank(this.ctx, at.x, mine ? at.y : at.y + at.r * 1.1, Math.max(at.r, 0.3 * this.cam.scaleAt(p.y)), p.rank);
@@ -807,8 +837,8 @@ export class BoardView {
       }
       const fade = fadeOf(bd);
       const z = height(bd);
-      // Contact shadow: smaller and fainter the higher the body flies.
-      this.shadow(x, y, bd.radius * (1.1 - z * 0.15), (0.38 - z * 0.08) * fade);
+      // Contact shadow: smaller and fainter the higher the body flies. JUICE: a soft two-layer shadow and a team ring.
+      shadowRing(ctx, this.cam, x, y, bd.radius * (1.1 - z * 0.15), (0.38 - z * 0.08) * fade, bd.kind === "decoy" && bd.side !== 0 ? null : bd.side, bd.alive ? 1 : fade);
       // Auras on the ground under the unit.
       const auraOn = bd.alive && ((bd.buff ?? 0) > 0 || (bd.rally ?? 0) > 0);
       if (auraOn && tex) {
@@ -876,21 +906,16 @@ export class BoardView {
     for (const bd of live) {
       if (!bd.alive || bd.hp >= bd.maxHp || bd.kind === "mite" || bd.kind === "decoy" || bd.burrowed || as?.pose(bd.id)) continue;
       const [x, y] = pos(bd);
-      const at = this.headAt(bd.kind, bd.rank, x, y, height(bd), bd.radius);
-      const w = Math.max(16, at.r * 1.9), h = 4;
-      const top = at.y - 9;
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(at.x - w / 2 - 1, top - 1, w + 2, h + 2);
-      ctx.fillStyle = TEAM[bd.side].main;
-      ctx.fillRect(at.x - w / 2, top, w * (bd.hp / bd.maxHp), h);
+      this.drawJuiceBar(bd, x, y, height(bd)); // JUICE
     }
     for (const bd of live) {
       const st = as?.pose(bd.id);
       if (!bd.alive || bd.rank <= 1 || bd.kind === "mite" || (bd.burrowed && !st) || bd.kind === "decoy" || st?.gone) continue;
       const [x, y] = pos(bd);
       const at = this.headAt(bd.kind, bd.rank, x, y, height(bd), bd.radius);
-      drawRank(ctx, at.x, at.y + at.r * 1.3 - (bd.hp < bd.maxHp && !st ? 14 : 5), at.r * 1.3, bd.rank);
+      drawRank(ctx, at.x, at.y + at.r * 1.3 - (bd.hp < bd.maxHp && !st ? 15 : 5), at.r * 1.3, bd.rank);
     }
+    this.drawCallouts(b); // JUICE
   }
 
   private spreadOf = new Map<number, [number, number]>();
@@ -899,7 +924,7 @@ export class BoardView {
   /** Render-only crowd spacing for ground bodies (spread.ts), eased per body so figures glide apart rather than jump.
    *  Bodies seen for the first time start at their target, matching the deploy footprints. */
   private spreadBattle(b: Battle, a: number): Map<number, [number, number]> {
-    if (this.spreadFor !== b) { this.spreadOf.clear(); this.spreadFor = b; this.spreadT = this.time; }
+    if (this.spreadFor !== b) { this.spreadOf.clear(); this.spreadFor = b; this.spreadT = this.time; this.juiceStart(b); }
     const dt = Math.max(0, Math.min(0.1, this.time - this.spreadT));
     this.spreadT = this.time;
     const crowd: SpreadBody[] = [];
@@ -918,6 +943,61 @@ export class BoardView {
     return this.spreadOf;
   }
 
+  // ---- JUICE: per-body squash and hop (juice.ts), HP bars, callouts
+  /** Battle start: every deployed body hops in place, staggered across the line, and lands in a puff of dust. */
+  private juiceStart(b: Battle) {
+    this.juice.reset();
+    if (this.juice.reduced) return;
+    for (const bd of b.bodies) {
+      if (bd.owner !== -1 || bd.flying || bd.kind === "mine" || bd.burrowed) continue;
+      this.fx.anim("dust", bd.x, bd.y, { size: Math.max(0.7, bd.radius * 3), max: 0.4, tint: "#d6c3a0", layer: "ground", alpha: 0.55, delay: hopDelay(bd.x) + HOP_AIR });
+    }
+  }
+
+  /** Extra height, scale and squash for a body from the juice: the start hop, a summon's pop-in, a hit's recoil. */
+  private juiceBody(b: Battle, bd: Body): { z: number; scale: number; sq?: readonly [number, number] } {
+    if (this.juice.reduced) return { z: 0, scale: 1 };
+    let z = 0, scale = 1, sq: readonly [number, number] | undefined;
+    if (bd.owner === -1 && !bd.flying && b.time < 1.2) {
+      const t = b.time - hopDelay(bd.x);
+      if (t > 0 && t < HOP_AIR) { z = HOP_HEIGHT * Math.sin((t / HOP_AIR) * Math.PI); sq = landSquash(-1); }
+      else if (t >= HOP_AIR && t < HOP_AIR + 0.32) sq = landSquash((t - HOP_AIR) / 0.32);
+    }
+    const t0 = this.juice.spawned.get(bd.id);
+    if (t0 !== undefined) {
+      const u = (this.juice.time - t0) / 0.3;
+      if (u < 1) scale = popScale(u); else if (u < 2) sq = landSquash((u - 1));
+    }
+    if (bd.alive && bd.flash > 0) {
+      const f = Math.min(1, bd.flash / 0.12) * 0.09;
+      sq = mulSq(sq, [1 + f, 1 - f]);
+    }
+    return { z, scale, sq };
+  }
+
+  /** HP bars, only for damaged bodies: a rounded team bar whose lost part drains a moment after each hit. */
+  private drawJuiceBar(bd: Body, x: number, y: number, z: number) {
+    const at = this.headAt(bd.kind, bd.rank, x, y, z, bd.radius);
+    const hp = this.juice.hpBar(bd.id, Math.max(0, bd.hp / bd.maxHp));
+    hpBar(this.ctx, at.x, at.y - 10, Math.max(18, at.r * 1.9), hp, bd.side, this.juice.time);
+  }
+
+  /** Ascended ability callouts over their units (after the bodies, before the numbers). */
+  private drawCallouts(b: Battle | null) {
+    let prev: { x: number; y: number } | null = null;
+    for (const c of this.juice.callouts) {
+      const bd = c.id >= 0 && b ? b.bodies.find((o) => o.id === c.id) : undefined;
+      if (bd && bd.alive) { c.x = bd.x; c.y = bd.y; }
+      let head = bd ? this.headAt(bd.kind, bd.rank, c.x, c.y, bd.flying ? (bd.z ?? 1.2) * AIR : 0, bd.radius).y : this.cam.project(c.x, c.y, 0.6).y - this.cam.scaleAt(c.y) * 0.9;
+      // Two ribbons near each other stack instead of overlapping.
+      const px = this.cam.project(c.x, c.y).x;
+      if (prev && Math.abs(px - prev.x) < 130 && Math.abs(head - prev.y) < 26) head = prev.y - 26;
+      prev = { x: px, y: head };
+      drawCallout(this.ctx, this.cam, c, head, this.juice.time);
+    }
+  }
+  // ---- /JUICE
+
   private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number, fade: number) {
     const ctx = this.ctx;
     const swing = b.time - bd.swing < 0.35 ? (b.time - bd.swing) / 0.35 : -1;
@@ -930,7 +1010,11 @@ export class BoardView {
       this.fx.burst(bd.x, bd.y, 1, { color: "#ffd166", speed: 0.8, size: 0.035, max: 0.3, kind: "spark", gravity: 0 });
     const fall = bd.owner === -1 ? this.dropping(bd.pieceId) : { z: 0, scale: 1 };
     z += fall.z;
-    const scale = (bd.flying ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale;
+    // JUICE: the muster hop as the battle starts, a pop-in for summons, a recoil squash on each hit.
+    const jz = this.juiceBody(b, bd);
+    z += jz.z;
+    const scale = (bd.flying ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale * jz.scale;
+    const sq = mulSq(fall.sq, jz.sq);
     const decoy = bd.kind === "decoy";
     const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
     // A decoy has its own ghostly atlas; the drawn fallback borrows the trickster's token.
@@ -940,7 +1024,7 @@ export class BoardView {
     this.token(kind, bd.side, x, y, z, radius, bd.face, {
       t: this.time, alpha: (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1) * (bd.alive ? fade : 1), dying: bd.alive ? undefined : 1 - fade,
       flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
-      state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank,
+      state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank, sq,
     });
     const at = this.bodyAt(x, y, z, bd.radius);
     const tex = vfxReady(), feet = this.cam.project(x, y, z);
@@ -1074,6 +1158,7 @@ export class BoardView {
       const tail = cam.project(tx, ty, hAt(tx, ty));
       const ang = Math.atan2(head.y - tail.y, head.x - tail.x), s = head.s;
       const tint = p.kind === "shard" || pfx === "freeze" ? ICE : p.kind === "pellet" ? GOLD : p.kind === "bolt" ? "#ffe6be" : "#ffffff";
+      this.shotTrail(p, wx, wy, hAt(wx, wy), tint, (p.kind === "bolt" ? 0.09 : 0.05) * s); // JUICE
       this.shadow(wx, wy, 0.06, 0.25);
       if (pv.trail) this.sheet("streak", 0, head.x - Math.cos(ang) * pv.size * s * 2, head.y - Math.sin(ang) * pv.size * s * 2, pv.size * s * 0.9, { a: ang, w: pv.size * s * 4.4, tint, alpha: 0.75 });
       this.sheet(pv.sheet, 0, head.x, head.y, pv.size * s, { a: ang });
@@ -1094,6 +1179,7 @@ export class BoardView {
     const hAt = (x: number, y: number) => arc.base + arc.peak * bump(progress(p, x, y));
     const h = hAt(wx, wy);
     const head = cam.project(wx, wy, h);
+    this.shotTrail(p, wx, wy, h, p.kind === "shard" ? ICE : p.kind === "pellet" ? GOLD : "#ffffff", (p.kind === "bolt" ? 0.09 : 0.05) * head.s); // JUICE
     if (p.kind === "pellet") {
       ctx.fillStyle = "#ffe08a";
       ctx.beginPath(); ctx.arc(head.x, head.y, Math.max(2, 0.05 * head.s), 0, TAU); ctx.fill();
@@ -1123,6 +1209,19 @@ export class BoardView {
       ctx.beginPath(); ctx.moveTo(pxLen * 0.25, 0); ctx.lineTo(0, -0.05 * s); ctx.lineTo(0, 0.05 * s); ctx.fill();
     }
     ctx.restore();
+  }
+
+  /** JUICE: a tapered trail behind a straight shot, through its last few positions (world, re-projected each frame so
+   *  it sits right under camera shake). */
+  private shotTrail(p: Proj, x: number, y: number, z: number, color: string, width: number) {
+    let pts = this.trails.get(p);
+    if (!pts) this.trails.set(p, (pts = []));
+    const last = pts[pts.length - 1];
+    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 5) pts.shift(); }
+    if (pts.length < 2) return;
+    const scr = pts.map((q) => this.cam.project(q.x, q.y, q.z));
+    scr.push(this.cam.project(x, y, z));
+    drawTrail(this.ctx, scr, color, width);
   }
 
   // ------------------------------------------------------------ keeps and the round-end assault
@@ -1350,6 +1449,8 @@ export class BoardView {
     k.flash = 1;
     k.shake = Math.min(1.4, k.shake + (big ? 1 : 0.45));
     k.hitT = 0; k.hitK = big ? 1.3 : e.first ? 1 : 0.6; // [keeps polish] the keep's own squash
+    this.juice.shake(big ? 0.4 : 0.22); // JUICE: keep hits jolt the camera
+    if (big) this.juice.hitStop(3);
     const stone = { color: "#8d929b", speed: big ? 2.6 : 1.6, size: 0.06, max: 0.7, kind: "chunk" as const, vz: 2.5, spin: 8, z };
     switch (e.style) {
       case "lob": this.boom(w.x, w.y, 0.8, "grenade", (1 - e.target) as Side); break;
@@ -1566,26 +1667,22 @@ export class BoardView {
       }
       ctx.restore();
     }
+    // JUICE: styled numbers (juicedraw.ts drawFloat). Whole-pixel font sizes only: a new size each frame misses the
+    // glyph cache and re-rasterises the text (it was most of the frame in a 24-unit battle).
     for (const f of fx.floats) {
-      const u = 1 - f.life / f.max;
       const q = cam.project(f.x, f.y, 0.6 + (f.z ?? 0));
-      ctx.save();
-      ctx.globalAlpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
-      // Whole pixels only: the float drifts in depth every frame, and a new font size each frame misses the
-      // glyph cache and re-rasterises the text (it was most of the frame in a 24-unit battle).
-      const size = Math.max(6, Math.round(f.size * q.s * (u < 0.15 ? 0.7 + u * 2 : 1)));
-      ctx.font = `800 ${size}px ui-rounded, "SF Pro Rounded", system-ui, sans-serif`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.strokeText(f.text, q.x, q.y);
-      ctx.fillStyle = f.color;
-      ctx.fillText(f.text, q.x, q.y);
-      ctx.restore();
+      drawFloat(ctx, f, q.x, q.y, q.s);
     }
   }
 }
 
 const easeOut = (x: number) => 1 - (1 - x) ** 3;
+// JUICE: the battle-start hop (world units, seconds), staggered left to right across the line.
+const HOP_HEIGHT = 0.32;
+const HOP_AIR = 0.26;
+const hopDelay = (x: number) => 0.05 + (Math.max(0, Math.min(W, x)) / W) * 0.22;
+const mulSq = (a?: readonly [number, number], b?: readonly [number, number]): readonly [number, number] | undefined =>
+  !a ? b : !b ? a : [a[0] * b[0], a[1] * b[1]];
 /** How high (world units) a deployed piece falls from. */
 const DROP_HEIGHT = 3;
 /** 0 at both ends, 1 in the middle. */

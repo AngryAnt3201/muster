@@ -507,7 +507,7 @@ export class GameScreen {
       if (this.phase === "battle" && this.battle && this.hold > 0) this.hold -= dt;
       else if (this.phase === "battle" && this.battle) {
         const slow = this.battle.done ? 0.35 : 1;
-        this.acc += dt * this.speed * slow;
+        if (!this.view.hitStopping) this.acc += dt * this.speed * slow; // JUICE: a hit-stop holds the sim too
         while (this.acc >= DT && !this.battle.done) {
           this.battle.step();
           this.view.consume(this.battle);

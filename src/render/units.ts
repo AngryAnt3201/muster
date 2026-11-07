@@ -52,12 +52,50 @@ export function drawFrame(ctx: CanvasRenderingContext2D, f: Frame, k: number, fl
   const dx = -f.ax * k, dy = -f.ay * k, dw = f.w * k, dh = f.h * k;
   ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
   if (flash > 0) {
-    ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha *= Math.min(1, flash) * 0.7;
-    ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
-    ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+    // A true white hit flash: the frame's silhouette filled white (cached per frame cell), laid over the sprite and
+    // fading with the sim's flash timer. Falls back to brightening the sprite if a canvas can't be made.
+    const k = Math.min(1, flash);
+    const sil = whiteSilhouette(f);
+    if (sil) {
+      ctx.globalAlpha *= 0.35 + 0.6 * k;
+      ctx.drawImage(sil, 0, 0, f.w, f.h, dx, dy, dw, dh);
+    } else {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha *= k * 0.7;
+      ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+      ctx.drawImage(f.img, f.x, f.y, f.w, f.h, dx, dy, dw, dh);
+    }
   }
   ctx.restore();
+}
+
+/** White silhouettes of atlas frames, made once per frame cell and reused (a hit flash replays the same few frames),
+ *  so a flash costs one drawImage. Cleared wholesale past SIL_MAX entries (~10 MB worst case). */
+const SIL_MAX = 72;
+const silCache = new Map<object, Map<number, HTMLCanvasElement>>();
+let silCount = 0;
+let silOk = typeof document !== "undefined";
+function whiteSilhouette(f: Frame): HTMLCanvasElement | null {
+  if (!silOk) return null;
+  let m = silCache.get(f.img);
+  const key = f.x * 65536 + f.y;
+  const hit = m?.get(key);
+  if (hit) return hit;
+  if (silCount >= SIL_MAX) { silCount = 0; m = undefined; silCache.clear(); }
+  try {
+    const c = document.createElement("canvas");
+    c.width = Math.ceil(f.w); c.height = Math.ceil(f.h);
+    const g = c.getContext("2d");
+    if (!g) { silOk = false; return null; }
+    g.drawImage(f.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    g.globalCompositeOperation = "source-in";
+    g.fillStyle = "#ffffff";
+    g.fillRect(0, 0, c.width, c.height);
+    if (!m) silCache.set(f.img, (m = new Map()));
+    m.set(key, c);
+    silCount++;
+    return c;
+  } catch { silOk = false; return null; }
 }
 
 const TAU = Math.PI * 2;

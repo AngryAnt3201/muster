@@ -50,7 +50,18 @@ export interface Anim {
 }
 export type AnimOpts = Partial<Omit<Anim, "sheet" | "x" | "y" | "life">> & { size: number; max: number };
 
-export interface Float { x: number; y: number; text: string; life: number; max: number; color: string; size: number; /** extra height (a flyer's) */ z?: number; }
+export interface Float {
+  x: number; y: number; text: string; life: number; max: number; color: string; size: number;
+  /** extra height (a flyer's) */ z?: number;
+  /** How it is styled (juicedraw.ts drawFloat): plain damage, a crit, a heal, or a word. */
+  kind?: FloatKind;
+}
+export type FloatKind = "dmg" | "crit" | "heal" | "text";
+/** Most numbers on screen at once: past this the oldest plain one goes, so a brawl never turns into a wall of digits. */
+export const MAX_FLOATS = 9;
+/** Numbers within this distance (world units) and age (s) merge into one. */
+export const MERGE_DIST = 0.9;
+export const MERGE_AGE = 0.3;
 
 let seed = 1;
 const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -123,7 +134,7 @@ export class Fx {
     this.bolts = this.bolts.filter((r) => r.life > 0);
     this.beams = this.beams.filter((r) => r.life > 0);
     this.floats = this.floats.filter((r) => r.life > 0);
-    for (const f of this.floats) f.y -= dt * 0.9;
+    for (const f of this.floats) f.y -= dt * 0.35;
     this.shake = Math.max(0, this.shake - dt * 2.8);
     this.flash = Math.max(0, this.flash - dt * 3);
     if (this.parts.length > 900) this.parts.splice(0, this.parts.length - 900);
@@ -166,7 +177,27 @@ export class Fx {
   beam(x0: number, y0: number, x1: number, y1: number, color: string, width = 0.07, max = 0.3) {
     this.beams.push({ x0, y0, x1, y1, life: max, max, color, width });
   }
-  float(x: number, y: number, text: string, color = "#fff", size = 0.32, max = 0.8) {
-    this.floats.push({ x: x + frand(-0.15, 0.15), y, text, life: max, max, color, size });
+  float(x: number, y: number, text: string, color = "#fff", size = 0.32, max = 0.8, kind: FloatKind = "text") {
+    // Numbers landing on the same spot within a moment add up into one (a cleave or a burst hitting a crowd shows a
+    // few totals, not a stack of digits). A crit merging into a plain number upgrades it.
+    if (kind !== "text") {
+      const n = parseInt(text.replace(/[^0-9]/g, ""), 10);
+      for (const f of this.floats) {
+        if (f.kind === "text" || (f.kind === "heal") !== (kind === "heal") || f.max - f.life > MERGE_AGE) continue;
+        if (Math.abs(f.x - x) > MERGE_DIST || Math.abs(f.y - y) > MERGE_DIST) continue;
+        const sum = parseInt(f.text.replace(/[^0-9]/g, ""), 10) + n;
+        const crit = f.kind === "crit" || kind === "crit";
+        f.kind = crit ? "crit" : f.kind;
+        f.text = kind === "heal" ? `+${sum}` : crit ? `${sum}!` : String(sum);
+        if (crit) { f.color = color; f.size = Math.max(f.size, size); }
+        f.life = f.max = Math.max(f.max, max) * 0.9 + 0.1 * (f.max - f.life);
+        return;
+      }
+    }
+    if (this.floats.length >= MAX_FLOATS) {
+      const i = this.floats.findIndex((f) => f.kind === "dmg" || f.kind === "heal");
+      this.floats.splice(i < 0 ? 0 : i, 1);
+    }
+    this.floats.push({ x: x + frand(-0.15, 0.15), y, text, life: max, max, color, size, kind });
   }
 }
