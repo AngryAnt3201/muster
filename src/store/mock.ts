@@ -1,8 +1,9 @@
 // A stand-in store for web and dev builds, tests and e2e. Behaves like StoreKit from the game's side:
-// async products, buy outcomes (picked with `mode`, or ?store=<mode> in the browser), Restore, change events.
+// async products, buy outcomes (picked with `mode`, or ?store=<mode> in the browser), unfinished consumables, events.
 // What it "owns" lives in its own storage key, like an Apple ID that outlives a save reset.
 import { GEM_PACKS } from "../economy/gems";
-import { FULL_ARMY, type BuyResult, type Product, type Purchase, type Store } from "./types";
+import { STARTER_PACK } from "./starter";
+import { STARTER, type BuyResult, type Product, type Purchase, type Store } from "./types";
 
 export type MockMode = "ok" | "pending" | "cancelled" | "failed" | "offline";
 export const MOCK_MODES: MockMode[] = ["ok", "pending", "cancelled", "failed", "offline"];
@@ -12,10 +13,11 @@ export const MOCK_KEY = "muster.mockstore.v1";
 
 /** The mock's catalogue. The price here is the mock's own; the game only ever shows what a store returns. */
 export const MOCK_PRODUCTS: Product[] = [
-  { id: FULL_ARMY, title: "Full Army", description: "Every act, Gauntlet and all Breakpoint puzzles.", displayPrice: "$4.99", price: 4.99 },
+  { id: STARTER, title: "Starter Pack", description: "Gems, coins and unit cards to get your army going. One per player.", displayPrice: `$${STARTER_PACK.usd}`, price: STARTER_PACK.usd },
   ...GEM_PACKS.map((p) => ({ id: p.id, title: `${p.gems.toLocaleString("en")} Gems`, description: `A ${p.name.toLowerCase()} of ${p.gems.toLocaleString("en")} gems.`, displayPrice: `$${p.usd}`, price: p.usd })),
 ];
-const consumable = (id: string) => GEM_PACKS.some((p) => p.id === id);
+/** Every product Muster sells is a consumable today (gem packs and the Starter Pack). */
+const consumable = (id: string) => id === STARTER || GEM_PACKS.some((p) => p.id === id);
 
 function memory(): KV {
   const m = new Map<string, string>();

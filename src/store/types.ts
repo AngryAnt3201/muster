@@ -1,10 +1,11 @@
-// The in-app store, as the game sees it: the one-time Full Army unlock (non-consumable) and the gem packs
-// (consumables, src/economy/gems.ts).
+// The in-app store, as the game sees it: the one-time Starter Pack (src/store/starter.ts) and the gem packs
+// (src/economy/gems.ts), all App Store consumables. Nothing is locked behind a purchase: every act, level, Gauntlet
+// and puzzle is free; purchases only speed progress up.
 // Implementations: MockStore (web and dev builds, tests, e2e) and NativeStore (StoreKit 2 through the
 // local MusterStore Capacitor plugin in ios/). Prices always come from the store, never from the game.
 
-/** The App Store product id of the Full Army unlock (a non-consumable). */
-export const FULL_ARMY = "co.inflect.muster.fullarmy";
+/** The App Store product id of the Starter Pack: a consumable the app sells once (src/store/starter.ts). */
+export const STARTER = "co.inflect.muster.starter";
 
 export interface Product {
   id: string;
@@ -41,7 +42,10 @@ export interface Store {
   products(ids: string[]): Promise<Product[]>;
   /** Starts a purchase. Resolves with how it ended; never rejects. */
   buy(id: string): Promise<BuyResult>;
-  /** Restore Purchases: syncs with the store (may ask the player to sign in), then lists owned product ids. */
+  /**
+   * Syncs with the store (may ask the player to sign in), then lists owned non-consumables. Muster sells none today,
+   * so the game shows no Restore Purchases button; the call stays for a future non-consumable.
+   */
   restore(): Promise<string[]>;
   /** Owned product ids as the store knows them now, without prompting. */
   owned(): Promise<string[]>;

@@ -25,7 +25,10 @@ vi.mock("@capacitor/core", () => ({
 
 import { createStore } from "../src/store";
 import { NativeStore, PLUGIN_NAME, UnavailableStore } from "../src/store/native";
-import { FULL_ARMY } from "../src/store/types";
+import { STARTER } from "../src/store/types";
+
+/** A non-consumable the plugin could sell later (Muster sells none today; restore and owned stay in the bridge). */
+const LATER = "co.inflect.muster.later";
 
 const root = resolve(__dirname, "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
@@ -35,12 +38,12 @@ function fakePlugin(over: Record<string, (...a: any[]) => any> = {}) {
   cap.plugin = {
     getProducts: async () => ({
       products: [
-        { id: FULL_ARMY, title: "Full Army", description: "Every act", displayPrice: "A$7.99" },
+        { id: STARTER, title: "Starter Pack", description: "Gems, coins and cards", displayPrice: "A$7.99" },
         { id: "co.inflect.muster.other", title: "Other", description: "", displayPrice: "$1" },
       ],
     }),
     purchase: async () => ({ status: "purchased" }),
-    restore: async () => ({ owned: [FULL_ARMY] }),
+    restore: async () => ({ owned: [LATER] }),
     owned: async () => ({ owned: [] }),
     unfinished: async () => ({ purchases: [] }),
     finish: async () => ({ finished: true }),
@@ -70,32 +73,32 @@ describe("NativeStore (JS bridge to the StoreKit plugin)", () => {
   });
 
   it("passes the store's own price string through untouched and drops ids it didn't ask for", async () => {
-    const ps = await new NativeStore().products([FULL_ARMY]);
-    expect(ps).toEqual([{ id: FULL_ARMY, title: "Full Army", description: "Every act", displayPrice: "A$7.99" }]);
+    const ps = await new NativeStore().products([STARTER]);
+    expect(ps).toEqual([{ id: STARTER, title: "Starter Pack", description: "Gems, coins and cards", displayPrice: "A$7.99" }]);
   });
 
   it("maps every purchase status, and turns a throw or an unknown reply into failed", async () => {
     for (const status of ["purchased", "pending", "cancelled", "failed"] as const) {
       fakePlugin({ purchase: async () => ({ status, message: status === "failed" ? "Declined." : undefined }) });
-      const r = await new NativeStore().buy(FULL_ARMY);
+      const r = await new NativeStore().buy(STARTER);
       expect(r.status).toBe(status);
       if (status === "failed") expect(r.message).toBe("Declined.");
     }
     fakePlugin({ purchase: async () => { throw new Error("bridge gone"); } });
-    expect(await new NativeStore().buy(FULL_ARMY)).toEqual({ status: "failed", message: "bridge gone" });
+    expect(await new NativeStore().buy(STARTER)).toEqual({ status: "failed", message: "bridge gone" });
     fakePlugin({ purchase: async () => ({ status: "weird" }) });
-    expect((await new NativeStore().buy(FULL_ARMY)).status).toBe("failed");
+    expect((await new NativeStore().buy(STARTER)).status).toBe("failed");
   });
 
   it("restores, reads owned, and forwards ownedChanged until unsubscribed", async () => {
     const s = new NativeStore();
-    expect(await s.restore()).toEqual([FULL_ARMY]);
+    expect(await s.restore()).toEqual([LATER]);
     expect(await s.owned()).toEqual([]);
     const seen: string[][] = [];
     const off = s.onChange((o) => seen.push(o));
     await Promise.resolve();
-    cap.listeners.forEach((f) => f({ owned: [FULL_ARMY] }));
-    expect(seen).toEqual([[FULL_ARMY]]);
+    cap.listeners.forEach((f) => f({ owned: [LATER] }));
+    expect(seen).toEqual([[LATER]]);
     off();
     await new Promise((r) => setTimeout(r, 0));
     expect(cap.listeners).toHaveLength(0);
@@ -186,14 +189,16 @@ describe("MusterStore Swift plugin and StoreKit config", () => {
     expect(swift).toContain('reply["txId"] = p.txId');
   });
 
-  it("ships a .storekit file with the US$4.99 Full Army non-consumable, matching the App Store Connect copy", () => {
+  it("ships a .storekit file with the US$4.99 Starter Pack consumable and no non-consumables, matching the App Store Connect copy", () => {
     const sk = JSON.parse(read("ios/App/Muster.storekit"));
     const meta = JSON.parse(read("store/metadata.json")).inAppPurchase;
-    expect(sk.products.filter((x: { type: string }) => x.type === "NonConsumable")).toHaveLength(1);
+    expect(sk.products.filter((x: { type: string }) => x.type === "NonConsumable")).toHaveLength(0);
+    expect(sk.products.some((x: { productID: string }) => x.productID === "co.inflect.muster.fullarmy")).toBe(false);
     const p = sk.products[0];
-    expect(p.productID).toBe(FULL_ARMY);
+    expect(p.productID).toBe(STARTER);
     expect(p.productID).toBe(meta.productId);
-    expect(p.type).toBe("NonConsumable");
+    expect(p.type).toBe("Consumable");
+    expect(meta.type).toBe("Consumable");
     expect(p.displayPrice).toBe("4.99");
     expect(meta.price).toContain("USD 4.99");
     expect(p.familyShareable).toBe(false);

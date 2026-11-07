@@ -12,9 +12,8 @@ import { initNative, setHaptics } from "./native";
 import { loadSprites } from "./render/sprites";
 import { applyStyleVars } from "./render/style";
 import { load, save } from "./save";
-import { StoreController, createStore } from "./store";
-import { actGated, gauntletGated, levelGated, puzzleGated } from "./store/entitlement";
-import { actGateCard, fullArmyOffer } from "./ui/shop";
+import { createStore } from "./store";
+import { StarterShop, payStarter, markStarter, starterBought } from "./store/starter";
 import { dailyBody } from "./ui/daily";
 import { el, stars } from "./ui/dom";
 import { MAP_SIZE } from "./ui/mapdata";
@@ -23,7 +22,8 @@ import { GameScreen, framedPortrait, paintPortrait, ribbon } from "./ui/game";
 import { applyUIStyle, icon } from "./ui/kit";
 // [gems] the gem store: packs, free rewards, Shop, counters, Gauntlet Rally
 import { settleRewards } from "./economy/rewards";
-import { creditPurchase } from "./economy/wallet";
+import { creditPurchase, earn } from "./economy/wallet";
+import { grantCards } from "./progression/collection";
 import { GemShop } from "./store/gems";
 import { currencyBar } from "./ui/currency";
 import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
@@ -34,11 +34,18 @@ import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
-/** The Full Army store (StoreKit on iOS, a mock on the web). */
-const store = new StoreController(createStore(location.search), { load, save });
+/** The App Store (StoreKit on iOS, a mock on the web). Nothing is locked behind it: purchases only speed progress up. */
+const store = createStore(location.search);
+/** [store] The one-time Starter Pack: gems and coins through the wallet, cards through the collection, once per transaction. */
+const starter = new StarterShop(store, (txId) => payStarter(txId, {
+  creditGems: creditPurchase,
+  earnCoins: (n) => void earn("coins", n, "starter"),
+  grantCards: (k, n) => void grantCards(k, n, "starter"),
+  markBought: (tx) => save((s) => { markStarter(s, tx); }),
+}), () => starterBought(load()));
 /** [gems] Gem packs on the same store, credited through the shared wallet once per transaction. */
-const gemShop = new GemShop(store.store, creditPurchase);
-/** Redraws the menu screen on show when the entitlement changes (null in battles and on the Shop, which updates itself). */
+const gemShop = new GemShop(store, creditPurchase);
+/** Redraws the menu screen when a Starter Pack lands outside a buy (null in battles and on the Shop, which updates itself). */
 let here: (() => void) | null = null;
 
 function clear() {
@@ -76,7 +83,6 @@ function title() {
   here = title;
   const s = load();
   const camp = Object.keys(s.campaign).length;
-  const gLocked = gauntletGated(s);
   screen("title",
     currencyBar("title-cur"), // [gems] coin and gem counters
     el("div", { class: "logo" }, [
@@ -88,18 +94,18 @@ function title() {
       // Secondary modes in pairs, so the menu stays low and the key art's clash shows above it.
       el("div", { class: "menu-row" }, [
         btn(el("span", {}, ["Daily", el("small", {}, [dailyTag()])]), "big half daily-btn", daily),
-        btn(el("span", {}, ["Gauntlet", gLocked ? el("small", { class: "gated" }, [icon("crown"), "Full Army"]) : el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big half gauntlet-btn", () => (gLocked ? paywall() : gauntlet())),
+        btn(el("span", {}, ["Gauntlet", el("small", {}, [s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless"])]), "big half gauntlet-btn", gauntlet),
       ]),
       el("div", { class: "menu-row" }, [
         btn(el("span", {}, ["Breakpoint", el("small", {}, [`${Object.keys(s.puzzles).length}/${PUZZLES.length}`])]), "big half puzzles-btn", puzzles),
         btn(el("span", {}, ["Skirmish", el("small", {}, ["AI lab"])]), "big half skirmish-btn", skirmish),
       ]),
-      // [td] hook: Bastion, the tower-defence mode (src/ui/td.ts). Free, no Full Army gate.
+      // [td] hook: Bastion, the tower-defence mode (src/ui/td.ts). Free, like every mode.
       btn(el("span", {}, ["Bastion", el("small", {}, ["hold the road"])]), "big bastion-btn", () => { clear(); void import("./ui/td").then((m) => m.bastionMenu(app, title)); }),
     ]),
     el("div", { class: "title-foot" }, [
       btn(barracksLabel(), "ghost small", barracks), // [progression] badge when a troop can level up
-      btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, () => shopScreen()),
+      btn(el("span", {}, [icon("crown"), "Shop"]), "gold small shop-btn", () => shopScreen()),
       btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
     ]),
   );
@@ -108,8 +114,8 @@ function title() {
 // ---------------------------------------------------------------- campaign
 /** Reached in the campaign: the first level, or the one before it cleared. */
 const reached = (id: number) => id === 1 || (load().campaign[id - 1] ?? 0) > 0;
-/** Reached and not behind the Full Army. */
-const unlocked = (id: number) => reached(id) && !levelGated(load(), LEVELS.find((l) => l.id === id) ?? { act: 1 });
+/** Reached: every level is free to play, opened by clearing the one before it. */
+const unlocked = reached;
 const SVG = "http://www.w3.org/2000/svg";
 
 /** The campaign: one illustrated map per act (by ACTS index), level nodes on the painted road, swipe or arrows between acts. */
@@ -117,7 +123,7 @@ function campaign(focusAct?: number) {
   clear();
   const s = load();
   const acts = ACTS.map((name, i) => ({ name, index: i, levels: LEVELS.filter((l) => l.act === i + 1) })).filter((a) => a.levels.length);
-  // The next level to play; if it's behind the Full Army the map opens on its act so the gate card shows.
+  // The next level to play; the map opens on its act.
   const next = LEVELS.find((l) => reached(l.id) && !s.campaign[l.id]) ?? [...LEVELS].reverse().find((l) => unlocked(l.id));
   const want = focusAct ?? next?.act ?? 1;
   let cur = Math.max(0, acts.findIndex((a) => a.index === want - 1));
@@ -162,8 +168,7 @@ function campaign(focusAct?: number) {
 
     const pts = nodePositions(map, a.levels.length);
     const reached = a.levels.reduce((k, l, i) => (unlocked(l.id) ? i : k), -1);
-    const gated = actGated(s, a.index + 1);
-    const page = el("div", { class: `map ${open ? "" : "locked"} ${gated ? "gated" : ""} ${dir > 0 ? "from-right" : dir < 0 ? "from-left" : ""}`, style: `background-image:url(${map.image})` });
+    const page = el("div", { class: `map ${open ? "" : "locked"} ${dir > 0 ? "from-right" : dir < 0 ? "from-left" : ""}`, style: `background-image:url(${map.image})` });
     // progress trail: the road walked so far, up to the furthest open node
     const svg = document.createElementNS(SVG, "svg");
     svg.setAttribute("class", "map-trail");
@@ -194,17 +199,16 @@ function campaign(focusAct?: number) {
       if (current) n.append(el("span", { class: "node-name" }, [l.name]));
       n.addEventListener("click", () => {
         if (swiped) return;
-        if (lopen) { sfx("tap"); levelSheet(l); } else if (gated) { sfx("tap"); paywall(); } else { sfx("deny"); n.classList.remove("shake"); void n.offsetWidth; n.classList.add("shake"); }
+        if (lopen) { sfx("tap"); levelSheet(l); } else { sfx("deny"); n.classList.remove("shake"); void n.offsetWidth; n.classList.add("shake"); }
       });
       page.append(n);
     });
-    if (gated) page.append(el("div", { class: "map-gate" }, [actGateCard(a.index + 1, store, paywall)]));
-    else if (!open) {
+    if (!open) {
       const prevBoss = LEVELS.find((l) => l.id === a.levels[0].id - 1);
       page.append(el("div", { class: "map-lock" }, [el("span", { class: "node-lock" }), el("b", {}, [`Act ${a.index + 1} is locked`]), el("small", {}, [prevBoss ? `Beat ${prevBoss.foe} to open it` : "Finish the act before it"])]));
     }
     view.replaceChildren(page);
-    const focus = page.querySelector(".map-gate .act-gate") ?? page.querySelector(".node.current") ?? page.querySelectorAll(".node")[Math.max(0, reached)];
+    const focus = page.querySelector(".node.current") ?? page.querySelectorAll(".node")[Math.max(0, reached)];
     requestAnimationFrame(() => (focus as HTMLElement | null)?.scrollIntoView({ block: "center" }));
   }
 
@@ -271,7 +275,7 @@ function playLevel(l: LevelDef, attempt = 0) {
         stars: m.winner === 0 ? n : undefined,
         lines: l.stars.map((o) => [objectiveText(o), objectiveMet(o, m)] as [string, boolean]),
         primary: m.winner === 0 && nextL
-          ? levelGated(load(), nextL) ? [`Act ${nextL.act}`, () => campaign(nextL.act)] : ["Next level", () => playLevel(nextL)]
+          ? ["Next level", () => playLevel(nextL)]
           : ["Retry", () => playLevel(l, attempt + 1)],
         secondary: ["Campaign", () => campaign(l.act)],
       });
@@ -324,17 +328,11 @@ function puzzles() {
   const s = load();
   const tiles: HTMLElement[] = [];
   PUZZLES.forEach((p, i) => {
-    const gated = puzzleGated(s, p.id);
-    const open = !gated && (i === 0 || (s.puzzles[PUZZLES[i - 1].id] ?? 0) > 0);
-    if (gated && (i === 0 || !puzzleGated(s, PUZZLES[i - 1].id))) {
-      const more = PUZZLES.filter((x) => puzzleGated(s, x.id)).length;
-      tiles.push(btn(el("span", {}, [icon("crown"), el("b", {}, [`${more} more puzzles in the Full Army`]), el("small", {}, ["See what's inside"])]), "tile-gate", paywall));
-    }
-    const b = el("button", { class: `tile ${open ? "" : "locked"} ${gated ? "gated" : ""} ${s.puzzles[p.id] ? "done" : ""}` }, [
+    const open = i === 0 || (s.puzzles[PUZZLES[i - 1].id] ?? 0) > 0;
+    const b = el("button", { class: `tile ${open ? "" : "locked"} ${s.puzzles[p.id] ? "done" : ""}` }, [
       el("span", { class: "tile-id" }, [String(p.id)]), el("span", { class: "tile-name" }, [p.name]), stars(s.puzzles[p.id] ?? 0),
     ]);
-    if (gated) b.append(el("span", { class: "tile-crown" }, [icon("crown")]));
-    b.addEventListener("click", () => { if (open) { sfx("tap"); playPuzzle(p); } else if (gated) { sfx("tap"); paywall(); } else sfx("deny"); });
+    b.addEventListener("click", () => { if (open) { sfx("tap"); playPuzzle(p); } else sfx("deny"); });
     tiles.push(b);
   });
   const grid = el("div", { class: "puzzle-grid" }, tiles);
@@ -354,7 +352,7 @@ function playPuzzle(p: PuzzleDef) {
       const n = puzzleStars(p, won, m.sides[0].gold);
       if (n > (load().puzzles[p.id] ?? 0)) save((s) => { s.puzzles[p.id] = n; });
       const after = PUZZLES[PUZZLES.indexOf(p) + 1];
-      const next = after && !puzzleGated(load(), after.id) ? after : undefined;
+      const next = after;
       results(m, {
         heading: won ? "Solved" : "Not yet",
         stars: won ? n : undefined,
@@ -570,20 +568,12 @@ function playSkirmish(lab: Lab) {
 }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-// ---------------------------------------------------------------- shop / paywall
+// ---------------------------------------------------------------- shop
 /** `back` is where the Shop's back button goes: the title, or the screen that opened it (the Barracks' "Get coins"). */
 function shopScreen(back: () => void = title) {
   clear();
   here = () => shopScreen(back);
-  screen("shop-screen", header("Shop", back, shopCounters()), shopView(store, gemShop)); // [gems] counters, Full Army, gem packs, coin bundles
-}
-
-/** The Full Army offer as a sheet over the current screen (gates open it); redraws the screen once it's owned. */
-function paywall() {
-  sheet(el("div", { class: "paywall" }, [fullArmyOffer(store, { compact: true, onOwned: () => {
-    const shown = sheetEl;
-    setTimeout(() => { if (sheetEl !== shown) return; closeSheet(); here?.(); }, 1200);
-  } })]));
+  screen("shop-screen", header("Shop", back, shopCounters()), shopView(starter, gemShop)); // [store] counters, Starter Pack, chests mount, gem packs, coin bundles
 }
 
 // ---------------------------------------------------------------- barracks
@@ -650,15 +640,15 @@ async function boot() {
   const font = Promise.race([document.fonts?.load('20px "Lilita One"').catch(() => undefined), new Promise((r) => setTimeout(r, 800))]);
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
-  // The cached entitlement is good offline; the store check runs alongside and redraws if it changes anything.
-  store.onChange(() => { if (!sheetEl) here?.(); });
-  void store.start();
+  // [store] A Starter Pack paid but never finished (or approved later) is credited, then the screen redraws.
+  starter.onCredit(() => { if (!sheetEl) here?.(); });
+  void starter.start();
   void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
   settleRewards(); // [gems] pay free gems for progress made before gems existed
   settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
-  // Deep links for checks (they skip the Full Army gates): ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
+  // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }
   if (q.has("puzzle")) { const p = PUZZLES.find((x) => x.id === Number(q.get("puzzle"))); if (p) return playPuzzle(p); }
   if (q.has("campaign")) return campaign(Number(q.get("campaign")) || undefined);

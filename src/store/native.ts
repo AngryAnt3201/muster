@@ -4,7 +4,7 @@
 //   getProducts({ ids: string[] })  -> { products: { id, title, description, displayPrice, price }[] }   Product.products(for:)
 //   purchase({ id: string })        -> { status: "purchased" | "pending" | "cancelled" | "failed", message?, txId?, productId? }
 //                                      product.purchase(): .success(verified) -> purchased. A non-consumable is finished
-//                                      there; a consumable (gem pack) is NOT: it comes back with txId for the game to
+//                                      there; a consumable (gem pack, Starter Pack) is NOT: it comes back with txId for the game to
 //                                      credit, then finish. .pending -> pending, .userCancelled -> cancelled,
 //                                      unverified or thrown -> failed
 //   restore()                       -> { owned: string[] }   AppStore.sync(), then Transaction.currentEntitlements
@@ -66,7 +66,7 @@ export class NativeStore implements Store {
   }
 }
 
-/** A native build without the plugin: nothing to buy, but the cached entitlement still works. */
+/** A native build without the plugin: nothing to buy (the whole game is free to play anyway). */
 export class UnavailableStore implements Store {
   readonly kind = "unavailable" as const;
   async products(): Promise<Product[]> { throw new Error("The App Store isn't available."); }
