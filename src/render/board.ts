@@ -12,6 +12,8 @@ import { animFor, spriteVis, drawFrame, drawRank, drawUnit, type DrawOpts } from
 import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
 import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playBoom, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
+// [keeps polish] hit squash, collapse and victory banner
+import { VICTORY_HOLD, bannerRaise, collapsePose, drawVictoryBanner, keepSquash } from "./keeps";
 import { spreadOffsets, type SpreadBody } from "./spread";
 
 export type { Rect } from "./camera";
@@ -80,7 +82,11 @@ export class BoardView {
   showKeeps = true;
   /** The round-end march on the losing keep, while it plays. */
   assault?: Assault;
-  private keeps = [0, 1].map(() => ({ state: "" as KeepState | "", flash: 0, shake: 0, alpha: 1, see: false, ember: 0, smoke: 0 }));
+  private keeps = [0, 1].map(() => ({ state: "" as KeepState | "", flash: 0, shake: 0, alpha: 1, see: false, ember: 0, smoke: 0,
+    // [keeps polish] seconds since the last blow and its strength; seconds since the keep fell / since the rival fell (-1: not)
+    hitT: 9, hitK: 0, fallT: -1, winT: -1 }));
+  /** [keeps polish] The rival's keep is the crowned boss variant (set for campaign boss levels). */
+  bossKeep = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -1145,11 +1151,13 @@ export class BoardView {
   private drawKeep(side: Side) {
     const k = this.keeps[side];
     const state = keepState(this.keepHp[side]);
-    const img = keepImage(side, state);
+    const img = keepImage(side, state, this.bossKeep);
     if (!img) return;
     const ctx = this.ctx, m = keepManifest(), a = keepAnchor(side);
     const base = this.cam.project(a.x, a.y), u = (KEEP_SCALE / m.ppu) * base.s;
-    const jig = k.shake * 0.07 * base.s;
+    // [keeps polish] the collapse once this commander is defeated, and the keep's own squash on a blow
+    const fall = k.fallT >= 0 ? collapsePose(k.fallT, side === 0 ? -1 : 1) : null;
+    const jig = (k.shake * 0.07 + (fall ? fall.shake * 0.05 : 0)) * base.s;
     const ox = jig ? frand(-jig, jig) : 0, oy = jig ? frand(-jig * 0.5, jig * 0.5) : 0;
     ctx.save();
     // Contact shadow on the ground under the plinth.
@@ -1160,8 +1168,20 @@ export class BoardView {
     ctx.save();
     ctx.globalAlpha *= k.alpha;
     const dx = base.x + ox - m.anchors.ground[0] * u, dy = base.y + oy - m.anchors.ground[1] * u, w = m.w * u, h = m.h * u;
-    ctx.drawImage(img, dx, dy, w, h);
-    if (k.flash > 0) {
+    // [keeps polish] rubble under the falling keep; the standing keep sinks into it behind the plinth's front
+    if (fall) {
+      const rubble = keepImage(side, "fallen", this.bossKeep);
+      if (rubble) { ctx.globalAlpha = k.alpha * fall.rubble; ctx.drawImage(rubble, base.x - m.anchors.ground[0] * u, base.y - m.anchors.ground[1] * u, w, h); }
+      ctx.globalAlpha = k.alpha * fall.alpha;
+      if (fall.alpha > 0) {
+        ctx.beginPath(); ctx.rect(dx - w, dy - h, w * 3, h + (m.anchors.gate[1] + 10) * u); ctx.clip();
+        ctx.translate(base.x, base.y); ctx.rotate(fall.tilt); ctx.translate(-base.x, -base.y + fall.sink * h);
+      }
+    }
+    const sq = keepSquash(k.hitT, k.hitK);
+    if (sq.sx !== 1 || sq.sy !== 1) { ctx.translate(base.x, base.y); ctx.scale(sq.sx, sq.sy); ctx.translate(-base.x, -base.y); }
+    if (!fall || fall.alpha > 0) ctx.drawImage(img, dx, dy, w, h);
+    if (k.flash > 0 && (!fall || fall.alpha > 0)) {
       // The hit flash: the keep's own pixels added over themselves.
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha = k.alpha * Math.min(1, k.flash) * 0.55;
@@ -1169,13 +1189,18 @@ export class BoardView {
       ctx.globalCompositeOperation = "source-over";
     }
     ctx.globalAlpha = k.alpha;
-    if (state === "burning" || state === "ruined") {
+    if ((state === "burning" || state === "ruined") && !fall) {
       const fires = state === "burning" ? m.anchors.fires : m.anchors.fires.slice(1, 3);
       fires.forEach((f, i) => {
         this.drawFlame(dx + f[0] * u, dy + f[1] * u, base.s * (state === "burning" ? 0.3 : 0.2), i + side * 7);
       });
     }
     ctx.restore();
+    // [keeps polish] the winner runs its banner up over the keep
+    if (k.winT >= 0) {
+      const top = m.anchors.top;
+      drawVictoryBanner(ctx, base.x + (top[0] - m.anchors.ground[0]) * u, base.y + (top[1] - m.anchors.ground[1]) * u, base.s * 1.25, bannerRaise(k.winT), this.time, team(side), GOLD, INK);
+    }
   }
 
   private drawFlame(x: number, y: number, size: number, seed: number) {
@@ -1211,6 +1236,44 @@ export class BoardView {
       const k = this.keeps[side];
       k.flash = Math.max(0, k.flash - dt * 6);
       k.shake = Math.max(0, k.shake - dt * 3.5);
+      // [keeps polish] a defeated commander's keep collapses; the survivor runs up its banner
+      k.hitT += dt;
+      const other = this.keeps[1 - side];
+      if (this.keepHp[side] <= 0 && k.fallT < 0) {
+        k.fallT = 0;
+        if (this.keepHp[1 - side] > 0) other.winT = 0;
+        this.assault?.hold(VICTORY_HOLD);
+        snd("crumble", 1);
+      } else if (this.keepHp[side] > 0 && k.fallT >= 0) { k.fallT = -1; other.winT = -1; }
+      if (k.fallT >= 0) {
+        const was = collapsePose(k.fallT).phase;
+        k.fallT += dt;
+        const now = collapsePose(k.fallT).phase;
+        if (now === "fall" && Math.random() < dt * 30) {
+          const p = this.keepPt(side, [m.anchors.ground[0] + frand(-110, 110), m.anchors.ground[1] - frand(0, 90)]);
+          this.fx.burst(p.x, p.y + 0.3, 1, { color: "#8d929b", speed: 1.8, size: 0.07, max: 0.8, kind: "chunk", vz: 2.5, spin: 8, z: p.z * 2 });
+        }
+        if (was !== now && now !== "rumble") {
+          // the tower starts down (dust rolls out round the plinth), then lands in a cloud
+          const big = now === "settled";
+          const a = keepAnchor(side);
+          for (let i = 0; i < (big ? 14 : 9); i++) {
+            const ang = (i / (big ? 14 : 9)) * TAU;
+            this.fx.burst(a.x + Math.cos(ang) * 0.9, a.y + Math.sin(ang) * 0.55, 1, { color: "rgba(216,196,154,0.55)", speed: big ? 1.8 : 1.1, size: 0.3, max: 1.2, kind: "smoke", gravity: -0.2, drag: 1.6, z: 0.3 });
+          }
+          puff(side, [m.anchors.ground[0], (m.anchors.ground[1] + m.anchors.top[1]) / 2], big ? 16 : 26, { color: "#8d929b", speed: 2.6, size: 0.09, max: 1, kind: "chunk", vz: 4, spin: 9 });
+          snd(big ? "slam" : "boom", big ? 0.9 : 0.7);
+        }
+      }
+      if (k.winT >= 0) {
+        const r0 = bannerRaise(k.winT);
+        k.winT += dt;
+        if (r0 < 0.97 && bannerRaise(k.winT) >= 0.97) {
+          const top = this.keepPt(side, m.anchors.top);
+          this.fx.burst(top.x, top.y, 18, { color: GOLD, speed: 2, size: 0.05, max: 1.1, kind: "spark", gravity: 1.2, vz: 2.5, z: top.z * 2 + 2.4 });
+          snd("upgrade", 0.6);
+        }
+      }
       k.alpha += ((k.see ? 0.42 : 1) - k.alpha) * Math.min(1, dt * 10);
       const state = keepState(this.keepHp[side]);
       if (k.state && state !== k.state && KEEP_STATES.indexOf(state) > KEEP_STATES.indexOf(k.state)) {
@@ -1219,6 +1282,7 @@ export class BoardView {
         puff(side, mid, 22, { color: "#8d929b", speed: 2.4, size: 0.08, max: 0.9, kind: "chunk", vz: 3.5, spin: 8 });
         puff(side, m.anchors.ground, 8, { color: "rgba(140,130,120,0.32)", speed: 1.3, size: 0.17, max: 0.9, kind: "smoke", gravity: -0.3, drag: 1.5 });
         k.shake = 1;
+        k.hitT = 0; k.hitK = 1.2; // [keeps polish]
         this.fx.shake = Math.min(1, this.fx.shake + 0.4);
         snd("crumble", 0.8);
       }
@@ -1285,6 +1349,7 @@ export class BoardView {
     const big = e.style === "shell" || e.style === "keg" || e.style === "slam";
     k.flash = 1;
     k.shake = Math.min(1.4, k.shake + (big ? 1 : 0.45));
+    k.hitT = 0; k.hitK = big ? 1.3 : e.first ? 1 : 0.6; // [keeps polish] the keep's own squash
     const stone = { color: "#8d929b", speed: big ? 2.6 : 1.6, size: 0.06, max: 0.7, kind: "chunk" as const, vz: 2.5, spin: 8, z };
     switch (e.style) {
       case "lob": this.boom(w.x, w.y, 0.8, "grenade", (1 - e.target) as Side); break;

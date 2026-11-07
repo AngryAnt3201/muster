@@ -3,7 +3,8 @@
     blender -b --factory-startup -P art/keeps/render_keeps.py -- [--samples 16] [--states intact,ruined]
     npm run art:keeps
 
-Writes public/keeps/<team>_<state>.png and public/keeps/manifest.json. Post-processing (ink silhouette, glow
+Writes public/keeps/<variant>_<state>.webp (tide, ember and the boss levels' ember_boss; intact, cracked, burning,
+ruined and fallen) and public/keeps/manifest.json; needs cwebp on the PATH. Post-processing (ink silhouette, glow
 halo for embers, 2x downsample) runs inside Blender with numpy, so no Pillow is needed.
 
 The keep is built in the shared art kit (art/muster_art/kit.py): unlit toon shading, inverted-hull outlines,
@@ -18,6 +19,10 @@ States, driven in game by commander hp / max hp (src/render/keeps.ts):
   cracked  stones knocked out, cracks, merlons fallen, torn pennant
   burning  roof caved in and charred, windows lit from inside, scorch on the stone (flames are added in game)
   ruined   the tower broken off, rubble, snapped banner pole on the ground (smoke is added in game)
+  fallen   what is left once the commander is defeated: the plinth under a heap of rubble (the game drops the
+           standing keep into it, src/render/keeps.ts collapsePose)
+The boss variant (ember_boss) has darker stone, a crimson roof with a crown of gold spikes, gold-spiked turrets,
+a shield over the gate and crowned banners.
 """
 import json
 import math
@@ -38,7 +43,9 @@ from muster_art import kit as K  # noqa: E402
 
 OUT = os.path.join(ROOT, "public", "keeps")
 RAW = os.path.join(ART, "build", "keeps")
-STATES = ("intact", "cracked", "burning", "ruined")
+STATES = ("intact", "cracked", "burning", "ruined", "fallen")
+# what gets rendered: each team, plus the boss levels' variant of the rival keep
+VARIANTS = (("tide", "tide", False), ("ember", "ember", False), ("ember_boss", "ember", True))
 TEAMS = ("tide", "ember")
 PPU = 120  # output pixels per world unit (the unit sprites use the same)
 SS = 2  # supersample
@@ -80,7 +87,7 @@ PER_ROW = 14
 
 def args():
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    a = {"samples": 16, "states": ",".join(STATES)}
+    a = {"samples": 16, "states": ",".join(STATES), "variants": ",".join(v[0] for v in VARIANTS)}
     for i in range(0, len(argv) - 1, 2):
         a[argv[i].lstrip("-")] = argv[i + 1]
     return a
@@ -132,6 +139,17 @@ class Mats:
         self.cloth = t("#efe4c8")
 
 
+def boss_keep(kp):
+    """The boss levels' rival keep: darker, older stone and heavier gold."""
+    b = dict(kp)
+    b["stone"] = mix(kp["stone"], "#5a4f62", 0.55)
+    b["stone_dk"] = mix(kp["stone_dk"], "#2e2733", 0.5)
+    b["roof"] = "team.dark"
+    b["stone2"] = mix(b["stone"], b["stone_dk"], 0.32)
+    b["stone_lt"] = mix(b["stone"], "#ffffff", 0.22)
+    return b
+
+
 class KeepKit(K.Kit):
     """The art kit with every explicit per-part outline width scaled to the direction's scenery line width,
     so a direction with no hull lines (outline.props = 0) turns them all off."""
@@ -147,8 +165,29 @@ def jitter(rng, a):
     return (rng.random() * 2 - 1) * a
 
 
+def hang(k, mat, cx, y, z0, half, ln, torn=False, tilt=0.0, notch=0.13, seed=0):
+    """A hanging cloth in the plane y, top edge at z0: a swallowtail foot, or uneven tatters when torn.
+    tilt (degrees) swings it round its top-left corner, as if torn loose from the other nail."""
+    if not torn:
+        foot = [(cx + half, z0 - ln), (cx, z0 - ln + notch), (cx - half, z0 - ln)]
+    else:
+        n = 6
+        foot = []
+        for i in range(n + 1):
+            f = i / n
+            d = ln * (0.55 + 0.4 * ((i * 5 + seed * 3) % 7) / 6) if i % 2 == 0 else ln * (0.38 + 0.12 * ((i + seed) % 3))
+            foot.append((cx + half - 2 * half * f, z0 - d))
+    pts = [(cx - half, z0), (cx + half, z0)] + foot
+    if tilt:
+        t = math.radians(tilt)
+        ox, oz = cx - half, z0
+        pts = [(ox + (x - ox) * math.cos(t) - (z - oz) * math.sin(t), oz + (x - ox) * math.sin(t) + (z - oz) * math.cos(t)) for x, z in pts]
+    k.sheet([(x, y, z) for x, z in pts], mat, thick=0.012)
+    return pts
+
+
 # ------------------------------------------------------------------ build
-def build(k, M, state):
+def build(k, M, state, boss=False):
     s = STATES.index(state)
     rng = random.Random(7)  # same stones in every state: damage only takes away and chars
     gate_dir = -math.pi / 2  # gate faces -Y
@@ -165,6 +204,8 @@ def build(k, M, state):
     def cutoff(a):
         if s < 3:
             return ROWS
+        if s == 4:  # fallen: only a jagged ring of the lowest courses is left
+            return 0.6 + 0.9 * (0.5 + 0.5 * math.sin(a * 3 + 0.4)) + 0.6 * (0.5 + 0.5 * math.sin(a * 7 + 1.3))
         return 2.2 + 1.6 * (0.5 + 0.5 * math.sin(a * 2 + 1.1)) + 1.2 * (0.5 + 0.5 * math.sin(a * 5 + 0.3))
 
     # missing stones per state (deterministic)
@@ -174,7 +215,7 @@ def build(k, M, state):
     if s >= 2:
         gone |= {(5, 4), (4, 3), (6, 10), (5, 11), (3, 12), (2, 9), (6, 5)}
     # the dark core behind the stones; sunk inside the walls once the roof has gone
-    core_h = {0: ROWS, 1: ROWS, 2: ROWS - 1.6, 3: 1.6}[s] * ROW_H
+    core_h = {0: ROWS, 1: ROWS, 2: ROWS - 1.6, 3: 1.6, 4: 0.7}[s] * ROW_H
     k.cyl(R_TOWER - 0.09, core_h - 0.02, M.fill, loc=(0, 0, base + (core_h - 0.02) / 2), seg=24, outline=0)
     if s >= 2:
         # charred debris heaped on the sunken floor
@@ -197,7 +238,7 @@ def build(k, M, state):
             dz = jitter(rng, 0.006)
             r = R_TOWER - 0.04 + jitter(rng, 0.012)
             top = row >= ROWS - 2
-            scorched = (s == 2 and (top or rng.random() < 0.25)) or (s == 3 and rng.random() < 0.55)
+            scorched = (s == 2 and (top or rng.random() < 0.25)) or (s >= 3 and rng.random() < 0.55)
             mat = (M.char if rng.random() < 0.5 else M.char2) if scorched else (M.stone if rng.random() < 0.55 else (M.stone2 if rng.random() < 0.7 else M.stone_lt))
             with k.at((math.cos(a) * r, math.sin(a) * r, base + row * ROW_H + ROW_H / 2 + dz), rot=(0, 0, math.degrees(a))):
                 k.box((0.2, w, h), mat, bevel=0.025, outline=0.009)
@@ -222,14 +263,27 @@ def build(k, M, state):
             with k.at((math.cos(a) * r, math.sin(a) * r, top_z + 0.09 + 0.09), rot=(0, 0, math.degrees(a))):
                 k.box((0.16, 0.22, 0.18), mat, bevel=0.025)
 
-    # ---- roof: a team-colour cone with a gold finial and a pennant
+    # ---- roof: a team-colour cone with a gold finial and a tall standard (a crowned spire on the boss keep)
     if s <= 1:
-        k.cone(R_TOWER - 0.06, 0.82, M.roof, loc=(0, 0, top_z + 0.06), seg=16)
+        rh = 1.04 if boss else 0.86
+        k.cone(R_TOWER - 0.06, rh, M.roof, loc=(0, 0, top_z + 0.06), seg=16)
         k.cyl(R_TOWER - 0.04, 0.06, M.team_dk, loc=(0, 0, top_z + 0.09), seg=16)
         # tile ridges
         for i in range(8):
             a = i / 8 * 2 * math.pi + 0.2
-            k.rod((math.cos(a) * (R_TOWER - 0.07), math.sin(a) * (R_TOWER - 0.07), top_z + 0.1), (0, 0, top_z + 0.86), 0.018, M.team_dk, outline=0.006)
+            k.rod((math.cos(a) * (R_TOWER - 0.07), math.sin(a) * (R_TOWER - 0.07), top_z + 0.1), (0, 0, top_z + rh + 0.04), 0.018, M.team_dk, outline=0.006)
+        # a gold band a third of the way up
+        k.torus((R_TOWER - 0.06) * 0.62, 0.026, M.gold, loc=(0, 0, top_z + 0.06 + rh * 0.38), seg=28, rseg=6)
+        if boss:
+            # a crown of gold spikes round the roof's foot, a few knocked off once cracked
+            k.torus(R_TOWER - 0.03, 0.04, M.gold, loc=(0, 0, top_z + 0.13), seg=32, rseg=8)
+            for i in range(12):
+                if s == 1 and i in (2, 3, 8):
+                    continue
+                a = (i + 0.5) / 12 * 2 * math.pi
+                b0 = (math.cos(a) * (R_TOWER - 0.04), math.sin(a) * (R_TOWER - 0.04), top_z + 0.12)
+                tip = (math.cos(a) * (R_TOWER + 0.06), math.sin(a) * (R_TOWER + 0.06), top_z + (0.46 if i % 2 else 0.36))
+                k.crystal_at(b0, tip, 0.05, M.gold, sides=4, mid=0.25)
         if s == 1:
             # a hole knocked through the roof, splintered battens round it
             a = math.radians(-55)
@@ -237,12 +291,23 @@ def build(k, M, state):
             for d in (-0.5, 0.0, 0.45):
                 p0 = (math.cos(a + d * 0.3) * 0.5, math.sin(a + d * 0.3) * 0.5, top_z + 0.3 + d * 0.08)
                 k.rod(p0, (p0[0] * 0.75, p0[1] * 0.75, p0[2] + 0.12), 0.014, M.wood_dk, outline=0.005)
-        k.ball(0.07, M.gold, loc=(0, 0, top_z + 0.92))
-        k.rod((0, 0, top_z + 0.9), (0, 0, top_z + 1.42), 0.018, M.wood_dk)
-        tl = 0.5 if s == 0 else 0.34  # torn shorter when cracked
-        pts = [(0, -0.02, top_z + 1.38), (0, -0.02, top_z + 1.12)]
-        tail = [(tl * 0.55, 0.0, top_z + 1.2), (tl, 0.02, top_z + 1.3), (tl * 0.6, 0.0, top_z + 1.36)]
-        k.sheet([pts[0], pts[1]] + tail, M.team, thick=0.014)
+        tip_z = top_z + 0.06 + rh
+        if boss:
+            k.crystal(0.08, 0.3, M.gold, loc=(0, 0, tip_z - 0.04), sides=4, mid=0.35)
+        else:
+            k.ball(0.075, M.gold, loc=(0, 0, tip_z + 0.02))
+        pole = tip_z + 0.62
+        k.rod((0, 0, tip_z), (0, 0, pole + 0.04), 0.022, M.wood_dk)
+        k.ball(0.04, M.gold, loc=(0, 0, pole + 0.06))
+        # the standard: a swallowtail flag flying to the right; torn short and ragged once cracked
+        L, fh = (0.7, 0.34) if s == 0 else (0.46, 0.3)
+        if s == 0:
+            fl = [(0, -0.02, pole), (L * 0.5, 0.0, pole + 0.03), (L, 0.02, pole - 0.01), (L * 0.74, 0.0, pole - fh * 0.5), (L, 0.02, pole - fh - 0.02), (L * 0.5, 0.0, pole - fh + 0.02), (0, -0.02, pole - fh)]
+        else:
+            fl = [(0, -0.02, pole), (L * 0.6, 0.0, pole + 0.01), (L, 0.02, pole - 0.04), (L * 0.7, 0.0, pole - fh * 0.42), (L * 0.88, 0.02, pole - fh * 0.6), (L * 0.5, 0.0, pole - fh * 0.78), (L * 0.32, 0.0, pole - fh + 0.02), (0, -0.02, pole - fh * 0.85)]
+        k.sheet(fl, M.team, thick=0.014)
+        if s == 0:
+            k.sheet([(L * 0.3, -0.016, pole - fh * 0.2), (L * 0.42, -0.016, pole - fh * 0.5), (L * 0.3, -0.016, pole - fh * 0.8), (L * 0.18, -0.016, pole - fh * 0.5)], M.gold, thick=0.01, outline=0.005)
     elif s == 2:
         # caved-in, charred roof: a broken cone sitting low with beams sticking out
         k.cone(R_TOWER - 0.32, 0.36, M.team_char, loc=(0.18, 0.22, base + core_h), rot=(18, -22, 0), seg=10)
@@ -270,8 +335,9 @@ def build(k, M, state):
     # ---- side turrets (left and right), with team-colour caps
     for sx in (-1, 1):
         cx, cy = sx * (R_TOWER + 0.12), 0.1
-        broken = s == 3 or (s == 2 and sx > 0)
-        h = 0.45 if s == 3 else (0.82 if not broken else 0.62)
+        broken = s >= 3 or (s == 2 and sx > 0)
+        tall = 1.0 if boss else 0.82
+        h = 0.25 if s == 4 else 0.45 if s == 3 else (tall if not broken else 0.62)
         mat = M.stone2 if s < 2 else M.char2
         k.cyl(0.27, h, mat, loc=(cx, cy, base + h / 2), seg=14, bevel=0.02)
         for j in range(int(h / 0.15)):
@@ -279,7 +345,11 @@ def build(k, M, state):
         if not broken:
             k.cyl(0.31, 0.07, M.stone_lt if s < 2 else M.char2, loc=(cx, cy, base + h + 0.035), seg=14, bevel=0.01)
             k.cone(0.29, 0.46 if s < 2 else 0.3, M.team_dk if s < 2 else M.team_char, loc=(cx, cy, base + h + 0.07), seg=12)
-            k.ball(0.04, M.gold if s < 2 else M.burnt, loc=(cx, cy, base + h + (0.55 if s < 2 else 0.4)))
+            if boss:
+                k.crystal(0.05, 0.22, M.gold if s < 2 else M.burnt, loc=(cx, cy, base + h + (0.5 if s < 2 else 0.35)), sides=4)
+                k.torus(0.3, 0.025, M.gold if s < 2 else M.gold_dk, loc=(cx, cy, base + h + 0.03), seg=20, rseg=6)
+            else:
+                k.ball(0.04, M.gold if s < 2 else M.burnt, loc=(cx, cy, base + h + (0.55 if s < 2 else 0.4)))
         else:
             # jagged stub top
             for i in range(6):
@@ -295,6 +365,10 @@ def build(k, M, state):
         k.cyl(0.25, 0.12, M.stone_lt if s < 2 else M.char2, loc=(0, -0.04, 0.44), rot=(90, 0, 0), seg=16)
         # keystone in team colour
         k.box((0.1, 0.06, 0.1), M.team if s < 3 else M.team_char, loc=(0, -0.1, 0.68), bevel=0.015)
+        if boss and s < 3:
+            # a gold-rimmed shield over the arch
+            k.cyl(0.13, 0.04, M.gold if s < 2 else M.gold_dk, loc=(0, -0.1, 0.86), rot=(90, 0, 0), seg=16)
+            k.cyl(0.095, 0.05, M.team if s < 2 else M.team_char, loc=(0, -0.11, 0.86), rot=(90, 0, 0), seg=16, outline=0)
         if s < 3:
             # wooden door with iron bands and studs
             door = M.wood if s < 2 else M.burnt
@@ -314,27 +388,43 @@ def build(k, M, state):
             k.box((0.08, 0.04, 0.3), M.burnt, loc=(-0.12, -0.13, 0.15), rot=(0, 12, 0))
             k.box((0.4, 0.04, 0.07), M.burnt, loc=(0.1, -0.3, 0.03), rot=(0, 0, 20))
 
-    # ---- banners either side of the gate (fall and char with damage)
+    # ---- banners either side of the gate: swallowtails with a gold emblem, torn ragged when cracked (one hangs
+    # from a single nail), charred tatters while burning
     for sx in (-1, 1):
         bx = sx * 0.4
         a = math.atan2(-0.62, bx)
         r = R_TOWER + 0.0
         px, py = math.cos(a) * r, math.sin(a) * r
         if s <= 1 or (s == 2 and sx < 0):
-            ln = 0.55 if s == 0 else (0.42 if sx > 0 else 0.55)
-            z0 = base + 0.92
+            half = 0.15 if not boss else 0.17
+            ln = 0.68 if not boss else 0.78
+            z0 = base + 0.98
             mat = M.team if s < 2 else M.team_char
-            k.rod((px - 0.13, py - 0.05, z0 + 0.02), (px + 0.13, py - 0.05, z0 + 0.02), 0.014, M.wood_dk, outline=0.006)
-            pts = [(px - 0.12, py - 0.06, z0), (px + 0.12, py - 0.06, z0), (px + 0.12, py - 0.07, z0 - ln), (px, py - 0.08, z0 - ln - 0.08), (px - 0.12, py - 0.07, z0 - ln)]
-            k.sheet(pts, mat, thick=0.012)
+            k.rod((px - half - 0.03, py - 0.05, z0 + 0.02), (px + half + 0.03, py - 0.05, z0 + 0.02), 0.016, M.wood_dk, outline=0.006)
+            for ex in (-half - 0.03, half + 0.03):
+                k.ball(0.022, M.gold, loc=(px + ex, py - 0.05, z0 + 0.02), outline=0)
+            torn = s >= 1
+            tilt = 24 if (s == 1 and sx > 0) else 0
+            hang(k, mat, px, py - 0.07, z0, half, ln if s < 2 else ln * 0.7, torn=torn, tilt=tilt, seed=sx + 2)
+            # a gold trim stripe across the top of the cloth
+            if not tilt:
+                k.box((half * 2, 0.012, 0.035), M.gold if s < 2 else M.gold_dk, loc=(px, py - 0.082, z0 - 0.05), outline=0.004)
             if s == 0:
-                # gold emblem: a small diamond
-                k.sheet([(px, py - 0.075, z0 - 0.12), (px + 0.06, py - 0.075, z0 - 0.22), (px, py - 0.075, z0 - 0.32), (px - 0.06, py - 0.075, z0 - 0.22)], M.gold, thick=0.01, outline=0.005)
+                # gold emblem: a diamond (a crown on the boss keep)
+                e = 1.2 if boss else 1.0
+                zc = z0 - 0.3
+                if boss:
+                    k.sheet([(px - 0.08, py - 0.085, zc - 0.06), (px + 0.08, py - 0.085, zc - 0.06), (px + 0.08, py - 0.085, zc + 0.04), (px + 0.04, py - 0.085, zc), (px, py - 0.085, zc + 0.07), (px - 0.04, py - 0.085, zc), (px - 0.08, py - 0.085, zc + 0.04)], M.gold, thick=0.01, outline=0.005)
+                else:
+                    k.sheet([(px, py - 0.085, zc + 0.1 * e), (px + 0.07 * e, py - 0.085, zc), (px, py - 0.085, zc - 0.1 * e), (px - 0.07 * e, py - 0.085, zc)], M.gold, thick=0.01, outline=0.005)
+            elif s == 1:
+                # a torn-off scrap of the cloth on the plinth below
+                k.sheet([(px - 0.06, py - 0.32, base + 0.02), (px + 0.1, py - 0.38, base + 0.02), (px + 0.03, py - 0.5, base + 0.02)], mat, thick=0.01)
 
     # ---- braziers on the front corners of the plinth
     for sx in (-1, 1):
         bx, by = sx * 0.78, -0.7
-        if s == 3 and sx > 0:
+        if s >= 3 and sx > 0 or s == 4:
             k.cyl(0.07, 0.05, M.iron, loc=(bx + 0.1, by - 0.05, base + 0.03), rot=(80, 0, 30), seg=10)
             continue
         k.cyl(0.03, 0.16, M.iron, loc=(bx, by, base + 0.08), seg=8)
@@ -345,7 +435,7 @@ def build(k, M, state):
 
     # ---- rubble and cracks
     if s >= 1:
-        n = {1: 6, 2: 12, 3: 30}[s]
+        n = {1: 6, 2: 12, 3: 30, 4: 46}[s]
         for i in range(n):
             a = rng.random() * 2 * math.pi
             r = (R_TOWER + 0.1 + rng.random() * (0.35 if s < 3 else 0.5))
@@ -355,7 +445,7 @@ def build(k, M, state):
             sz = 0.07 + rng.random() * (0.08 if s < 3 else 0.12)
             mat = (M.stone2 if rng.random() < 0.6 else M.stone_dk) if s < 2 else (M.char2 if rng.random() < 0.5 else M.stone2)
             k.box((sz * 1.3, sz, sz * 0.8), mat, loc=(math.cos(a) * r, math.sin(a) * r, z), rot=(jitter(rng, 25), jitter(rng, 25), math.degrees(rng.random() * 6)), bevel=0.015)
-        if s == 3:
+        if s >= 3:
             # the snapped banner pole lies on the plinth so the side is still clear
             k.rod((-0.95, -0.55, base + 0.05), (0.15, -1.0, base + 0.04), 0.022, M.wood_dk)
             k.sheet([(-0.55, -0.72, base + 0.06), (-0.05, -0.92, base + 0.06), (-0.12, -1.12, base + 0.04), (-0.62, -0.95, base + 0.05)], M.team, thick=0.014)
@@ -492,6 +582,14 @@ def post(raw, glow, out_path):
     return out.shape[1], out.shape[0]
 
 
+def webp(src, dst):
+    """The game loads webp (a third of the PNG size); cwebp keeps the alpha lossless."""
+    import shutil
+    import subprocess
+    exe = shutil.which("cwebp") or "/opt/homebrew/bin/cwebp"
+    subprocess.run([exe, "-quiet", "-q", "88", "-alpha_q", "100", "-m", "6", src, "-o", dst], check=True)
+
+
 # ------------------------------------------------------------------ main
 def main():
     a = args()
@@ -505,15 +603,17 @@ def main():
     k = KeepKit(outline=LINE)
     k.line_k = LINE / 0.012
     M = Mats(kp)
-    # one canvas for every state: frame on the union of all of them
+    Mb = Mats(boss_keep(kp))
+    # one canvas for every state and variant: frame on the union of all of them
     lo, hi = None, None
     for state in STATES:
-        k.clear()
-        build(k, M, state)
-        xy = project(st, k.verts_world())
-        l, h = xy.min(0), xy.max(0)
-        lo = l if lo is None else np.minimum(lo, l)
-        hi = h if hi is None else np.maximum(hi, h)
+        for boss in (False, True):
+            k.clear()
+            build(k, Mb if boss else M, state, boss)
+            xy = project(st, k.verts_world())
+            l, h = xy.min(0), xy.max(0)
+            lo = l if lo is None else np.minimum(lo, l)
+            hi = h if hi is None else np.maximum(hi, h)
     pad = 0.08
     lo, hi = lo - pad, hi + pad
     span = hi - lo
@@ -530,25 +630,31 @@ def main():
         "ground": px((0, 0, 0)),
         "gate": px((0, -R_TOWER - 0.1, 0.55)),
         "top": px((0, 0, top_z + 0.3)),
+        # the standard's pole top (intact roof), where the winner's banner is run up
+        "pole": px((0, 0, top_z + 0.06 + 0.86 + 0.62)),
         # where flames and smoke rise from in the burning and ruined states
         "fires": [px((0.05, 0, top_z + 0.15)), px((-0.42, -0.5, 0.95)), px((0.87, 0.1, 0.9)), px((0.35, -0.62, 0.72))],
         "smoke": [px((0, 0, 0.7)), px((-0.5, -0.4, 0.5)), px((0.6, -0.2, 0.55))],
     }
+    variants = [v for v in VARIANTS if v[0] in a["variants"].split(",")]
     for state in states:
-        k.clear()
-        build(k, M, state)
-        for team in TEAMS:
+        for name, team, boss in variants:
+            k.clear()
+            build(k, Mb if boss else M, state, boss)
             K.set_team(team)
-            raw = os.path.join(RAW, f"{team}_{state}.png")
-            glow = os.path.join(RAW, f"{team}_{state}_glow.png")
+            raw = os.path.join(RAW, f"{name}_{state}.png")
+            glow = os.path.join(RAW, f"{name}_{state}_glow.png")
             K.set_glowpass(False)
             render(st, raw, w * SS, h * SS, span_x, float(c[0]), float(c[1]))
             K.set_glowpass(True)
             render(st, glow, w * SS, h * SS, span_x, float(c[0]), float(c[1]))
             K.set_glowpass(False)
-            post(raw, glow, os.path.join(OUT, f"{team}_{state}.png"))
-            print(f"KEEP_OK {team}_{state} {w}x{h}", flush=True)
+            png = os.path.join(RAW, f"{name}_{state}_out.png")
+            post(raw, glow, png)
+            webp(png, os.path.join(OUT, f"{name}_{state}.webp"))
+            print(f"KEEP_OK {name}_{state} {w}x{h}", flush=True)
     man = {"ppu": PPU, "w": w, "h": h, "elevation": EL, "style": STYLE or "v2", "states": list(STATES), "teams": list(TEAMS),
+           "variants": [v[0] for v in VARIANTS],
            "footprint": round(1.22, 2), "anchors": anchors}
     with open(os.path.join(OUT, "manifest.json"), "w") as f:
         json.dump(man, f, indent=1)
