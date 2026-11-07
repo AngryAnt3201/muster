@@ -68,6 +68,16 @@ async function battle() {
     await shot(p, "battle-deploy");
     await p.context().close();
   }
+  // Short of gold: the cards you can't afford dim a touch and their cost gem turns red (after only).
+  if (!skip("battle-poor") && tag !== "before") {
+    const p = await page("owner");
+    await p.goto(`http://${host}:${port}/?level=6`);
+    await p.waitForTimeout(2600);
+    await p.evaluate(() => { const g = window.__game; g.match.sides[0].gold = 2; g.refreshHud(); });
+    await p.waitForTimeout(600);
+    await shot(p, "battle-poor");
+    await p.context().close();
+  }
   if (!skip("battle-fight") || !skip("battle-shop")) {
     const p = await page("owner");
     await p.goto(`http://${host}:${port}/?level=6`);

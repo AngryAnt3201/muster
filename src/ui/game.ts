@@ -262,19 +262,24 @@ export class GameScreen {
     const shop = this.h.shop;
     if (shop.childElementCount !== st.shop.length) {
       shop.replaceChildren(...st.shop.map((_, i) => {
-        const card = el("div", { class: "card t1", "data-slot": String(i) }, [
-          el("canvas", { class: "card-icon" }), el("div", { class: "card-name" }), coin("", "card-cost"), el("span", { class: "card-role" }), el("div", { class: "card-new" }, ["NEW"]),
+        const card = el("div", { class: "card t1", "data-slot": String(i), style: `--i:${i}` }, [
+          el("div", { class: "card-art" }, [el("canvas", { class: "card-icon" })]), el("div", { class: "card-name" }), coin("", "card-cost"),
+          el("span", { class: "card-role" }), el("div", { class: "card-new" }, ["NEW"]),
         ]);
         return card;
       }));
     }
+    const live = this.phase === "deploy" && !this.watch;
     st.shop.forEach((k, i) => {
       const card = shop.children[i] as HTMLElement;
       const was = card.dataset.kind;
       card.dataset.kind = k ?? "";
       card.classList.toggle("sold", !k);
       const why = k ? this.match.canBuy(0, i) : "Sold";
-      card.classList.toggle("off", !!why || this.phase !== "deploy" || this.watch);
+      // Never greyscale: a card you can't take now dims a touch, and a short purse turns the cost red.
+      card.classList.toggle("off", !!k && live && !!why);
+      card.classList.toggle("poor", !!k && why === "Need gold");
+      card.classList.toggle("rest", !!k && !live);
       card.classList.toggle("picked", this.pickSlot === i);
       card.classList.toggle("is-new", !!k && !seen.has(k));
       if (k && was !== k) {
@@ -283,14 +288,42 @@ export class GameScreen {
         nameEl.classList.toggle("long", UNITS[k].name.length > 11);
         (card.querySelector(".card-cost") as HTMLElement).textContent = String(UNITS[k].cost);
         const role = UNITS[k].role;
-        card.className = card.className.replace(/\bfam-\w+/g, "").trim() + ` fam-${ROLE_FAMILY[role]}`;
+        // Frame metal by price: bronze for the cheap rank and file, silver at 4, gold at 5+.
+        const rar = UNITS[k].cost >= 5 ? 3 : UNITS[k].cost >= 4 ? 2 : 1;
+        card.className = card.className.replace(/\b(fam|rar)-\w+/g, "").trim() + ` fam-${ROLE_FAMILY[role]} rar-${rar}`;
         card.querySelector(".card-role")!.replaceWith(roleBadge(role, "card-role"));
         requestAnimationFrame(() => paintPortrait(card.querySelector("canvas") as HTMLCanvasElement, k));
         card.classList.remove("deal"); void card.offsetWidth; card.classList.add("deal");
+      } else if (!k && was) {
+        card.classList.remove("deal", "socket-in"); void card.offsetWidth; card.classList.add("socket-in");
       }
       if (!k) (card.querySelector(".card-name") as HTMLElement).textContent = "";
     });
+    const gold = st.gold;
+    if (this.lastGold !== undefined && gold !== this.lastGold) {
+      const pill = this.h.gold;
+      pill.classList.remove("bump", "spend"); void pill.offsetWidth; pill.classList.add(gold > this.lastGold ? "bump" : "spend");
+    }
+    this.lastGold = gold;
     if (st.shop.some((k) => k && !seen.has(k))) save((s) => { for (const k of st.shop) if (k && !s.seen.includes(k)) s.seen.push(k); });
+  }
+  private lastGold?: number;
+
+  /** The bought card leaves the tray: a copy of it (portrait included) flies up towards the drop and fades. */
+  private spendFx(slot: number, toX?: number, toY?: number) {
+    const card = this.h.shop.children[slot] as HTMLElement | undefined;
+    if (!card || this.o.mode === "demo") return;
+    const r = card.getBoundingClientRect();
+    const copy = card.cloneNode(true) as HTMLElement;
+    const src = card.querySelector("canvas") as HTMLCanvasElement | null, dst = copy.querySelector("canvas") as HTMLCanvasElement | null;
+    if (src && dst && src.width && src.height) { dst.width = src.width; dst.height = src.height; dst.getContext("2d")?.drawImage(src, 0, 0); }
+    copy.classList.remove("deal", "picked", "dragging", "off", "poor", "is-new");
+    copy.classList.add("spent");
+    const dx = toX === undefined ? 0 : toX - (r.left + r.width / 2), dy = toY === undefined ? -90 : toY - (r.top + r.height / 2);
+    copy.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;--dx:${Math.round(dx * 0.55)}px;--dy:${Math.round(dy * 0.55)}px`;
+    copy.addEventListener("animationend", () => copy.remove());
+    setTimeout(() => copy.remove(), 900);
+    this.root.append(copy);
   }
 
   private bannerT = 0;
@@ -552,7 +585,7 @@ export class GameScreen {
       return;
     }
     if (this.pickSlot !== null) {
-      this.tryBuy(this.pickSlot, w.x, w.y);
+      this.tryBuy(this.pickSlot, w.x, w.y, e.clientX, e.clientY);
       return;
     }
     const theirs = this.pieceAt(w.x, w.y, 1) ?? this.pieceAt(up.x, up.y, 1);
@@ -565,7 +598,10 @@ export class GameScreen {
     const d = this.drag;
     if (!d || d.pid !== e.pointerId) return;
     const dist = Math.hypot(e.clientX - d.sx, e.clientY - d.sy);
-    if (!d.moved && dist > 8) { d.moved = true; clearTimeout(this.tipTimer); this.hideTip(); this.closePop(); }
+    if (!d.moved && dist > 8) {
+      d.moved = true; clearTimeout(this.tipTimer); this.hideTip(); this.closePop();
+      if (d.type === "card") (this.h.shop.children[d.slot!] as HTMLElement | undefined)?.classList.add("dragging");
+    }
     if (!d.moved) return;
     // Lift the preview above the finger so it stays visible.
     const lift = e.pointerType === "touch" ? 46 : 0;
@@ -589,11 +625,12 @@ export class GameScreen {
     this.drag = null;
     clearTimeout(this.tipTimer);
     this.hideTip();
+    if (d.type === "card") (this.h.shop.children[d.slot!] as HTMLElement | undefined)?.classList.remove("dragging");
     if (d.type === "card") {
       if (d.moved && this.ghost) {
         const g = this.ghost;
         this.ghost = null;
-        if (g.ok) this.tryBuy(d.slot!, g.x, g.y);
+        if (g.ok) this.tryBuy(d.slot!, g.x, g.y, e.clientX, e.clientY);
         else if (this.view.toWorld(e.clientX, e.clientY).y < 14) { sfx("deny"); }
       } else if (!d.moved) {
         // Tap: pick the card, then tap the board to place it.
@@ -610,11 +647,12 @@ export class GameScreen {
     if (p) { this.selected = p.id; this.openPop(p); sfx("tap"); }
   };
 
-  private tryBuy(slot: number, x: number, y: number) {
+  private tryBuy(slot: number, x: number, y: number, sx?: number, sy?: number) {
     const why = this.match.canBuy(0, slot);
     if (why) { this.flashStatus(why); sfx("deny"); return; }
     if (!inZone(0, x, y)) { this.flashStatus("Place it in your half"); sfx("deny"); return; }
     const p = this.match.buy(0, slot, x, y);
+    this.spendFx(slot, sx, sy);
     this.view.dropIn([{ id: p.id, x: p.x, y: p.y, radius: p.kind === "blades" ? 0.5 : UNITS[p.kind].radius, side: p.side }]);
     sfx("buy"); sfx("place");
     buzz("light");
