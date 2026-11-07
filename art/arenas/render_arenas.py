@@ -64,7 +64,7 @@ ACTS = {
     5: dict(name="High Keep", g=dict(grass="#8cc45e", grass_dk="#70ad4b", grass_lt="#a9d878", path="#cf5446", path_dk="#9c3a30",
                                      strip="#86c25a", strip_dk="#6aa947", court="#dcc6a0", court_dk="#a88d68"),
             court=True, strip_pat="patches", border="wall", trees=("topiary",), scatter="flowers", obstacle="pillar",
-            relief="flagstones", stones=("#dcc6a0", "#e7d6b3", "#ccb38b", "#d5bf98"), trim="#ffcf4d",
+            relief="flagstones", stones=("#dcc6a0", "#e7d6b3", "#ccb38b", "#d5bf98"), trim="#ffcf4d", lozenges="#b8463a",
             dress=dict(clumps="flowers", n_clumps=0, cracks=18, banners=("#cf5446", "#ffcf4d")), fg="topiary"),
     6: dict(name="Frozen Reach", g=dict(grass="#eef5fb", grass_dk="#d3e2ef", grass_lt="#ffffff", path="#c5d7e8", path_dk="#9fb7cf",
                                         strip="#dbe7f2", strip_dk="#b9cde0", foliage="#3f8f6a", foliage_dk="#2b6b52", rock="#a9b4c2", rock_dk="#76828f",
@@ -506,6 +506,13 @@ def main():
                         wk.box((0.16, zy1 - zy0, 0.012), lap, loc=B(xx, (zy0 + zy1) / 2, 0.062), outline=0.004)
                         for dx in (-0.12, 0.12):
                             wk.box((0.035, zy1 - zy0, 0.012), gold, loc=B(xx + dx, (zy0 + zy1) / 2, 0.064), outline=0)
+            if th.get("lozenges"):
+                # High Keep: heraldic lozenges of red stone in gold frames, set into the courtyard of each zone.
+                red, gold = K.toon(th["lozenges"], spec=0.25), K.toon(th["trim"], spec=0.5)
+                for (rx, ry) in ((2.0, 3.3), (7.0, 3.3), (2.0, H - 3.3), (7.0, H - 3.3)):
+                    wk.box((0.92, 0.92, 0.012), gold, loc=B(rx, ry, 0.062), rot=(0, 0, 45), outline=0.004)
+                    wk.box((0.76, 0.76, 0.014), red, loc=B(rx, ry, 0.066), rot=(0, 0, 45), outline=0.004)
+                    wk.box((0.3, 0.3, 0.016), gold, loc=B(rx, ry, 0.07), rot=(0, 0, 45), outline=0.003)
             if ds.get("banners"):
                 for (bx, by) in ((3.05, -0.85), (5.55, -0.85), (-1.05, ZD + 0.6), (W + 0.6, ZD + 0.6)):  # flanking the far gate and the strip
                     banner(bx, by, ds["banners"])
