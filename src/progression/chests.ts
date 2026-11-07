@@ -389,6 +389,8 @@ export function winChest(crowns: number): WinResult {
     return { ...d, crowns: k.crowns, crownReady: !k.claimed && k.crowns >= CROWNS_FOR_CHEST };
   });
 }
+/** Starts the free-chest clock for a new player (one ready now), so the bank fills even before the first claim. */
+export const initChests = () => { if (current().freeFrom < 0) commit((c) => freeBanked(c, c.seen)); };
 export const startUnlock = (slot: number) => commit((c) => startIn(c, slot, c.seen));
 export const openReady = (slot: number) => commit((c) => takeIn(c, slot, c.seen));
 /** Opens a slot now for gems; null if the player can't afford it. */

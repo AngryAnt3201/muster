@@ -10,12 +10,13 @@ import {
   CHESTS, CROWNS_FOR_CHEST, FREE_BANK, SHOP_CHESTS, actOf, actScale, buyDeal, buyShopChest, chests, claimCrown, claimFree,
   crownReady, dealBought, effectiveOdds, findable, freeBanked, freeNextIn, gameNow, grantChest, localDay, msLeft,
   onChestsChange, openReady, openWithGems, skipCost, startUnlock, stateOf, todaysDeals, unlocking,
-  rollContents, type Chest, type ChestType, type Granted, type WinResult,
+  initChests, rollContents, type Chest, type ChestType, type Granted, type WinResult,
 } from "../progression/chests";
 import { foundKinds } from "../progression/collection";
 import { canAfford } from "../economy/wallet";
 import { coinIcon, currencyBar, flyInto, gemIcon } from "./currency";
 import { el } from "./dom";
+import { icon } from "./kit";
 import { paintPortrait } from "./game";
 
 // ---------------------------------------------------------------- chest art
@@ -131,6 +132,7 @@ export function chestInfo(type: ChestType, slot?: number, after?: () => void) {
 /** The title's chest bar: four slots, then the free chest and the crown chest. Ticks every second while shown. */
 export function chestBar(): HTMLElement {
   const bar = el("div", { class: "ch-bar" });
+  initChests();
   // A full redraw only when something changes state (a chest lands, starts, gets ready...); otherwise each second just
   // updates the timer and price text, so the ready hop and other loops never restart.
   let sig = "", live: (() => void)[] = [];
@@ -192,9 +194,9 @@ export function chestEarned(r: WinResult, into?: HTMLElement | null) {
   const host = into ?? document.querySelector<HTMLElement>(".overlay .sheet > .results, .overlay .sheet > .boons");
   if (!host) return;
   const line = r.chest
-    ? el("div", { class: "ch-earned" }, [chestArt(r.chest.type, "ch-pop-in"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Chest earned!"]), el("small", {}, [`${CHESTS[r.chest.type].name} · ${clock(CHESTS[r.chest.type].unlockMs)} to unlock`])])])
+    ? el("div", { class: "ch-earned" }, [chestArt(r.chest.type, "ch-pop-in"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Chest earned!"]), el("small", {}, [`${CHESTS[r.chest.type].name} · ${clock(CHESTS[r.chest.type].unlockMs)}`])])])
     : el("div", { class: "ch-earned full" }, [chestArt("wood", "dim"), el("span", { class: "ch-earned-t" }, [el("b", {}, ["Slots full"]), el("small", {}, ["Open a chest to make room for the next one."])])]);
-  if (r.crowns > 0) line.append(el("span", { class: `ch-crowns ${r.crownReady ? "ready" : ""}` }, [r.crownReady ? "Crown chest ready!" : `${r.crowns}/${CROWNS_FOR_CHEST}`]));
+  if (r.crowns > 0) line.append(el("span", { class: `ch-crowns ${r.crownReady ? "ready" : ""}` }, [icon("crown"), r.crownReady ? "Ready!" : `${r.crowns}/${CROWNS_FOR_CHEST}`]));
   const before = host.querySelector(":scope > .btn, :scope > .boon-list, :scope > .td-result-btns");
   host.insertBefore(line, before);
   if (r.chest) setTimeout(() => sfx("buy"), 900);

@@ -70,10 +70,12 @@
 /* ---- result line */
 .ch-earned { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; border: 2px solid #2b1d14; background: linear-gradient(#fff3c4, #f6d77a); color: #2b1d14; animation: rise 0.4s cubic-bezier(.2,1.2,.3,1) 0.35s both; }
 .ch-earned > .ch-earned-t { display: flex; flex-direction: column; flex: 1; line-height: 1.1; }
-.ch-earned b { font: 400 18px/1 var(--display, sans-serif); }
+.ch-earned b { font: 400 18px/1 var(--display, sans-serif); white-space: nowrap; }
+.ch-crowns .icon { width: 15px; height: 15px; color: #c8761b; }
+.ch-crowns.ready .icon { color: #fff; }
 .ch-earned small { font-size: 12px; font-weight: 800; opacity: 0.7; }
 .ch-earned.full { background: #f3eadb; }
-.ch-crowns { flex: none; font: 400 13px/1 var(--display, sans-serif); padding: 5px 8px; border-radius: 10px; background: rgba(43, 29, 20, 0.1); }
+.ch-crowns { flex: none; display: inline-flex; align-items: center; gap: 4px; font: 400 13px/1 var(--display, sans-serif); padding: 5px 8px; border-radius: 10px; background: rgba(43, 29, 20, 0.1); }
 .ch-crowns.ready { background: #d8455a; color: #fff; }
 .td-result-card .ch-earned { margin: 8px 0; }
 
@@ -180,3 +182,4 @@
 @media (prefers-reduced-motion: reduce) {
   .ch-art.hero, .ch-card.live, .ch-card.gone, .ch-rays, .ch-slot.ready, .ch-slot.ready .ch-art { animation-duration: 0.01s !important; animation-iteration-count: 1 !important; }
 }
+.td-result-card .ch-earned-t { text-align: left; }
