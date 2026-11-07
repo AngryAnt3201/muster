@@ -49,8 +49,9 @@ const prog = (): ProgressionSave => {
 export const migrateLevel = (old: number) => Math.min(MAX_LEVEL, 1 + Math.ceil(((Math.min(10, clampLevel(old)) - 1) * 3) / 8));
 /**
  * Moves a save to the card collection, once: every unit met in the campaign (and any levelled one) is found, the
- * starters are found, and old troop levels become their new-scale equivalents. Commander XP starts from the upgrades
- * those levels stand for. Pure over a save object, so tests need no storage.
+ * starters are found, old troop levels become their new-scale equivalents, and each cleared level pays the cards and
+ * commander XP its first clear would have. Commander XP also counts the upgrades the old levels stand for. Pure over a
+ * save object, so tests need no storage.
  */
 export function migrateArmySave(s: Save): boolean {
   const p = normalizeProgression(s.progression);
@@ -65,6 +66,12 @@ export function migrateArmySave(s: Save): boolean {
   }
   const met = new Set<UnitKind>([...STARTER_KINDS, ...unlockedKinds(s.campaign ?? {}), ...(Object.keys(p.levels) as UnitKind[])]);
   for (const k of met) if (!c.found.includes(k)) grantIn(c, k, 1);
+  // The cards their first clears would have paid, so a returning player opens the Army with upgrades to make.
+  for (const l of LEVELS) {
+    if ((s.campaign?.[l.id] ?? 0) <= 0) continue;
+    xp += l.boss ? WIN_XP.boss : WIN_XP.firstClear;
+    for (const [k, n] of campaignCards({ act: l.act, roster: l.roster, unlocks: l.unlocks ?? (l.unlock ? [l.unlock] : []), first: true, won: true, salt: l.id })) grantIn(c, k, n);
+  }
   s.collection = c;
   s.progression = { ...p, levels, v: 2, ...(xp ? { xp } : {}) };
   return true;

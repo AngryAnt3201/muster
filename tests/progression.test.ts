@@ -251,6 +251,7 @@ describe("migration to the card collection", () => {
     const found = s.collection!.found;
     for (const k of [...unlockedKinds(s.campaign), ...STARTER_KINDS]) expect(found).toContain(k);
     expect(found).not.toContain("golem");
+    expect(Object.values(s.collection!.cards).reduce((x, y) => x + (y ?? 0), 0)).toBeGreaterThan(20); // first-clear cards back-paid
     expect(migrateArmySave(s)).toBe(false);
     expect(s.progression?.levels).toEqual({ blades: 5, ranger: 3 });
   });

@@ -1,5 +1,9 @@
 # Coins and troop levels
 
+> **Superseded in part (7 Nov, `feature/army`):** upgrades now cost cards plus coins, levels run 1-12 at +8%, the
+> cap comes from the commander level and the foe curve is steeper. See `outputs/economy/progression.md` for the
+> current cost, cap and foe tables. The coin earning rules below still hold.
+
 Branch `feature/progression`. Code: `src/core/levels.ts` (the sim), `src/progression/economy.ts` (every number on this page), `src/progression/troops.ts` (save + wallet binding), `src/ui/barracks.ts` (Barracks + result-screen coin line). Coins only move through `src/economy/wallet.ts`.
 
 ## Shared anchors (the gem store uses the same ones)

@@ -133,5 +133,6 @@
 .tag.rec { background: var(--gloss), var(--k-blue); color: #fff; text-shadow: var(--ol-s); }
 .tag.rec.low { background: var(--gloss), var(--k-danger); }
 .ar-cmd-up-gains .icon { width: 22px; height: 22px; color: var(--gold); fill: var(--gold); }
-.ar-tile.ghost .ar-portrait.frame { background: linear-gradient(#e8dcc2, #b9a988) !important; }
-.ar-tile.ghost .ar-portrait.frame canvas { filter: brightness(0) opacity(0.62); }
+
+.ar-tile.ghost .ar-portrait.frame canvas { filter: grayscale(1) brightness(0.42) contrast(1.7); }
+.pg-r-cap { text-align: center; justify-content: center; flex-wrap: wrap; }
