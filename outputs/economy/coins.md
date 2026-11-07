@@ -142,3 +142,12 @@ What the table shows:
 - The in-match unit popover (`statsLine` in `src/ui/game.ts`) still shows level 1 base stats. Health bars in battle use the real levelled values.
 - Gauntlet rival levels haven't been run through `tools/gauntlet.ts` yet. The rule is mild (+1 every 4 rivals, capped at your cap), but it does make deep runs harder for a player who never upgrades.
 - The coin pill in the Barracks header is local (`coinPill()` in `src/ui/barracks.ts`). Swap it for the HUD kit's pill once that lands.
+- This was already there before my change: on the Gauntlet boon sheet, the "Rival N beaten · health left" kicker sits under the ribbon (the shared `.results .ribbon` negative margin). My coin line goes under the ribbon and isn't affected. Left alone because it's shared CSS.
+
+## Screens
+
+They're in `outputs/review/progression/`, shot at 390x844 @2x. Re-shoot with `PORT=<vite port> node tools/progression-shots.mjs`.
+
+- Barracks: `barracks-normal.png`, `barracks-upgrade.png` (the level-up moment), `barracks-after-upgrade.png`, `barracks-capped.png`, `barracks-max.png`, `barracks-short.png`, `barracks-get-coins-to-shop.png`, `barracks-locked.png`
+- Result screens: `result-coins.png` (Act 1 boss, first clear, cap raised) and `gauntlet-coins.png`
+- Elsewhere: `title-barracks-badge.png` and `level-sheet-foe-level.png`
