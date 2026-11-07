@@ -1,4 +1,5 @@
-// The in-app store, as the game sees it. One product: the one-time Full Army unlock.
+// The in-app store, as the game sees it: the one-time Full Army unlock (non-consumable) and the gem packs
+// (consumables, src/economy/gems.ts).
 // Implementations: MockStore (web and dev builds, tests, e2e) and NativeStore (StoreKit 2 through the
 // local MusterStore Capacitor plugin in ios/). Prices always come from the store, never from the game.
 
@@ -12,11 +13,25 @@ export interface Product {
   description: string;
   /** Localised price string from the store (StoreKit `displayPrice`), e.g. "$4.99" or "4,99 €". */
   displayPrice: string;
+  /** The price as a number in the storefront's currency (StoreKit `price`), only for comparing packs. Never shown. */
+  price?: number;
 }
+
+/**
+ * A consumable purchase the store has paid for but not finished yet. The game credits it (once per `txId`, saved),
+ * then calls `finish(txId)`. Until then StoreKit keeps offering it, so a crash between payment and credit is safe.
+ */
+export interface Purchase { txId: string; productId: string }
 
 /** How a buy ended. `pending` is Ask to Buy or a payment that still needs action: it may complete later. */
 export type BuyStatus = "purchased" | "pending" | "cancelled" | "failed";
-export interface BuyResult { status: BuyStatus; message?: string }
+export interface BuyResult {
+  status: BuyStatus;
+  message?: string;
+  /** Set for a purchased consumable: the unfinished transaction to credit, then finish. */
+  txId?: string;
+  productId?: string;
+}
 
 export type StoreKind = "mock" | "native" | "unavailable";
 
@@ -32,4 +47,10 @@ export interface Store {
   owned(): Promise<string[]>;
   /** Called with the full owned list whenever it changes outside a buy (Ask to Buy approved, refund, other device). */
   onChange(cb: (owned: string[]) => void): () => void;
+  /** Consumables paid for but not finished (a crash after paying, or an Ask to Buy approved while closed). */
+  unfinished(): Promise<Purchase[]>;
+  /** Marks a consumable delivered. Call only after its credit is saved. */
+  finish(txId: string): Promise<void>;
+  /** Called when a consumable arrives outside a buy (Ask to Buy approved, interrupted purchase completed). */
+  onPurchase(cb: (p: Purchase) => void): () => void;
 }

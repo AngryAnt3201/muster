@@ -38,6 +38,8 @@ export interface OfferOpts {
   onOwned?: () => void;
   /** Smaller layout for sheets. */
   compact?: boolean;
+  /** A line under Restore Purchases (the Shop says what it does and doesn't bring back). */
+  restoreNote?: string;
 }
 
 /** The Full Army offer: art, what it opens, the store price on the buy button, Restore Purchases, and every buy state. */
@@ -55,6 +57,7 @@ export function fullArmyOffer(store: StoreController, o: OfferOpts = {}) {
     owned, buy, status,
     el("p", { class: "shop-fine" }, ["One-time purchase. No ads, no subscriptions, no tracking."]),
     restore,
+    ...(o.restoreNote ? [el("p", { class: "shop-fine shop-restore-note" }, [o.restoreNote])] : []),
   ]);
 
   let busy = false;

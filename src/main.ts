@@ -21,11 +21,19 @@ import { MAP_SIZE } from "./ui/mapdata";
 import { mapForAct, nodeFractions, nodePositions, pathUpTo } from "./ui/maplayout";
 import { GameScreen, TIER_NAMES, abilityOf, framedPortrait, paintPortrait, ribbon, statsLine } from "./ui/game";
 import { ROLE_LABEL, applyUIStyle, coin, icon, roleBadge } from "./ui/kit";
+// [gems] the gem store: packs, free rewards, Shop, counters, Gauntlet Rally
+import { settleRewards } from "./economy/rewards";
+import { creditPurchase } from "./economy/wallet";
+import { GemShop } from "./store/gems";
+import { currencyBar } from "./ui/currency";
+import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
 /** The Full Army store (StoreKit on iOS, a mock on the web). */
 const store = new StoreController(createStore(location.search), { load, save });
+/** [gems] Gem packs on the same store, credited through the shared wallet once per transaction. */
+const gemShop = new GemShop(store.store, creditPurchase);
 /** Redraws the menu screen on show when the entitlement changes (null in battles and on the Shop, which updates itself). */
 let here: (() => void) | null = null;
 
@@ -66,6 +74,7 @@ function title() {
   const camp = Object.keys(s.campaign).length;
   const gLocked = gauntletGated(s);
   screen("title",
+    currencyBar("title-cur"), // [gems] coin and gem counters
     el("div", { class: "logo" }, [
       el("span", { class: "logo-word", "data-t": "MUSTER" }, [el("span", {}, ["MUSTER"])]),
       el("div", { class: "logo-sub" }, [ribbon("build · place · clash", "small")]),
@@ -283,6 +292,7 @@ function results(m: Match, o: { heading: string; stars?: number; lines?: [string
     btn(o.primary[0], "primary big", () => { closeSheet(); o.primary[1](); }),
     btn(o.secondary[0], "ghost", () => { closeSheet(); o.secondary[1](); }),
   ]), false, true);
+  showRewards(sheetEl, settleRewards()); // [gems] free gems this result earned
   // A chime as each star lands (timed with the CSS: 0.35 s, 0.75 s, 1.15 s).
   const shown = sheetEl;
   for (let i = 0; i < n; i++) setTimeout(() => { if (sheetEl === shown) sfx(i === 2 ? "upgrade" : "buy"); }, 350 + 400 * i + 180);
@@ -387,6 +397,7 @@ function duel() {
           primary: ["New run", () => { run = newRun(Math.floor(Math.random() * 1e9)); save((x) => { x.gauntlet.runs++; }); duel(); }],
           secondary: ["Menu", title],
         });
+        rallyOffer(sheetEl, r, duel); // [gems] Gauntlet Rally: refight this rival for gems, once per run
         return;
       }
       if (r.wins > load().gauntlet.best) save((s) => { s.gauntlet.best = r.wins; });
@@ -544,7 +555,7 @@ const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 // ---------------------------------------------------------------- shop / paywall
 function shopScreen() {
   clear();
-  screen("shop-screen", header("Shop", title), fullArmyOffer(store));
+  screen("shop-screen", header("Shop", title, shopCounters()), shopView(store, gemShop)); // [gems] counters, Full Army, gem packs, coin bundles
 }
 
 /** The Full Army offer as a sheet over the current screen (gates open it); redraws the screen once it's owned. */
@@ -609,6 +620,23 @@ function showcase(n: number) {
   });
 }
 
+// ---------------------------------------------------------------- [gems] review shots
+/** ?gemdemo=reward (Act 1 boss cleared with three stars) or ?gemdemo=rally (a lost Gauntlet run), on a stand-in match. */
+function gemDemo(kind: string) {
+  title();
+  const won = kind === "reward";
+  const m = { winner: won ? 0 : 1, played: 9, history: [{ winner: 1 }, { winner: 1 }], sides: [{ hp: won ? 212 : 0 }] } as unknown as Match;
+  if (won) {
+    const boss = LEVELS.find((l) => l.boss)!;
+    save((s) => { s.campaign[boss.id] = 3; });
+    return results(m, { heading: "Victory", stars: 3, lines: boss.stars.map((o) => [objectiveText(o), true] as [string, boolean]), primary: ["Next level", title], secondary: ["Campaign", title] });
+  }
+  run = { ...newRun(42), stage: 4, wins: 3, over: true, hp: 0 };
+  const r = run;
+  results(m, { heading: "Run over", note: "You beat 3 rivals.", primary: ["New run", title], secondary: ["Menu", title] });
+  rallyOffer(sheetEl, r, duel);
+}
+
 // ---------------------------------------------------------------- boot
 async function boot() {
   applyStyleVars(document.documentElement);
@@ -628,6 +656,8 @@ async function boot() {
   // The cached entitlement is good offline; the store check runs alongside and redraws if it changes anything.
   store.onChange(() => { if (!sheetEl) here?.(); });
   void store.start();
+  void gemShop.start(); // [gems] credit paid-but-unfinished packs, then listen for Ask to Buy approvals
+  settleRewards(); // [gems] pay free gems for progress made before gems existed
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
   // Deep links for checks (they skip the Full Army gates): ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
@@ -641,6 +671,7 @@ async function boot() {
   if (q.has("shop")) return shopScreen();
   if (q.has("gauntlet")) { run = newRun(42); return duel(); }
   if (q.has("showcase")) return showcase(Number(q.get("showcase")) || 1);
+  if (q.has("gemdemo")) return gemDemo(q.get("gemdemo") ?? ""); // [gems] review shots of the result-screen moments
   if (q.has("vfx")) return void import("./ui/vfxlab").then((m) => m.vfxLab(app, { page: Number(q.get("vfx")) || 1, at: q.has("at") ? Number(q.get("at")) : undefined }));
   if (q.has("watch")) return playSkirmish({ foe: { ...DEFAULT_AI, tactic: "blitz" }, you: { ...DEFAULT_AI, difficulty: 0.9, tactic: "artillery" }, watch: true, hp: [400, 400] });
   title();

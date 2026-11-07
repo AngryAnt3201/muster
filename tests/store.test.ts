@@ -97,7 +97,7 @@ describe("mock store", () => {
     const m = new MockStore({ storage });
     expect(await m.owned()).toEqual([]);
     expect(await m.buy(FULL_ARMY)).toEqual({ status: "purchased" });
-    expect(JSON.parse(storage.getItem(MOCK_KEY)!)).toEqual({ owned: [FULL_ARMY] });
+    expect(JSON.parse(storage.getItem(MOCK_KEY)!)).toEqual({ owned: [FULL_ARMY], open: [] });
     expect(await new MockStore({ storage }).restore()).toEqual([FULL_ARMY]);
     expect((await m.buy("nope")).status).toBe("failed");
   });

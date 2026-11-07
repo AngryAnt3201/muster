@@ -1,4 +1,4 @@
-# Muster: Tactics: Full Army in-app purchase
+# Muster: Tactics: in-app purchases (Full Army and gem packs)
 
 Generated from `store/metadata.json` (`inAppPurchase`) by `npm run release:config`. Edit that, not this file.
 What the player gets: the free download has Campaign Acts 1 and 2, the Daily Challenge, Skirmish and the first Breakpoint puzzles.
@@ -54,3 +54,44 @@ Then submit the version as usual (`store/RELEASE-CHECKLIST.md` step 7). The purc
 - **Simulator, no Apple account needed:** `npm run ios:open`, pick an iPhone simulator, press Run. The shared App scheme already uses `ios/App/Muster.storekit` (Edit Scheme > Run > Options > StoreKit Configuration), so the Shop shows US$4.99 and buy, cancel, Ask to Buy and Restore all work locally. Debug > StoreKit > Manage Transactions refunds or deletes the test purchase. The plugin's own StoreKit tests run from `ios/MusterStore/TestHost` (command at the top of its project.yml).
 - **Sandbox on your iPhone:** App Store Connect > Users and Access > **Sandbox** > Test Accounts > **+**. On the iPhone, Settings > Developer > Sandbox Apple Account, sign in with it, then buy Full Army from a TestFlight or Xcode build. Sandbox purchases are free.
 - **Restore:** delete the app, reinstall, open Shop > Restore Purchases. Full Army comes back. (Game progress does not; it lives on the device.)
+
+## 4. Gem packs (five consumables, 15 min)
+
+Gems are the optional premium currency: free players earn them by playing, and these packs sell them.
+The app decides how many gems each product id gives (`src/economy/gems.ts`) and shows StoreKit's own price, so prices can change here without a new build.
+Each pack is credited once per App Store transaction and only then finished, so an interrupted purchase is credited on the next launch.
+**Restore Purchases does not bring gems back.** Consumables are used up; the Shop says so under the packs.
+
+For each row: Apps > Muster: Tactics > Monetization > **In-App Purchases** > **+** > Type **Consumable**, then the Reference Name and Product ID, **Create**, then fill the page.
+
+| Product ID | Reference Name | Price (US base) | Display Name | Description |
+| --- | --- | --- | --- | --- |
+| `co.inflect.muster.gems.pouch` | `Gems Pouch (80)` (15/64) | USD 0.99 | `80 Gems` (7/30) | `A pouch of 80 gems for the Shop` (31/45) |
+| `co.inflect.muster.gems.sack` | `Gems Sack (450)` (15/64) | USD 4.99 | `450 Gems` (8/30) | `A sack of 450 gems for the Shop` (31/45) |
+| `co.inflect.muster.gems.coffer` | `Gems Coffer (1000)` (18/64) | USD 9.99 | `1,000 Gems` (10/30) | `A coffer of 1,000 gems for the Shop` (35/45) |
+| `co.inflect.muster.gems.trove` | `Gems Trove (2200)` (17/64) | USD 19.99 | `2,200 Gems` (10/30) | `A trove of 2,200 gems for the Shop` (34/45) |
+| `co.inflect.muster.gems.hoard` | `Gems Hoard (6000)` (17/64) | USD 49.99 | `6,000 Gems` (10/30) | `A hoard of 6,000 gems for the Shop` (34/45) |
+
+The same on every pack:
+
+| Section | Field | Enter |
+| --- | --- | --- |
+| Availability | Countries or Regions | All countries and regions (same as the app) |
+| Price Schedule | Base price | the row's price; let Apple set the other storefronts from it |
+| App Store Localization (English (U.S.)) | Display Name, Description | the row's values |
+| Family Sharing | | Not offered for consumables (the switch isn't shown). |
+| Tax Category | | Match to parent app (the default) |
+| Review Information | Screenshot | `store/screenshots/iap-gems-review.png` (the Shop's Gems section with prices, 1320x2868). Re-shoot with `PORT=<port> node tools/gems-shots.mjs` while the dev server runs. The same image works for all five. |
+| Review Information | Review Notes | the block below |
+| Promotional Image | | None |
+
+Review Notes (same for every pack):
+
+```
+Gems are a consumable premium currency. Each pack gives the fixed number of gems in its name, credited the moment the purchase completes. Gems buy coin bundles (coins buy troop upgrades) and a once-per-run Gauntlet Rally; nothing gives random rewards. Gems are also earned free from three-star clears, bosses, Daily Challenge wins and streaks. To find them: title screen > Shop, the Gems section below Full Army. Restore Purchases restores the Full Army only, as consumables can't be restored; the Shop says so.
+```
+511/4000.
+
+Then on the 1.1.0 version page, **In-App Purchases and Subscriptions** > **+**: tick all five gem packs as well as Full Army.
+
+Test: the simulator's `ios/App/Muster.storekit` already lists the five packs (US$0.99 to US$49.99), so buy, cancel, Ask to Buy and failure all work without an account. Debug > StoreKit > Manage Transactions shows each pack finished once its gems are saved.

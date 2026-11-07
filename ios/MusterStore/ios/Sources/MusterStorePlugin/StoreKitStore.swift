@@ -8,18 +8,28 @@ public struct StoreProduct: Equatable {
     public let title: String
     public let description: String
     public let displayPrice: String
+    /// The price as a number, only for comparing gem packs (the "best value" tag). Never shown.
+    public let price: Double
+}
+
+/// A paid consumable (gem pack) that hasn't been finished: the game credits it, saves, then calls `finish`.
+public struct UnfinishedPurchase: Equatable {
+    public let txId: String
+    public let productId: String
 }
 
 /// How a purchase ended, in the same words as the JS store interface (src/store/types.ts BuyStatus).
 public enum BuyOutcome: Equatable {
     case purchased
+    /// A consumable paid for and verified but deliberately left unfinished until the game has saved the credit.
+    case purchasedUnfinished(UnfinishedPurchase)
     case pending
     case cancelled
     case failed(String)
 
     public var status: String {
         switch self {
-        case .purchased: return "purchased"
+        case .purchased, .purchasedUnfinished: return "purchased"
         case .pending: return "pending"
         case .cancelled: return "cancelled"
         case .failed: return "failed"
@@ -42,7 +52,8 @@ public final class StoreKitStore {
     public func products(_ ids: [String]) async throws -> [StoreProduct] {
         let found = try await Product.products(for: ids)
         return found
-            .map { StoreProduct(id: $0.id, title: $0.displayName, description: $0.description, displayPrice: $0.displayPrice) }
+            .map { StoreProduct(id: $0.id, title: $0.displayName, description: $0.description, displayPrice: $0.displayPrice,
+                                price: NSDecimalNumber(decimal: $0.price).doubleValue) }
             .sorted { $0.id < $1.id }
     }
 
@@ -67,6 +78,11 @@ public final class StoreKitStore {
             }
             switch result {
             case .success(.verified(let transaction)):
+                if transaction.productType == .consumable {
+                    // Gems: not finished here. The game credits them (once per transaction id), saves, then calls
+                    // finish(). If the app dies first, Transaction.unfinished offers it again on the next launch.
+                    return .purchasedUnfinished(UnfinishedPurchase(txId: String(transaction.id), productId: transaction.productID))
+                }
                 await transaction.finish()
                 return .purchased
             case .success(.unverified(_, _)):
@@ -100,17 +116,50 @@ public final class StoreKitStore {
         return ids.sorted()
     }
 
-    /// Finishes any transaction left over from a crash or a purchase made on another device, then listens to
-    /// `Transaction.updates` (Ask to Buy approved, refunds, other devices) and calls `changed` with the owned list.
-    public func listen(_ changed: @escaping ([String]) -> Void) {
+    /// Verified consumables that were paid for and never finished (a crash before the credit was saved, or an
+    /// Ask to Buy approved while the app was closed). The game credits each one and then calls `finish`.
+    public func unfinishedConsumables() async -> [UnfinishedPurchase] {
+        var out: [UnfinishedPurchase] = []
+        for await result in Transaction.unfinished {
+            if case .verified(let t) = result, t.productType == .consumable, t.revocationDate == nil {
+                out.append(UnfinishedPurchase(txId: String(t.id), productId: t.productID))
+            }
+        }
+        return out
+    }
+
+    /// Finishes one transaction by id, once the game has saved its credit. False when it isn't unfinished any more.
+    public func finish(_ txId: String) async -> Bool {
+        for await result in Transaction.unfinished {
+            let t: Transaction
+            switch result {
+            case .verified(let v): t = v
+            case .unverified(let v, _): t = v
+            }
+            if String(t.id) == txId { await t.finish(); return true }
+        }
+        return false
+    }
+
+    /// Finishes non-consumables left over from a crash or bought on another device, then listens to
+    /// `Transaction.updates`: non-consumables (Ask to Buy approved, refunds, other devices) are finished and `changed`
+    /// gets the owned list; a consumable goes to `consumable` unfinished, so the game credits it before it's finished.
+    /// Unfinished consumables from before launch are left for `unfinishedConsumables()`.
+    public func listen(_ changed: @escaping ([String]) -> Void, consumable: @escaping (UnfinishedPurchase) -> Void = { _ in }) {
         updates?.cancel()
         updates = Task.detached(priority: .background) { [weak self] in
             for await result in Transaction.unfinished {
-                if case .verified(let t) = result { await t.finish() }
+                if case .verified(let t) = result, t.productType != .consumable { await t.finish() }
             }
             for await result in Transaction.updates {
-                if case .verified(let t) = result { await t.finish() }
                 guard let self = self, !Task.isCancelled else { return }
+                if case .verified(let t) = result {
+                    if t.productType == .consumable {
+                        if t.revocationDate == nil { consumable(UnfinishedPurchase(txId: String(t.id), productId: t.productID)) }
+                        continue
+                    }
+                    await t.finish()
+                }
                 changed(await self.owned())
             }
         }

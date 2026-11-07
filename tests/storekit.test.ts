@@ -9,6 +9,7 @@ const cap = vi.hoisted(() => ({
   available: true,
   plugin: null as null | Record<string, (...a: any[]) => any>,
   listeners: [] as ((e: { owned: string[] }) => void)[],
+  buys: [] as ((e: unknown) => void)[],
 }));
 
 vi.mock("@capacitor/core", () => ({
@@ -41,7 +42,13 @@ function fakePlugin(over: Record<string, (...a: any[]) => any> = {}) {
     purchase: async () => ({ status: "purchased" }),
     restore: async () => ({ owned: [FULL_ARMY] }),
     owned: async () => ({ owned: [] }),
-    addListener: async (event: string, cb: (e: { owned: string[] }) => void) => {
+    unfinished: async () => ({ purchases: [] }),
+    finish: async () => ({ finished: true }),
+    addListener: async (event: string, cb: (e: any) => void) => {
+      if (event === "purchase") {
+        cap.buys.push(cb);
+        return { remove: async () => { cap.buys = cap.buys.filter((f) => f !== cb); } };
+      }
       expect(event).toBe("ownedChanged");
       cap.listeners.push(cb);
       return { remove: async () => { cap.listeners = cap.listeners.filter((f) => f !== cb); } };
@@ -50,7 +57,7 @@ function fakePlugin(over: Record<string, (...a: any[]) => any> = {}) {
   };
 }
 
-beforeEach(() => { cap.native = true; cap.available = true; fakePlugin(); });
+beforeEach(() => { cap.native = true; cap.available = true; cap.buys = []; fakePlugin(); });
 
 describe("NativeStore (JS bridge to the StoreKit plugin)", () => {
   it("is what a native build gets when the plugin is registered, and never on the web", () => {
@@ -94,6 +101,31 @@ describe("NativeStore (JS bridge to the StoreKit plugin)", () => {
     expect(cap.listeners).toHaveLength(0);
   });
 
+  it("passes a consumable's unfinished transaction through, and drops malformed ones", async () => {
+    const gem = "co.inflect.muster.gems.sack";
+    fakePlugin({ purchase: async () => ({ status: "purchased", txId: "2000000123", productId: gem }) });
+    expect(await new NativeStore().buy(gem)).toEqual({ status: "purchased", message: undefined, txId: "2000000123", productId: gem });
+    fakePlugin({ purchase: async () => ({ status: "purchased", txId: 42, productId: gem }) });
+    expect(await new NativeStore().buy(gem)).toEqual({ status: "purchased", message: undefined });
+    const finished: string[] = [];
+    fakePlugin({
+      unfinished: async () => ({ purchases: [{ txId: "1", productId: gem }, { txId: "", productId: gem }, { nope: true }] }),
+      finish: async ({ txId }: { txId: string }) => { finished.push(txId); return { finished: true }; },
+    });
+    const s = new NativeStore();
+    expect(await s.unfinished()).toEqual([{ txId: "1", productId: gem }]);
+    await s.finish("1");
+    expect(finished).toEqual(["1"]);
+    const seen: unknown[] = [];
+    const off = s.onPurchase((p) => seen.push(p));
+    await Promise.resolve();
+    cap.buys.forEach((f) => { f({ txId: "7", productId: gem }); f({ txId: "" }); });
+    expect(seen).toEqual([{ txId: "7", productId: gem }]);
+    off();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cap.buys).toHaveLength(0);
+  });
+
   it("lets a failed restore reject so the Shop can say the store is unreachable", async () => {
     fakePlugin({ restore: async () => { throw new Error("sync failed"); } });
     await expect(new NativeStore().restore()).rejects.toThrow("sync failed");
@@ -128,9 +160,10 @@ describe("MusterStore Swift plugin and StoreKit config", () => {
     expect(swift).toMatch(/@objc\(MusterStorePlugin\)\s*public class MusterStorePlugin: CAPPlugin, CAPBridgedPlugin/);
     expect(swift).toContain(`public let jsName = "${PLUGIN_NAME}"`);
     const methods = [...swift.matchAll(/CAPPluginMethod\(name: "(\w+)"/g)].map((m) => m[1]).sort();
-    expect(methods).toEqual(["getProducts", "owned", "purchase", "restore"]);
+    expect(methods).toEqual(["finish", "getProducts", "owned", "purchase", "restore", "unfinished"]);
     for (const m of methods) expect(swift).toContain(`@objc func ${m}(_ call: CAPPluginCall)`);
     expect(swift).toContain('notifyListeners("ownedChanged"');
+    expect(swift).toMatch(/notifyListeners\("purchase", data: \[[^\]]*\], retainUntilConsumed: true\)/);
   });
 
   it("uses StoreKit 2 only: purchase, AppStore.sync, currentEntitlements and Transaction.updates", () => {
@@ -139,10 +172,24 @@ describe("MusterStore Swift plugin and StoreKit config", () => {
     expect(core).not.toMatch(/SKPaymentQueue|RevenueCat|import (?!Foundation|StoreKit|UIKit)\w+/);
   });
 
+  it("leaves a consumable (gem pack) unfinished until the game has saved its credit", () => {
+    // In buy(): a verified consumable returns its transaction id before any finish() call.
+    const buy = core.slice(core.indexOf("public func buy("), core.indexOf("public func restore("));
+    const consumable = buy.indexOf("transaction.productType == .consumable");
+    expect(consumable).toBeGreaterThan(0);
+    expect(buy.indexOf(".purchasedUnfinished(")).toBeGreaterThan(consumable);
+    expect(buy.indexOf(".purchasedUnfinished(")).toBeLessThan(buy.indexOf("await transaction.finish()"));
+    // The launch sweep only finishes non-consumables; updates hand consumables to the game unfinished.
+    expect(core).toContain("t.productType != .consumable { await t.finish() }");
+    expect(core).toContain("public func unfinishedConsumables()");
+    expect(core).toContain("public func finish(_ txId: String)");
+    expect(swift).toContain('reply["txId"] = p.txId');
+  });
+
   it("ships a .storekit file with the US$4.99 Full Army non-consumable, matching the App Store Connect copy", () => {
     const sk = JSON.parse(read("ios/App/Muster.storekit"));
     const meta = JSON.parse(read("store/metadata.json")).inAppPurchase;
-    expect(sk.products).toHaveLength(1);
+    expect(sk.products.filter((x: { type: string }) => x.type === "NonConsumable")).toHaveLength(1);
     const p = sk.products[0];
     expect(p.productID).toBe(FULL_ARMY);
     expect(p.productID).toBe(meta.productId);

@@ -60,8 +60,9 @@ FIVE WAYS TO PLAY
 • Breakpoint: 18 one-battle puzzles against a fixed board with fixed gold. Find the win, then find a cheaper one for the stars.
 • Skirmish: any rival, any settings, any starting health.
 
-FREE TO START, ONE UNLOCK
-Download free and play the first two acts of the campaign, the first Breakpoint puzzles, the Daily Challenge and Skirmish, for as long as you like. One purchase, Full Army, opens every act, the Gauntlet and every Breakpoint puzzle for good. It is a one-time unlock: no subscriptions, no coins, no energy, no loot boxes. Restore Purchases brings it back on a new iPhone.
+FREE TO START, FAIR TO PLAY
+Download free and play the first two acts of the campaign, the first Breakpoint puzzles, the Daily Challenge and Skirmish, for as long as you like. One purchase, Full Army, opens every act, the Gauntlet and every Breakpoint puzzle for good, and Restore Purchases brings it back on a new iPhone.
+Gems are optional. You earn them free from three-star clears, bosses, Daily wins and streaks, and spend them on coins for troop upgrades or a Gauntlet Rally. Gem packs in the Shop speed that up, and every pack says exactly what you get: no subscriptions, no energy, no loot boxes, no random rewards.
 
 PLAYS YOUR WAY
 • Short rounds that fit a spare minute, with 2× and 3× battle speed
@@ -69,7 +70,7 @@ PLAYS YOUR WAY
 • No ads, no tracking, no timers
 • Your progress stays on your device
 ```
-2948/4000.
+3175/4000.
 
 ## What's New in This Version
 
@@ -78,9 +79,10 @@ Daily Challenge: a new board every day, the same for every player, with a streak
 A new act: Act 8, six new levels and a new boss.
 Four new units, each with its own Ascended ability.
 Full Army: Muster is now free to start with Acts 1 and 2, Skirmish, the Daily Challenge and the first Breakpoint puzzles. A one-time Full Army unlock opens every act, the Gauntlet and every puzzle. If you already reached Act 3, you keep everything you had, no purchase needed.
+Gems: earn them free from three-star clears, bosses, Daily wins and streaks, or buy a pack in the Shop. Spend them on coins for troop upgrades or a Gauntlet Rally.
 Sunlit new art across units, arenas and menus.
 ```
-533/4000. App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.
+697/4000. App Store Connect only asks for What's New on an update. If 1.0 was never released, this is the first version and the field does not appear: skip it.
 
 ## Keywords
 
@@ -140,6 +142,8 @@ Battles are top-down fantasy units (swords, bows, bombs, lightning) knocking eac
 
 One non-consumable: **Full Army** (`co.inflect.muster.fullarmy`), USD 4.99 (United States base price; let Apple set the other storefronts from it). Every field to enter in App Store Connect is in `store/IAP.md`.
 
+Plus 5 consumable gem packs (`co.inflect.muster.gems.*`): 80 Gems US$0.99, 450 Gems US$4.99, 1,000 Gems US$9.99, 2,200 Gems US$19.99, 6,000 Gems US$49.99. Also in `store/IAP.md` (section 4). Restore Purchases covers the Full Army only; consumables can't be restored.
+
 ## App Privacy
 
 **Data Not Collected.** App Privacy > Get Started > 'Do you or your third-party partners collect data from this app?' = No, we do not collect data from this app. Then Publish. Still true with the Full Army purchase: Apple takes the payment outside the app, and the unlock is checked and remembered on the device only. Apple's rule: data processed only on device is not 'collected' (https://developer.apple.com/support/app-privacy-on-the-app-store/). No tracking. No third-party SDKs (StoreKit is Apple's own). No analytics, ads or crash reporting.
@@ -157,6 +161,8 @@ Muster: Tactics is a single-player strategy game. No account or sign-in, no ads,
 
 Free: Campaign Acts 1 and 2, the Daily Challenge, Skirmish (AI Lab) and the first Breakpoint puzzles.
 In-app purchase: one non-consumable, Full Army (co.inflect.muster.fullarmy). It opens every campaign act, the Gauntlet and all Breakpoint puzzles. Players who had already reached Act 3 before this version keep that access without buying.
+
+Also five consumable gem packs (co.inflect.muster.gems.pouch, .sack, .coffer, .trove, .hoard). Gems are a premium currency spent on coin bundles (troop upgrades) and a once-per-run Gauntlet Rally. Each pack gives a fixed, stated number of gems; nothing in the game gives random paid rewards. Gems are also earned free by playing. Restore Purchases restores the Full Army only: consumables are used up and cannot be restored, and the Shop says so. Gem packs: title screen > Shop, below Full Army.
 
 To test the purchase with a sandbox account: on the title screen tap Shop, then tap the Full Army price button and confirm. The price shown comes from the App Store. You can also tap Campaign and open Act 3: the locked act card offers the same purchase. Restore Purchases is on the Shop screen.
 

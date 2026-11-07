@@ -2,7 +2,7 @@
 
 About 25 minutes of your time, plus Apple's build processing (5 to 15 minutes) while you fill the listing.
 Everything to paste is in `store/LISTING.md`; the Full Army in-app purchase fields are in `store/IAP.md`. Everything about the name, version and ids is in `app.config.json`.
-Version 1.1 is free to download with one in-app purchase (Full Army, `co.inflect.muster.fullarmy`, USD 4.99). If 1.0 is already live, skip step 3 (the app record exists) and use the version page for 1.1.
+Version 1.1 is free to download with one non-consumable (Full Army, `co.inflect.muster.fullarmy`, USD 4.99) and five consumable gem packs (`co.inflect.muster.gems.pouch|sack|coffer|trove|hoard`, USD 0.99 to 49.99; `store/IAP.md` section 4). If 1.0 is already live, skip step 3 (the app record exists) and use the version page for 1.1.
 
 | | |
 | --- | --- |
@@ -12,6 +12,7 @@ Version 1.1 is free to download with one in-app purchase (Full Army, `co.inflect
 | Team | Jack Wakem, `F4ZF9VS4GN` |
 | Version | 1.1.0 (build 1) |
 | In-app purchase | Full Army, `co.inflect.muster.fullarmy`, non-consumable, USD 4.99 |
+| Gem packs | five consumables, `co.inflect.muster.gems.*`: 80 / 450 / 1,000 / 2,200 / 6,000 gems at USD 0.99 / 4.99 / 9.99 / 19.99 / 49.99 |
 | Privacy Policy URL | https://muster-tactics.vercel.app/privacy.html |
 | Support URL | https://muster-tactics.vercel.app/support.html |
 
@@ -26,6 +27,7 @@ npm run release:config         # must end with "release-config: ..." and no "fix
                                # against the build (Full Army, Daily Challenge, Act 8 and unit counts)
 npm run store:shots            # the art and content changed for 1.1, so re-shoot before submitting
 node tools/store-shots.mjs --only=iap-review   # the Full Army review screenshot for store/IAP.md
+PORT=5180 node tools/gems-shots.mjs            # the gem packs review screenshot (store/screenshots/iap-gems-review.png)
 ```
 
 Xcode > Settings > Accounts: your Apple ID is listed and team **Jack Wakem (F4ZF9VS4GN)** shows as a paid Apple Developer Program team (not "Personal Team").
@@ -89,8 +91,8 @@ From `store/LISTING.md`:
 
 - **App Information**: Subtitle; Category = Games, subcategories Strategy and Casual; Content Rights = does not contain third-party content; **Age Rating** > Edit: answer as in LISTING.md (only "Cartoon or Fantasy Violence" = Infrequent/Mild, everything else None/No; expect **9+**).
 - **Pricing and Availability**: Price = Free (USD 0.00), all countries and regions. The app is free; the money is in the in-app purchase.
-- **In-App Purchases**: create Full Army exactly as in `store/IAP.md` step 1 (about 3 minutes). Its status should read Ready to Submit.
-- **App Privacy**: Privacy Policy URL = `https://muster-tactics.vercel.app/privacy.html`; Get Started > "Do you or your third-party partners collect data from this app?" = **No** > Save > **Publish**. The label reads "Data Not Collected". The purchase does not change this: Apple takes the payment, and the unlock is only checked and kept on the device.
+- **In-App Purchases**: create Full Army exactly as in `store/IAP.md` step 1 (about 3 minutes), then the five gem packs from section 4 (Type **Consumable**, about 15 minutes). All six should read Ready to Submit.
+- **App Privacy**: Privacy Policy URL = `https://muster-tactics.vercel.app/privacy.html`; Get Started > "Do you or your third-party partners collect data from this app?" = **No** > Save > **Publish**. The label reads "Data Not Collected". The purchases do not change this: Apple takes the payment, and the unlock and gem balance are only checked and kept on the device.
 - **EU (Digital Services Act)**: if App Store Connect asks for trader status (Business > or the banner on the app), answer it. With a paid in-app purchase you are selling, so the answer is most likely **trader**, and Apple then shows your address, phone and email on the EU product page. If you would rather not publish those yet, leave EU storefronts out under Pricing and Availability; without an answer the app is left out of EU storefronts but the rest of the world is fine.
 
 ## 6. Version 1.1 page (5 min)
@@ -102,7 +104,7 @@ iOS App > 1.1 Prepare for Submission (if 1.0 is live: iOS App > **+** next to th
 - **Support URL**: `https://muster-tactics.vercel.app/support.html` · **Marketing URL**: `https://muster-tactics.vercel.app`
 - **Copyright**: `2026 Jack Wakem`
 - **Build**: + > pick 1.1.0 (1) once processed. No export compliance question (Info.plist says no non-exempt encryption).
-- **In-App Purchases and Subscriptions**: + > tick **Full Army** > Done. Apple reviews the first in-app purchase only together with a new version, so it must be attached here.
+- **In-App Purchases and Subscriptions**: + > tick **Full Army** and all five gem packs > Done. Apple reviews the first in-app purchase only together with a new version, so it must be attached here.
 - **App Review Information**: Sign-in required: **off**; contact Jack Wakem, jackwakem@gmail.com, your phone; Notes: paste from LISTING.md (they tell the reviewer how to find and buy Full Army in the sandbox).
 - **Version Release**: Automatically release this version.
 
@@ -113,6 +115,6 @@ iOS App > 1.1 Prepare for Submission (if 1.0 is live: iOS App > **+** next to th
 ## What to expect
 
 - Review usually starts within 24 hours and takes minutes once it starts; most apps are decided within 1 to 2 days. Statuses: Waiting for Review > In Review > Ready for Distribution (then it appears on the store within a few hours) or Rejected with a message in App Store Connect.
-- Likeliest questions for this app, with answers ready: "Is this just a website?" (no: a full offline game, all content bundled, no network); "Screenshots must show the app" (they are the real game UI); age rating (fantasy violence, no blood: 9+); "We could not find the in-app purchase" (review notes point to title screen > Shop and the locked Act 3 card); "Restore Purchases is missing" (it is on the Shop screen, Guideline 3.1.1); "Products did not load" (usually the Paid Apps Agreement was not Active yet).
+- Likeliest questions for this app, with answers ready: "Is this just a website?" (no: a full offline game, all content bundled, no network); "Screenshots must show the app" (they are the real game UI); age rating (fantasy violence, no blood: 9+); "We could not find the in-app purchase" (review notes point to title screen > Shop and the locked Act 3 card); "Restore Purchases is missing" (it is on the Shop screen, Guideline 3.1.1; it restores the Full Army, and the Shop says gems are consumables that can't be restored); "Are there random paid rewards?" (no: every pack and coin bundle gives a fixed, stated amount, Guideline 3.1.1 loot box rule); "Products did not load" (usually the Paid Apps Agreement was not Active yet).
 - If rejected for something in the binary: fix, bump `build` to 2 in `app.config.json`, `npm run ios:release`, upload again, reply in Resolution Center. Metadata-only fixes need no new build.
 - Promotional text can be edited any time; everything else on the version page needs a new version after release.
