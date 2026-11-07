@@ -13,8 +13,8 @@
   },
   "perf": {
     "frames": 240,
-    "fps": 59.2,
-    "worstMs": 66.7,
+    "fps": 60,
+    "worstMs": 17.6,
     "maxUnitsOnScreen": 46,
     "enemies": 15,
     "defenders": 31,
@@ -31,7 +31,7 @@
     "wave": 18,
     "gold": 520,
     "keepHp": 54,
-    "time": 771.433,
+    "time": 771.167,
     "stars": 2,
     "leaked": 9,
     "kills": 309

@@ -34,6 +34,19 @@ const dir8 = (face: number) => {
   return ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
 };
 
+/** A soft contact shadow, drawn once and blitted per body (filling an ellipse path per body cost more). */
+let shadowCanvas: HTMLCanvasElement | null = null;
+function shadowSprite(): HTMLCanvasElement {
+  if (shadowCanvas) return shadowCanvas;
+  const c = document.createElement("canvas");
+  c.width = 64; c.height = 64;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(32, 32, 4, 32, 32, 32);
+  grad.addColorStop(0, "rgba(0,0,0,0.34)"); grad.addColorStop(0.75, "rgba(0,0,0,0.26)"); grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return (shadowCanvas = c);
+}
+
 export class TdView {
   readonly canvas: HTMLCanvasElement;
   readonly ctx: CanvasRenderingContext2D;
@@ -46,6 +59,9 @@ export class TdView {
   /** Frames drawn and bodies drawn last frame (for the perf probe). */
   stats = { units: 0, culled: 0, particles: 0 };
   private ground: HTMLCanvasElement | null = null;
+  private groundCanvas: HTMLCanvasElement;
+  private gctx: CanvasRenderingContext2D;
+  private groundKey = "";
   private parts: Particle[] = [];
   private floats: Float[] = [];
   private rings: Ring[] = [];
@@ -62,6 +78,11 @@ export class TdView {
   constructor(canvas: HTMLCanvasElement, run: TdRun) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    // The ground lives on its own canvas underneath, redrawn only when the camera moves.
+    this.groundCanvas = document.createElement("canvas");
+    this.groundCanvas.className = "td-ground";
+    canvas.parentElement?.insertBefore(this.groundCanvas, canvas);
+    this.gctx = this.groundCanvas.getContext("2d", { alpha: false })!;
     this.run = run;
     this.cam = new TdCamera(run.map.w, run.map.h);
     const kinds = new Set<string>();
@@ -82,6 +103,8 @@ export class TdView {
     this.canvas.height = Math.round(h * dpr);
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
+    for (const c of [this.groundCanvas]) { c.width = this.canvas.width; c.height = this.canvas.height; c.style.width = `${w}px`; c.style.height = `${h}px`; }
+    this.groundKey = "";
     this.cam.resize(w, h);
   }
 
@@ -209,14 +232,23 @@ export class TdView {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     let sx = 0, sy = 0;
     if (this.shake > 0) { this.shake -= dt; sx = (Math.random() - 0.5) * 6 * this.shake; sy = (Math.random() - 0.5) * 6 * this.shake; }
+    ctx.clearRect(0, 0, cam.vw, cam.vh);
     ctx.translate(sx, sy);
-    // Ground: just the visible window of the baked texture.
-    const a = cam.toWorld(0, 0), b = cam.toWorld(cam.vw, cam.vh);
-    const P = TEX_PPU, Q = TEX_PPU * TD_SQUASH;
-    ctx.fillStyle = "#2f8a3a";
-    ctx.fillRect(-10, -10, cam.vw + 20, cam.vh + 20);
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.ground, (a.x + TEX_M) * P, (a.y + TEX_M) * Q, (b.x - a.x) * P, (b.y - a.y) * Q, 0, 0, cam.vw, cam.vh);
+    // Ground: the visible window of the baked texture, on the layer below; skipped while the camera holds still.
+    const key = `${cam.cx.toFixed(3)},${cam.cy.toFixed(3)},${cam.s.toFixed(3)},${sx.toFixed(1)},${sy.toFixed(1)},${this.tileScale}`;
+    if (key !== this.groundKey) {
+      const g = this.gctx;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.fillStyle = "#2f8a3a";
+      g.fillRect(0, 0, cam.vw, cam.vh);
+      g.translate(sx, sy);
+      g.imageSmoothingEnabled = true;
+      if (!this.drawTiles(g, sx, sy)) {
+        const a = cam.toWorld(0, 0), b = cam.toWorld(cam.vw, cam.vh), P = TEX_PPU, Q = TEX_PPU * TD_SQUASH;
+        g.drawImage(this.ground, (a.x + TEX_M) * P, (a.y + TEX_M) * Q, (b.x - a.x) * P, (b.y - a.y) * Q, 0, 0, cam.vw, cam.vh);
+        this.groundKey = ""; // redraw sharp once the zoom settles
+      } else this.groundKey = `${cam.cx.toFixed(3)},${cam.cy.toFixed(3)},${cam.s.toFixed(3)},${sx.toFixed(1)},${sy.toFixed(1)},${this.tileScale}`;
+    }
     const s = cam.s;
     const view = cam.view(1.5);
     const vis = (x: number, y: number) => x > view.x0 && x < view.x1 && y > view.y0 && y < view.y1;
@@ -387,6 +419,46 @@ export class TdView {
     this.stats = { units, culled, particles: this.parts.length + this.sfx.length };
   }
 
+  /** Ground tiles pre-scaled to the current zoom so each frame is a 1:1 blit (scaling the whole texture every
+   *  frame was the main cost on a slow CPU). Rebuilt once the zoom settles; until then the caller scales. */
+  private tiles = new Map<string, HTMLCanvasElement>();
+  private tileScale = 0;
+  private scaleSeen = 0;
+  private scaleSince = 0;
+  private drawTiles(ctx: CanvasRenderingContext2D, shx: number, shy: number): boolean {
+    const { cam, dpr, ground } = this;
+    if (!ground) return false;
+    const scale = +(cam.s * dpr).toFixed(3);
+    if (scale !== this.scaleSeen) { this.scaleSeen = scale; this.scaleSince = this.t; }
+    if (scale !== this.tileScale) {
+      if (this.t - this.scaleSince < 0.15) return false;
+      this.tiles.clear();
+      this.tileScale = scale;
+    }
+    const T = 512, k = TEX_PPU / scale;
+    const midY = cam.toScreen(cam.cx, cam.cy).y;
+    const ox = Math.round((cam.cx + TEX_M) * scale - (cam.vw / 2) * dpr), oy = Math.round((cam.cy + TEX_M) * scale * TD_SQUASH - midY * dpr);
+    const i0 = Math.floor(ox / T), i1 = Math.floor((ox + cam.vw * dpr) / T), j0 = Math.floor(oy / T), j1 = Math.floor((oy + cam.vh * dpr) / T);
+    ctx.setTransform(1, 0, 0, 1, Math.round(shx * dpr), Math.round(shy * dpr));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      if (i < 0 || j < 0 || i * T * k > ground.width || j * T * k > ground.height) continue;
+      const key = `${i},${j}`;
+      let c = this.tiles.get(key);
+      if (!c) {
+        c = document.createElement("canvas");
+        c.width = c.height = T;
+        const g = c.getContext("2d")!;
+        g.fillStyle = "#2f8a3a"; g.fillRect(0, 0, T, T);
+        g.drawImage(ground, i * T * k, j * T * k, T * k, T * k, 0, 0, T, T);
+        if (this.tiles.size >= 40) this.tiles.delete(this.tiles.keys().next().value!);
+      } else this.tiles.delete(key);
+      this.tiles.set(key, c); // most recently used last
+      ctx.drawImage(c, i * T - ox, j * T - oy);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, shx * dpr, shy * dpr);
+    return true;
+  }
+
   private drawKeep(side: Side, x: number, y: number, state: Parameters<typeof keepImage>[1], scale: number) {
     const img = keepImage(side, state);
     if (!img) return;
@@ -399,8 +471,8 @@ export class TdView {
     const s = cam.s, g = cam.toScreen(x, y), p = cam.toScreen(x, y, z);
     const baseR = bodyDef(kind).radius;
     // Contact shadow.
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
-    ctx.beginPath(); ctx.ellipse(g.x, g.y, radius * s * 1.05, radius * s * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    const sw = radius * s * 2.3, shh = radius * s * 1.35;
+    ctx.drawImage(shadowSprite(), g.x - sw / 2, g.y - shh / 2, sw, shh);
     const o = { t: this.t, id, swing, speed, rank };
     const { anim, phase } = animFor(o);
     const fr = frame(kind, Math.max(1, Math.min(4, rank)), side, anim, phase, dir8(face));
@@ -410,7 +482,8 @@ export class TdView {
       ctx.restore();
     } else drawUnit(ctx, kind, side, p.x, p.y, radius * s, face, { ...o, noShadow: true });
     const top = p.y - (0.75 + radius * 1.6) * s * big;
-    if (rank > 1 && side === 0) drawRank(ctx, p.x, top - 6, Math.max(6, s * 0.18), rank);
+    // Rank pips only once they are big enough to read (a cheap level of detail when zoomed out).
+    if (rank > 1 && side === 0 && s >= 34) drawRank(ctx, p.x, top - 6, Math.max(6, s * 0.18), rank);
     if (hpFrac < 0.999) {
       const w = Math.max(18, radius * s * 2.2 * big), h = big > 1 ? 6 : 4;
       ctx.fillStyle = "rgba(20,16,12,0.75)"; ctx.fillRect(p.x - w / 2 - 1, top - 1, w + 2, h + 2);
