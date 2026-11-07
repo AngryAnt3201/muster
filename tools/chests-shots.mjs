@@ -49,6 +49,6 @@ await shots([
   ["open-7-epic", null, [{ tap: 1 }, { tap: 1 }, { wait: 300 }]],
   ["open-8-summary", null, [{ tap: 1 }, { tap: 1 }, { tap: 1 }, { tap: 1 }, { wait: 2600 }]],
 ]);
-await shots([["shop-component", "?chests=shop", [{ wait: 600 }]], ["shop-deals", null, [{ scroll: ".ch-deals" }, { wait: 300 }]]]);
+await shots([["shop-component", "?chests=shop", [{ wait: 600 }]]]);
 await browser.close();
 if (errors.length) { console.error(errors.join("\n")); process.exit(1); }
