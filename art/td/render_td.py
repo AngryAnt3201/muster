@@ -340,8 +340,8 @@ def main():
 
         kinds = th["trees"]
         # Woods: clumps seeded mostly toward the map edges and in the margin; each clump packs a few trees at
-        # different sizes so the canopy reads with depth. Trees keep clear of the road (more on the near side, since
-        # their crowns rise up the screen toward it).
+        # different sizes so the canopy reads with depth. Trees keep clear of the road and pads, more on the near
+        # side, since their crowns rise up the screen toward them: nothing baked ever stands in front of a unit.
         j = 0
         for n in range(900):
             edge = rnd(n, 41)
@@ -356,7 +356,7 @@ def main():
                 y = cy + (rnd(n * 7 + k, 47) - 0.5) * 1.3
                 s = 0.8 + rnd(n * 7 + k, 48) * 0.55
                 r = 0.42 * s
-                if y < -MARGIN + 0.6 or not free(x, y, r, 0.45) or road_d(x, y - 0.9 * s) < RH + 0.2:
+                if y < -MARGIN + 0.6 or not free(x, y, r, 0.45) or road_d(x, y - 0.9 * s) < RH + 0.2 or pad_d(x, y - 0.9 * s) < 0.85:
                     continue
                 if any(math.hypot(px - x, py - y) < (pr + r) * 0.78 for px, py, pr in placed):
                     continue

@@ -1,4 +1,5 @@
-// Bastion renderer: a big meadow battlefield baked once into a ground texture (grass, road, pads, trees, rocks),
+// Bastion renderer: a big meadow battlefield in one ground texture: the map's Blender render (public/td, from
+// art/td/render_td.py through this camera's ground layout) or, without one, a procedural bake (grass, road, pads, trees),
 // then units from the Blender atlases (sprites.ts / units.ts), the keeps (keeps.ts), projectiles and a capped
 // particle layer, all through TdCamera. Off-screen bodies are culled; the sim is interpolated between ticks.
 import type { BodyKind, Side } from "../core/defs";
@@ -89,6 +90,8 @@ export class TdView {
   private groundKey = "";
   /** Decoded backdrop slices waiting to be copied into the ground texture (dropped once baked). */
   private backdrop: { px: [number, number]; slices: { img: HTMLImageElement; y: number }[] } | null = null;
+  /** While the render loads, the ground is plain grass (no procedural bake to pop out a moment later). */
+  private backdropPending = true;
   /** ?tddebug: draw the sim's road and pads over the ground, to check them against the render. */
   private debug = typeof location !== "undefined" && /[?&]tddebug\b/.test(location.search);
   private parts: Particle[] = [];
@@ -119,6 +122,7 @@ export class TdView {
     preload([...kinds, "mite", "thrall", "golemling"], 1, [1, 2, 3, 4]);
     void loadVfx();
     void loadBackdrop(run.map.id).then((b) => {
+      this.backdropPending = false;
       if (!b || this.run.map.id !== run.map.id) return;
       this.backdrop = b;
       this.ground = null; // rebake from the render
@@ -272,7 +276,7 @@ export class TdView {
   draw(dt: number, alpha: number) {
     const { ctx, cam, run } = this;
     this.t += dt;
-    if (!this.ground) this.ground = this.bake(run.map);
+    if (!this.ground && !this.backdropPending) this.ground = this.bake(run.map);
     const dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     let sx = 0, sy = 0;
@@ -288,7 +292,10 @@ export class TdView {
       g.fillRect(0, 0, cam.vw, cam.vh);
       g.translate(sx, sy);
       g.imageSmoothingEnabled = true;
-      if (!this.drawTiles(g, sx, sy)) {
+      if (!this.ground) {
+        g.fillStyle = "#80c25a"; g.fillRect(0, 0, cam.vw, cam.vh);
+        this.groundKey = "";
+      } else if (!this.drawTiles(g, sx, sy)) {
         const a = cam.toWorld(0, 0), b = cam.toWorld(cam.vw, cam.vh), P = TEX_PPU, Q = TEX_PPU * TD_SQUASH;
         g.drawImage(this.ground, (a.x + TEX_M) * P, (a.y + TEX_M) * Q, (b.x - a.x) * P, (b.y - a.y) * Q, 0, 0, cam.vw, cam.vh);
         this.groundKey = ""; // redraw sharp once the zoom settles
