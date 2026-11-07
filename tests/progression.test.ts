@@ -31,20 +31,20 @@ describe("troop levels in the sim", () => {
     expect(fingerprint(lv1.run() && lv1)).toBe(fingerprint(plain.run() && plain));
   });
 
-  it("each level adds 5% health and damage, up to +45% at level 10", () => {
-    expect(levelHp(2)).toBeCloseTo(1.05);
-    expect(levelHp(MAX_LEVEL)).toBeCloseTo(1.45);
-    expect(levelDmg(99)).toBeCloseTo(1.45); // clamped
+  it("each level adds 3% health and damage, up to +27% at level 10", () => {
+    expect(levelHp(2)).toBeCloseTo(1.03);
+    expect(levelHp(MAX_LEVEL)).toBeCloseTo(1.27);
+    expect(levelDmg(99)).toBeCloseTo(1.27); // clamped
     const b = new Battle(army(0, ["bulwark"], 1), { levels: [{ bulwark: 5 }, undefined] });
-    expect(b.bodies[0].maxHp).toBe(Math.round(UNITS.bulwark.hp * 1.2));
-    expect(b.bodies[0].dmg).toBeCloseTo(UNITS.bulwark.dmg * 1.2);
+    expect(b.bodies[0].maxHp).toBe(Math.round(UNITS.bulwark.hp * 1.12));
+    expect(b.bodies[0].dmg).toBeCloseTo(UNITS.bulwark.dmg * 1.12);
   });
 
   it("levels are per side and spawned bodies share their maker's level", () => {
     const b = new Battle([...army(0, ["hive"], 1), ...army(1, ["hive"], 50)], { mods: [{ broodStart: true }, { broodStart: true }], levels: [{ hive: 10 }, undefined] });
     const mites = b.bodies.filter((x) => x.kind === "mite");
     const mine = mites.filter((x) => x.side === 0), theirs = mites.filter((x) => x.side === 1);
-    expect(mine[0].maxHp).toBe(Math.round(22 * 1.45));
+    expect(mine[0].maxHp).toBe(Math.round(22 * 1.27));
     expect(theirs[0].maxHp).toBe(22);
   });
 
@@ -60,7 +60,7 @@ describe("troop levels in the sim", () => {
   it("higher levels win more of a mirror match", () => {
     let lead = 0;
     for (let s = 1; s <= 12; s++) {
-      const r = simulate(fight().map((p) => ({ ...p, kind: p.side === 0 ? p.kind : (["bulwark", "ranger", "medic", "hive", "lamp"] as UnitKind[])[p.id - 100] })), { seed: s, levels: [uniformLevels(6), undefined] });
+      const r = simulate(fight().map((p) => ({ ...p, kind: p.side === 0 ? p.kind : (["bulwark", "ranger", "medic", "hive", "lamp"] as UnitKind[])[p.id - 100] })), { seed: s, levels: [uniformLevels(8), undefined] });
       lead += r.winner === 0 ? 1 : r.winner === 1 ? -1 : 0;
     }
     expect(lead).toBeGreaterThan(4);
