@@ -47,9 +47,10 @@ export function keepState(frac: number): KeepState {
 /** Where a blow from (fx, fy) lands on the keep's wall: on the side facing the attacker, partway up the tower. */
 export function keepHitPoint(side: Side, fx: number, fy: number): { x: number; y: number } {
   const k = keepAnchor(side);
-  const cx = k.x, cy = k.y - 0.55;
+  const g = KEEP_SCALE / 0.8; // the offsets were set for the keep at 0.8 scale
+  const cx = k.x, cy = k.y - 0.55 * g;
   const dx = fx - cx, dy = fy - cy, d = Math.hypot(dx, dy) || 1;
-  return { x: cx + (dx / d) * 0.6, y: cy + (dy / d) * 0.38 };
+  return { x: cx + (dx / d) * 0.6 * g, y: cy + (dy / d) * 0.38 * g };
 }
 
 /** A manifest anchor (image pixels) as a board position. */
@@ -58,10 +59,11 @@ export function keepPoint(side: Side, px: [number, number], m: KeepManifest = ma
   return { x: k.x + (px[0] - g[0]) * u, y: k.y + (px[1] - g[1]) * u };
 }
 
-/** True when a body at (x, y) stands behind the keep, so the keep should go see-through. */
+/** True when a body at (x, y) stands behind the keep's solid tower (not just its flag or the plinth's flanks),
+ *  so the keep should go see-through. Kept tight so the keep only fades when it would really hide someone. */
 export function behindKeep(side: Side, x: number, y: number, r = 0.3): boolean {
   const k = keepAnchor(side);
-  return Math.abs(x - k.x) < KEEP_RX * 0.85 + r * 0.5 && y < k.y - 0.15 && y > k.y - KEEP_TALL + 0.1;
+  return Math.abs(x - k.x) < KEEP_RX * 0.72 + r * 0.5 && y < k.y - 0.2 && y > k.y - KEEP_TALL * 0.82;
 }
 
 // ------------------------------------------------------------ art

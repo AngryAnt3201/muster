@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { H, W, type Side } from "../src/core/defs";
 import { Match } from "../src/core/match";
 import { Assault, detour, styleOf } from "../src/render/assault";
-import { KEEP_ARTS, KEEP_STATES, RAISE_FROM, RAISE_TIME, VICTORY_HOLD, bannerRaise, collapsePose, keepAnchor, keepFile, keepSquash, keepState } from "../src/render/keeps";
+import { KEEP_ARTS, KEEP_STATES, RAISE_FROM, RAISE_TIME, VICTORY_HOLD, bannerRaise, behindKeep, collapsePose, keepAnchor, keepFile, keepSquash, keepState } from "../src/render/keeps";
 import { existsSync, readFileSync } from "node:fs";
 
 /** Plays one round headless with events off and returns the finished battle and its report. */
@@ -50,6 +50,14 @@ describe("keep damage art", () => {
     const man = JSON.parse(readFileSync("public/keeps/manifest.json", "utf8"));
     expect(man.states).toEqual(KEEP_ARTS);
     for (const st of KEEP_ARTS) for (const f of [keepFile(0, st), keepFile(1, st), keepFile(1, st, true)]) expect(existsSync(`public/keeps/${f}`), f).toBe(true);
+  });
+
+  it("go see-through only for a body right behind the tower", () => {
+    const k = keepAnchor(0);
+    expect(behindKeep(0, k.x, k.y - 0.8)).toBe(true);
+    expect(behindKeep(0, k.x + 2.2, k.y - 0.8)).toBe(false); // off to the side
+    expect(behindKeep(0, k.x, k.y + 0.3)).toBe(false); // in front
+    expect(behindKeep(0, k.x, k.y - 3)).toBe(false); // well clear above the flag
   });
 
   it("squash on a blow and settle back to rest", () => {
