@@ -515,7 +515,7 @@ export class BoardView {
     if (this.fx.flash > 0) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = this.fx.flash * 0.5;
+      ctx.globalAlpha = this.fx.flash * (this.juice.reduced ? 0.15 : 0.5); // JUICE: calm mode dims full-screen flashes
       ctx.fillStyle = this.fx.flashColor;
       ctx.fillRect(this.area.x, this.area.y, this.area.w, this.area.h);
       ctx.restore();
