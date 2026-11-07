@@ -12,6 +12,8 @@ import { TdView } from "../render/tdView";
 import { el, stars } from "./dom";
 import { ROLE_LABEL, coin, icon, roleBadge } from "./kit";
 import { attachReward } from "./barracks";
+import { winChest } from "../progression/chests"; // [chests]
+import { chestEarned } from "./chests"; // [chests]
 
 const KEY = "muster.td.v1";
 interface TdSave { stars: Record<string, number>; best: Record<string, number>; }
@@ -355,6 +357,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
     const won = run.phase === "won", st = run.stars();
     const waveCoins = coins;
     if (won) { const c = coinsForWin(st); coins += c; earn("coins", c, `bastion ${mapId} win ${st}`); }
+    const chest = won ? winChest(st) : null; // [chests] a win drops the next chest in the cycle
     // The same coin line as the other modes' result screens (paid already: per wave during the run, the win here).
     const winCoins = won ? coinsForWin(st) : 0;
     const parts: [string, number][] = ([["Waves held", waveCoins], ["Victory", won ? coinsForWin(0) : 0], [`${st} star${st === 1 ? "" : "s"}`, winCoins - coinsForWin(0)]] as [string, number][])
@@ -381,6 +384,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
       ]);
       root.append(panel);
       attachReward(reward, undefined, panel.querySelector<HTMLElement>(".td-result-card")!);
+      if (chest) chestEarned(chest, panel.querySelector<HTMLElement>(".td-result-card")); // [chests]
     }, 900);
   }
   function stop() { alive = false; ro.disconnect(); }
