@@ -16,6 +16,9 @@ export interface ArenaAct {
   obstacle: string;
   ground: string;
   props: ArenaProp[];
+  /** The foreground (foreground.ts): border canopy drawn over units, same frame as the backdrop, cut into cells
+   *  given as [x, y, w, h] fractions of the backdrop. Optional: older manifests have none. */
+  fg?: { file: string; cells: [number, number, number, number][] };
 }
 export interface ArenaManifest {
   version: number;
@@ -73,6 +76,8 @@ export interface Arena {
   m: ArenaManifest;
   ground: HTMLImageElement;
   props: HTMLImageElement[];
+  /** The foreground layer, null if the act has none (or it failed to load). */
+  fg: HTMLImageElement | null;
 }
 
 /** Loads the arena for an act (falling back to act 1). Null if the art isn't there. */
@@ -82,9 +87,10 @@ export async function arenaFor(act: number | undefined): Promise<Arena | null> {
   const a = arenaAct(act, m);
   const info = m.acts[String(a)];
   if (!info) return null;
-  const [ground, ...props] = await Promise.all([info.ground, ...info.props.map((p) => p.file)].map((f) => load(`${base()}arenas/${f}`)));
+  const files = [info.ground, ...info.props.map((p) => p.file)];
+  const [fg, ground, ...props] = await Promise.all([info.fg ? load(`${base()}arenas/${info.fg.file}`) : Promise.resolve(null), ...files.map((f) => load(`${base()}arenas/${f}`))]);
   if (!ground) return null;
-  return { act: a, info, m, ground, props: props.filter((p): p is HTMLImageElement => !!p) };
+  return { act: a, info, m, ground, props: props.filter((p): p is HTMLImageElement => !!p), fg };
 }
 
 /** Which prop variant an obstacle gets: stable for its position so it doesn't change between rounds. */

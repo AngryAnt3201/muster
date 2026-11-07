@@ -1,0 +1,156 @@
+// Arena layers drawn around the units (see arena.ts and art/arenas/render_arenas.py):
+//  - the foreground: border canopy, boughs and banners that overhang the board edge, rendered in Blender through the
+//    game camera as act<n>_fg.webp (the same frame as the backdrop) and drawn over the units. It is cut into cells
+//    (each side in bands); a cell fades out while a unit's screen box overlaps it, so units under it stay readable.
+//  - ambient motion under the units: water glints on the Fen's mere, cloud wisps drifting past the Sky Throne.
+// Render-only: the sim never sees any of it, and obstacles and lanes are untouched.
+import { H, W, ZONE_DEPTH } from "../core/defs";
+import { backdropRect, type Arena } from "./arena";
+import type { Camera, Rect } from "./camera";
+
+/** Alpha of a foreground cell with a unit under it. */
+export const FG_FADED = 0.28;
+
+/** Screen rects of the foreground cells (stored as fractions of the backdrop) for a backdrop drawn at `r`. */
+export function fgCells(cells: readonly (readonly number[])[], r: Rect): Rect[] {
+  return cells.map(([x, y, w, h]) => ({ x: r.x + x * r.w, y: r.y + y * r.h, w: w * r.w, h: h * r.h }));
+}
+
+const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** Target alpha per cell: FG_FADED where any unit box overlaps it, else 1. */
+export function fadeTargets(cells: readonly Rect[], boxes: readonly Rect[], faded = FG_FADED): number[] {
+  return cells.map((c) => (boxes.some((b) => overlaps(c, b)) ? faded : 1));
+}
+
+/** Eases alphas toward their targets in place: out quickly (a unit walked under), back in slowly. */
+export function easeAlphas(cur: number[], target: readonly number[], dt: number): void {
+  for (let i = 0; i < target.length; i++) {
+    const a = cur[i] ?? target[i], t = target[i];
+    const rate = t < a ? 9 : 2.5;
+    cur[i] = a + (t - a) * Math.min(1, dt * rate);
+  }
+  cur.length = target.length;
+}
+
+/** A standing figure's screen box from its ground contact point: about a body wide and two tall (more for flyers). */
+export function unitBox(cam: Camera, x: number, y: number, z = 0): Rect {
+  const p = cam.project(x, y, 0), s = p.s;
+  const lift = z * s * 0.75;
+  return { x: p.x - 0.6 * s, y: p.y - 1.9 * s - lift, w: 1.2 * s, h: 2.0 * s };
+}
+
+interface Pos { x: number; y: number; z?: number; alive?: boolean; burrowed?: boolean; flying?: boolean }
+/** The scene's figures: bodies in a battle, pieces and the ghost while deploying. */
+export function sceneFigures(scene: { mode: string; battle?: { bodies: Pos[] }; pieces?: Pos[]; ghost?: Pos }): Pos[] {
+  if (scene.mode === "battle") return (scene.battle?.bodies ?? []).filter((b) => b.alive !== false && !b.burrowed);
+  return [...(scene.pieces ?? []), ...(scene.ghost ? [scene.ghost] : [])];
+}
+
+/** Deterministic 0..1 noise. */
+const rnd = (i: number, k: number) => Math.abs(Math.sin(i * 127.1 + k * 311.7) * 43758.5453) % 1;
+
+/** Water glint spots on the Fen's mere (between the zones, off the boardwalk), world coordinates. */
+export function glintSpots(n = 22): { x: number; y: number; ph: number }[] {
+  const out: { x: number; y: number; ph: number }[] = [];
+  for (let i = 0; out.length < n && i < n * 6; i++) {
+    const x = 0.3 + rnd(i, 7) * (W - 0.6), y = ZONE_DEPTH + 0.3 + rnd(i, 11) * (H - 2 * ZONE_DEPTH - 0.6);
+    const px = 4.5 + 0.32 * Math.sin(((y + 6.0) / 0.6) * 0.55); // the boardwalk's centre (render_arenas.py path_x)
+    if (Math.abs(x - px) < 0.95) continue;
+    out.push({ x, y, ph: rnd(i, 13) * Math.PI * 2 });
+  }
+  return out;
+}
+
+const TAU = Math.PI * 2;
+
+export class ArenaLayers {
+  private alpha: number[] = [];
+  private forFile = "";
+  private last = -1;
+  private wisp?: HTMLCanvasElement;
+  private glints = glintSpots();
+
+  /** Ambient motion on the ground, under the units. */
+  ambient(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number) {
+    if (a.info.obstacle === "fenlamp") this.shimmer(ctx, cam, time);
+    else if (a.info.obstacle === "obelisk") this.clouds(ctx, a, cam, time);
+  }
+
+  /** Small glints on the mere that swell and fade, a few at a time. */
+  private shimmer(ctx: CanvasRenderingContext2D, cam: Camera, time: number) {
+    ctx.save();
+    ctx.fillStyle = "#e6fbff";
+    for (const g of this.glints) {
+      const w = Math.sin(time * 1.3 + g.ph);
+      if (w <= 0.35) continue;
+      const p = cam.project(g.x + Math.sin(time * 0.4 + g.ph) * 0.06, g.y), s = p.s;
+      ctx.globalAlpha = (w - 0.35) * 1.1;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, s * (0.07 + 0.06 * w), s * 0.022, 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** Soft cloud wisps drifting past the courtyard, outside the board. */
+  private clouds(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number) {
+    const r = backdropRect(a.m, cam.k, cam.cx, cam.cy);
+    if (!this.wisp) {
+      const c = document.createElement("canvas");
+      c.width = 128; c.height = 64;
+      const g = c.getContext("2d")!;
+      for (const [x, y, rr] of [[40, 34, 26], [70, 28, 30], [96, 36, 22]]) {
+        const gr = g.createRadialGradient(x, y, 0, x, y, rr);
+        gr.addColorStop(0, "rgba(255,255,255,0.75)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = gr; g.fillRect(0, 0, 128, 64);
+      }
+      this.wisp = c;
+    }
+    const tl = cam.project(-0.9, -0.9), tr = cam.project(W + 0.9, -0.9), bl = cam.project(-0.9, H + 0.9), br = cam.project(W + 0.9, H + 0.9);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.moveTo(tl.x, tl.y); ctx.lineTo(bl.x, bl.y); ctx.lineTo(br.x, br.y); ctx.lineTo(tr.x, tr.y); ctx.closePath();
+    ctx.clip("evenodd");
+    const span = r.w + 240;
+    for (let i = 0; i < 7; i++) {
+      const sp = 7 + 6 * rnd(i, 3), y = r.y + r.h * (0.04 + 0.92 * rnd(i, 5)), w = 150 + 110 * rnd(i, 9);
+      const x = r.x - 200 + ((rnd(i, 1) * span + time * sp) % span);
+      ctx.globalAlpha = 0.45 + 0.3 * rnd(i, 17);
+      ctx.drawImage(this.wisp, x, y - w * 0.25, w, w * 0.5);
+    }
+    ctx.restore();
+  }
+
+  /** The foreground over the units, each cell faded while a figure stands under it. */
+  foreground(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number, figures: readonly Pos[]) {
+    const img = a.fg, info = a.info.fg;
+    if (!img || !info?.cells.length) return;
+    const r = backdropRect(a.m, cam.k, cam.cx, cam.cy);
+    const cells = fgCells(info.cells, r);
+    const boxes = figures.map((f) => unitBox(cam, f.x, f.y, f.flying ? (f.z ?? 1) : 0));
+    const target = fadeTargets(cells, boxes);
+    if (this.forFile !== info.file) { this.alpha = target.slice(); this.forFile = info.file; }
+    const dt = this.last < 0 ? 0 : Math.max(0, Math.min(0.1, time - this.last));
+    this.last = time;
+    easeAlphas(this.alpha, target, dt);
+    const sx = img.naturalWidth / r.w, sy = img.naturalHeight / r.h;
+    ctx.save();
+    for (let i = 0; i < cells.length; i++) {
+      const c = cells[i], al = this.alpha[i];
+      if (al <= 0.01) continue;
+      ctx.globalAlpha = al;
+      ctx.drawImage(img, (c.x - r.x) * sx, (c.y - r.y) * sy, c.w * sx, c.h * sy, c.x, c.y, c.w, c.h);
+    }
+    ctx.restore();
+  }
+}
+
+const layers = new WeakMap<object, ArenaLayers>();
+/** One ArenaLayers per board (its fade state carries from frame to frame). */
+export function arenaLayers(owner: object): ArenaLayers {
+  let l = layers.get(owner);
+  if (!l) layers.set(owner, (l = new ArenaLayers()));
+  return l;
+}

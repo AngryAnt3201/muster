@@ -27,6 +27,17 @@ just outside the board. Shapes and palettes are original and built from primitiv
 - `public/arenas/act<n>_prop<0..2>.png`: obstacle props modelled with their base on the unit circle (radius 1 = the
   collision radius), rendered orthographic at the camera's mid-board elevation with a baked contact shadow. The
   board stands each on its obstacle (`propRect`) in the same depth sort as units and keeps.
+- `public/arenas/act<n>_fg.webp`: the foreground, rendered alone through the same camera (same frame as the
+  backdrop): canopy, boughs, banner pillars or cloud banks that overhang the board's side edges. They are in the
+  backdrop too; this copy is drawn over the units (`src/render/foreground.ts`). The manifest's `fg.cells` cut it into
+  bands per side (tight boxes of covered pixels); a cell fades to 28% while a unit's screen box overlaps it and eases
+  back when it leaves, so units under the canopy stay readable.
+- Ground dressing per act (`dress` in the render script): mown stripes, a cobbled road across the neutral strip,
+  path wear and pebbles, flower/fern/heather/dry-grass clumps, tufts, moss, gravel, cracks, banners, and for the Sky
+  Throne lapis-and-gold rosettes and edge bands. All of it is low so units stand over it, and it stays off the path
+  and the keep plazas. Obstacles still come only from the sim and stand up as props.
+- Ambient motion (`foreground.ts`, drawn under the units): water glints on the Fen's mere and cloud wisps drifting
+  past the Sky Throne outside the board.
 - The board lays a light team wash over each deploy zone and a glowing back line on top of the art.
 - If the art is missing or was rendered for a different camera, the board falls back to its drawn terrain.
 

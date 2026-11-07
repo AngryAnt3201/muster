@@ -13,6 +13,7 @@ import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
 import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playBoom, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
 import { spreadOffsets, type SpreadBody } from "./spread";
+import { arenaLayers, sceneFigures } from "./foreground"; // polish/arenas: arena layers (see render())
 
 export type { Rect } from "./camera";
 
@@ -484,8 +485,12 @@ export class BoardView {
     ctx.beginPath(); ctx.rect(this.area.x, this.area.y, this.area.w, this.area.h); ctx.clip();
     this.drawAnims("ground");
     this.airSorted = false;
+    // ---- arena layers (polish/arenas, foreground.ts): ambient ground motion under the units, border canopy over them
+    if (this.arena) arenaLayers(this).ambient(ctx, this.arena, this.cam, this.time);
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
+    if (this.arena) arenaLayers(this).foreground(ctx, this.arena, this.cam, this.time, sceneFigures(scene));
+    // ---- end arena layers
     this.drawFx();
     ctx.restore();
     if (this.fx.flash > 0) {
