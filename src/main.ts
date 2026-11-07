@@ -41,6 +41,7 @@ import { chestBar, chestDemo, chestEarned } from "./ui/chests";
 import { startPass } from "./progression/pass";
 import { passEvent } from "./progression/passEvents";
 import { settleQuests } from "./progression/quests";
+import { usePassStore } from "./store/pass";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -55,6 +56,8 @@ const starter = new StarterShop(store, (txId) => payStarter(txId, {
 }), () => starterBought(load()));
 /** [gems] Gem packs on the same store, credited through the shared wallet once per transaction. */
 const gemShop = new GemShop(store, creditPurchase);
+/** [pass] War Pass Premium and special offers on the same store (credit once per transaction, then finish). */
+usePassStore(store);
 /** Redraws the menu screen when a Starter Pack lands outside a buy (null in battles and on the Shop, which updates itself). */
 let here: (() => void) | null = null;
 

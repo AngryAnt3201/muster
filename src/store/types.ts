@@ -6,6 +6,8 @@
 
 /** The App Store product id of the Starter Pack: a consumable the app sells once (src/store/starter.ts). */
 export const STARTER = "co.inflect.muster.starter";
+/** [pass] War Pass Premium: a consumable the app sells once per season (src/store/pass.ts). */
+export const PASS = "co.inflect.muster.pass";
 
 export interface Product {
   id: string;

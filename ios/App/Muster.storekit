@@ -91,6 +91,81 @@
       "productID": "co.inflect.muster.gems.hoard",
       "referenceName": "Gems Hoard (6000)",
       "type": "Consumable"
+    },
+    {
+      "displayPrice": "4.99",
+      "familyShareable": false,
+      "internalID": "D4A50001",
+      "localizations": [
+        {
+          "description": "This season's premium reward track",
+          "displayName": "War Pass Premium",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "co.inflect.muster.pass",
+      "referenceName": "War Pass Premium",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "1.99",
+      "familyShareable": false,
+      "internalID": "D4A50101",
+      "localizations": [
+        {
+          "description": "Limited-time bundle; contents shown in the game",
+          "displayName": "Special Offer",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "co.inflect.muster.offer.t1",
+      "referenceName": "Special Offer Tier 1 (1.99)",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "4.99",
+      "familyShareable": false,
+      "internalID": "D4A50102",
+      "localizations": [
+        {
+          "description": "Limited-time bundle; contents shown in the game",
+          "displayName": "Special Offer",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "co.inflect.muster.offer.t2",
+      "referenceName": "Special Offer Tier 2 (4.99)",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "9.99",
+      "familyShareable": false,
+      "internalID": "D4A50103",
+      "localizations": [
+        {
+          "description": "Limited-time bundle; contents shown in the game",
+          "displayName": "Special Offer",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "co.inflect.muster.offer.t3",
+      "referenceName": "Special Offer Tier 3 (9.99)",
+      "type": "Consumable"
+    },
+    {
+      "displayPrice": "19.99",
+      "familyShareable": false,
+      "internalID": "D4A50104",
+      "localizations": [
+        {
+          "description": "Limited-time bundle; contents shown in the game",
+          "displayName": "Special Offer",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "co.inflect.muster.offer.t4",
+      "referenceName": "Special Offer Tier 4 (19.99)",
+      "type": "Consumable"
     }
   ],
   "settings": {
