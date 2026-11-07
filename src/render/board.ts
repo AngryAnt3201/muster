@@ -480,8 +480,9 @@ export class BoardView {
   }
 
   update(dt: number) {
-    // JUICE: a hit-stop holds the board's clock and effects (the frame on screen is held, see render).
-    if (!this.juice.update(dt)) return;
+    // JUICE: hit-stop and shake clocks. The effects keep ageing through a stop (the sim does too, it runs in game.ts):
+    // only the picture is held (see render), so nothing piles up while the frame is frozen.
+    this.juice.update(dt);
     this.time += dt;
     this.fx.update(dt);
     if (this.showKeeps) this.updateKeeps(dt);
@@ -496,7 +497,9 @@ export class BoardView {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     // JUICE: a smooth trauma shake (the effects' own kicks feed in through fx.shake).
-    const [dx, dy] = this.juice.offset(this.s * 0.16, this.fx.shake * 0.75);
+    // Whole device pixels only: a sub-pixel offset resamples the full-screen background blit every frame.
+    const [sx, sy] = this.juice.offset(this.s * 0.16, this.fx.shake * 0.75);
+    const dx = Math.round(sx * this.dpr) / this.dpr, dy = Math.round(sy * this.dpr) / this.dpr;
     ctx.setTransform(1, 0, 0, 1, dx * this.dpr, dy * this.dpr);
     ctx.drawImage(this.bg, 0, 0);
     ctx.setTransform(this.dpr, 0, 0, this.dpr, dx * this.dpr, dy * this.dpr);
@@ -1203,7 +1206,7 @@ export class BoardView {
     let pts = this.trails.get(p);
     if (!pts) this.trails.set(p, (pts = []));
     const last = pts[pts.length - 1];
-    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 7) pts.shift(); }
+    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 5) pts.shift(); }
     if (pts.length < 2) return;
     const scr = pts.map((q) => this.cam.project(q.x, q.y, q.z));
     scr.push(this.cam.project(x, y, z));

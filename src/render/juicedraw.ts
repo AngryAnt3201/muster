@@ -14,15 +14,13 @@ const INK = "#1d2330";
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const easeOutBack = (u: number) => { const c = 1.9; return 1 + (c + 1) * (u - 1) ** 3 + c * (u - 1) ** 2; };
 
-/** A soft two-layer contact shadow (a wide faint skirt and a darker core under the feet), plus a thin team ring so
+/** A cool-toned contact shadow under the feet (one fill), plus a thin team ring so
  *  teal and red read at a glance. r in world units. */
 export function shadowRing(ctx: CanvasRenderingContext2D, cam: Camera, x: number, y: number, r: number, alpha: number, side: Side | null, ring = 1) {
   ctx.save();
   ctx.fillStyle = "#14202a";
-  ctx.globalAlpha = alpha * 0.45;
-  ctx.beginPath(); cam.groundPath(ctx, x + r * 0.1, y + r * 0.12, r * 1.28); ctx.fill();
-  ctx.globalAlpha = alpha * 0.75;
-  ctx.beginPath(); cam.groundPath(ctx, x + r * 0.05, y + r * 0.06, r * 0.82); ctx.fill();
+  ctx.globalAlpha = alpha * 0.95;
+  ctx.beginPath(); cam.groundPath(ctx, x + r * 0.07, y + r * 0.09, r * 0.98); ctx.fill();
   if (side !== null && ring > 0) {
     const p = cam.project(x, y);
     ctx.globalAlpha = Math.min(1, alpha * 1.6) * 0.75 * ring;

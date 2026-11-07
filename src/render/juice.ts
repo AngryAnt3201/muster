@@ -180,7 +180,7 @@ export class Juice {
     if (k.banner !== undefined) this.banner = { winner: k.banner, t: 0 };
   }
 
-  /** Advance by dt seconds. Returns false while a hit-stop holds the frame (the board skips its own update). */
+  /** Advance by dt seconds. Returns false while a hit-stop holds the frame (the shake and callouts wait for it). */
   update(dt: number): boolean {
     this.cool = Math.max(0, this.cool - dt);
     if (this.stop > 0) {
