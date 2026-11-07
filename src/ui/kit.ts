@@ -57,6 +57,7 @@ const ICON_PATHS: Record<string, string> = {
   sword: ROLE_PATHS.melee,
   shield: ROLE_PATHS.tank,
   check: '<path d="M2.5 12.5 6 9l3.8 3.8L18 4.5l3.5 3.5L9.8 19.8z"/>',
+  flame: '<path d="M12.5 1.5c1 3.6 5.6 6.4 6.6 11 .9 4.6-2.3 9.5-7.1 9.5S4 19 4.4 14.6c.3-3 2.2-4.8 3.6-6.6.3 1.9 1.1 3.2 2.4 3.9-.4-3.9.7-7.2 2.1-10.4z"/>',
 };
 
 function svg(paths: string, cls: string) {
@@ -87,3 +88,47 @@ export function coin(n: number | string, cls = "") {
 
 /** Inline HTML for a star (for innerHTML strings such as banners). */
 export const STAR_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICON_PATHS.star}</svg>`;
+
+/** A faceted gem (premium currency), drawn for this game: cool blue-violet cut stone with an ink outline. */
+export function gem(cls = "") {
+  const g = document.createElement("span");
+  g.className = `gem ${cls}`;
+  g.innerHTML = '<svg viewBox="0 0 32 32" aria-hidden="true">'
+    + '<path d="M9 4h14l7 8.5L16 29 2 12.5z" fill="#2b1d14"/>'
+    + '<path d="M10 6h12l5.4 6.6L16 26.2 4.6 12.6z" fill="#6fc8ff"/>'
+    + '<path d="M10 6h12l-3 6.6h-6z" fill="#c9f1ff"/>'
+    + '<path d="M4.6 12.6h8.4L16 26.2z" fill="#3f8de0"/>'
+    + '<path d="M19 12.6h8.4L16 26.2z" fill="#7a5fe0"/>'
+    + '<path d="M13 12.6h6L16 26.2z" fill="#58aaf5"/>'
+    + '<path d="M10 6l3 6.6H4.6z" fill="#a3e2ff"/><path d="M22 6l5.4 6.6H19z" fill="#9b8cff"/>'
+    + '<path d="M11.2 7.4h3l-1.4 2.8z" fill="#fff" opacity=".85"/></svg>';
+  return g;
+}
+
+/**
+ * A currency counter pill for menus and the battle top bar: the icon overhangs the left end, the value sits in the
+ * display face. `icon` is "coin", "gem" or any node. Not wired to data; update with `setPill`.
+ */
+export function currencyPill(iconKind: "coin" | "gem" | Node, value: number | string, cls = "") {
+  const p = document.createElement("span");
+  const kind = iconKind === "coin" ? "coins" : iconKind === "gem" ? "gems" : "custom";
+  p.className = `cpill ${kind} ${cls}`.trim();
+  const ic = document.createElement("span");
+  ic.className = "cpill-icon";
+  ic.append(iconKind === "coin" ? coin("") : iconKind === "gem" ? gem() : iconKind);
+  const b = document.createElement("b");
+  b.textContent = typeof value === "number" ? value.toLocaleString("en") : value;
+  p.append(ic, b);
+  return p;
+}
+
+/** Changes a currency pill's value; it hops when the number goes up. */
+export function setPill(pill: HTMLElement, value: number | string) {
+  const b = pill.querySelector("b");
+  if (!b) return;
+  const next = typeof value === "number" ? value.toLocaleString("en") : value;
+  if (b.textContent === next) return;
+  const up = Number(String(value).replace(/,/g, "")) > Number((b.textContent || "0").replace(/,/g, ""));
+  b.textContent = next;
+  if (up) { pill.classList.remove("bump"); void pill.offsetWidth; pill.classList.add("bump"); }
+}

@@ -15,6 +15,7 @@ import { load, save } from "./save";
 import { StoreController, createStore } from "./store";
 import { actGated, gauntletGated, levelGated, puzzleGated } from "./store/entitlement";
 import { actGateCard, fullArmyOffer } from "./ui/shop";
+import { dailyBody } from "./ui/daily";
 import { el, stars } from "./ui/dom";
 import { MAP_SIZE } from "./ui/mapdata";
 import { mapForAct, nodeFractions, nodePositions, pathUpTo } from "./ui/maplayout";
@@ -424,33 +425,18 @@ function untilTomorrow() {
 function daily() {
   clear();
   const key = today();
-  const b = dailyBoard(key);
   const d = load().daily;
   const open = canScore(d, key);
-  const t = d.today?.key === key ? d.today : undefined;
-  const when = new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-  const status = open
-    ? el("p", { class: "lead" }, ["One scored attempt today. Same board for every player."])
-    : el("div", { class: `daily-today ${t?.won ? "won" : ""}` }, [
-      el("b", {}, [t?.done ? `${t.won ? "Victory" : "Defeat"} · ${num(t.score)}` : "Attempt abandoned"]),
-      el("small", {}, [`Next board in ${untilTomorrow()}`]),
-    ]);
-  screen("daily", header("Daily", title, el("span", { class: "star-total" }, [icon("flag"), String(streakOn(d, key))])),
-    el("div", { class: "panel daily-card" }, [
-      el("div", { class: "sheet-kicker" }, [`Challenge ${b.number} · ${when}`]),
-      el("div", { class: "daily-rule" }, [ribbon(b.rule.name, "gold small"), el("span", {}, [b.rule.text])]),
-      el("div", { class: "foe-line" }, ["vs ", el("b", {}, [b.foe.name]), el("span", { class: "tag" }, [cap(b.foe.ai.tactic)])]),
-      el("div", { class: "roster" }, b.roster.map((k) => framedPortrait(k, 1, "roster-unit").frame)),
-      el("div", { class: "result-stats" }, [
-        el("span", {}, [el("b", {}, [String(streakOn(d, key))]), "streak"]),
-        el("span", {}, [el("b", {}, [num(d.best)]), "best"]),
-        el("span", {}, [el("b", {}, [String(d.bestStreak)]), "top streak"]),
-      ]),
-      status,
-      open
-        ? btn("Play today's board", "primary big", () => { save((s) => { beginDaily(s.daily, key); }); playDaily(key, false); })
-        : btn("Practice (unscored)", "big", () => playDaily(key, true)),
-    ]));
+  const streak = streakOn(d, key);
+  // hud polish: the page body (board preview, rival, draft, streak week) lives in ui/daily.ts.
+  screen("daily", header("Daily", title, el("span", { class: "star-total daily-streak-pill" }, [icon("flame"), String(streak)])),
+    dailyBody({
+      board: dailyBoard(key), save: d, key, streak, open, next: untilTomorrow(),
+      when: new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }),
+      action: open
+        ? btn("Play today's board", "primary big daily-play", () => { save((s) => { beginDaily(s.daily, key); }); playDaily(key, false); })
+        : btn("Practice (unscored)", "big daily-play", () => playDaily(key, true)),
+    }));
 }
 
 function playDaily(key: string, practice: boolean, attempt = 0) {
