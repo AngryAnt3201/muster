@@ -261,6 +261,7 @@ function playLevel(l: LevelDef, attempt = 0) {
     onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
   });
+  game.view.bossKeep = !!l.boss; // [keeps polish] act bosses get the boss keep
 }
 
 // ---------------------------------------------------------------- results
