@@ -52,6 +52,13 @@ const settle = (p, ms = 900) => p.waitForTimeout(ms);
   await p.screenshot({ path: `${out}/barracks-locked.png` });
 }
 {
+  // Title: the Barracks button counts troops ready to level up.
+  const p = await page("normal");
+  await p.goto(`http://127.0.0.1:${port}/`);
+  await settle(p, 1400);
+  await p.screenshot({ path: `${out}/title-barracks-badge.png` });
+}
+{
   const p = await page("capped");
   await p.goto(`http://127.0.0.1:${port}/?barracks`);
   await settle(p, 1400);

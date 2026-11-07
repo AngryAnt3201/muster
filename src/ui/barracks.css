@@ -114,3 +114,9 @@
 .pg-r-cap { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--k-text); }
 .pg-r-cap.up { color: #fff; padding: 4px 10px; border-radius: 10px; background: var(--gloss), var(--k-go); border: 2px solid var(--k-ink); text-shadow: var(--ol-s); font: 400 15px/1 var(--display); }
 .pg-r-go { margin-top: 2px; }
+
+/* ---- title screen Barracks badge */
+.pg-menu { display: inline-flex; align-items: center; gap: 6px; }
+.pg-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; border: 2px solid var(--k-ink);
+  background: var(--k-danger); color: #fff; font: 400 13px/1 var(--display); font-style: normal; text-shadow: var(--ol-s); animation: pgPulse 1.6s ease-in-out infinite; }
+@keyframes pgPulse { 50% { transform: scale(1.12); } }

@@ -195,6 +195,12 @@ export function barracksScreen(o: BarracksOpts) {
 
 const roleFam = (k: UnitKind) => ROLE_FAMILY[UNITS[k].role];
 
+/** The title screen's Barracks label, with a badge counting troops that can level up now. */
+export function barracksLabel(): Node {
+  const ready = UNIT_KINDS.filter((k) => troopState(k).why === null).length;
+  return el("span", { class: "pg-menu" }, ["Barracks", ...(ready ? [el("i", { class: "pg-badge" }, [String(ready)])] : [])]);
+}
+
 // ---------------------------------------------------------------- result screens
 /**
  * Adds the coins a result paid (and the troop level cap) to the result sheet on screen. Call right after the result

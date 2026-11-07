@@ -22,7 +22,7 @@ import { GameScreen, framedPortrait, paintPortrait, ribbon } from "./ui/game";
 import { applyUIStyle, icon } from "./ui/kit";
 // [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
 import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, withLevels } from "./progression/troops";
-import { attachReward, barracksScreen } from "./ui/barracks";
+import { attachReward, barracksLabel, barracksScreen } from "./ui/barracks";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -85,7 +85,7 @@ function title() {
       ]),
     ]),
     el("div", { class: "title-foot" }, [
-      btn("Barracks", "ghost small", barracks),
+      btn(barracksLabel(), "ghost small", barracks), // [progression] badge when a troop can level up
       btn(el("span", {}, [icon("crown"), "Shop"]), `gold small shop-btn ${store.owns() ? "owned" : ""}`, shopScreen),
       btn(s.settings.sound ? "Sound on" : "Sound off", "ghost small", () => { save((x) => { x.settings.sound = !x.settings.sound; }); setSound(load().settings.sound); title(); }),
     ]),
