@@ -15,8 +15,9 @@ None of these changed.
 ## What a level does
 
 - Every one of the 28 units has a level from 1 to 10. It's kept on the device and carries across matches.
-- Each level past 1 adds **5% health and 5% damage** (healing and wards scale with damage), so level 10 is +45%. Spawned bodies (mites, thralls, shardlings, turrets, decoys) use their maker's level.
-- Levels stack on top of the in-match ranks (Recruit to Ascended). A level 10 unit is +45%, while an in-match rank 2 upgrade is +65% health, so ranks still matter more than levels.
+- Each level past 1 adds **3% health and 3% damage** (healing and wards scale with damage), so level 10 is +27%. Spawned bodies (mites, thralls, shardlings, turrets, decoys) use their maker's level.
+- **Why 3% and not 5%:** I tried 5% first. In `npm run balance`, one level of gap between a whole army and the foe moved the strong AI's win rate by about 30 points (Act 3: 77% to 46%). A uniform edge compounds, because each unit both lasts longer and hits harder. At 3% the same curve gives the results below.
+- Levels stack on top of the in-match ranks (Recruit to Ascended). A level 10 unit is +27%, while an in-match rank 2 upgrade is +65% health, so ranks still matter more than levels.
 - At level 1 the multiplier is exactly 1, so a level 1 army is the game as it was. All 281 tests from before still pass unchanged, and there are new tests that check a level 1 battle matches the old one body for body.
 - Levels are part of the battle input for each side (`levels` in `BattleOptions` and `MatchConfig`), and the AI's planning sims see them too. The sim stays deterministic.
 
@@ -92,8 +93,8 @@ This models a free player (no gems bought) on a first pass. They clear an act in
 Campaign foes field their whole army at **one level below** what that six-unit player can afford. That allows for coins spread over more units and for units that join the roster late at level 1. Acts 1-2 stay at level 1, so the free tier plays exactly as tuned.
 
 - A player who keeps upgrading stays on or a little ahead of the curve, and the campaign plays as tuned.
-- A player who never upgrades meets foes up to +20% stronger by Act 8.
-- A player at the cap is up to +20% stronger than the foe. That's an edge, but it doesn't trivialise the campaign (see the balance results).
+- A player who never upgrades meets foes up to +12% stronger by Act 8.
+- A player at the cap (level 9 in Act 8) is about +11% stronger than the foe there (1.24 against 1.12).
 
 ## Time to max (free player, no gems)
 
