@@ -286,6 +286,18 @@ button { font-family: inherit; color: inherit; }
 .in-battle .speed, .in-battle .skip { display: block; }
 .in-battle .reroll, .in-battle .fight { display: none; }
 .in-battle .actions { justify-content: flex-end; }
+/* The fight's troop tally fills the row left of 1× and Skip. */
+.tally { display: none; flex: 1; min-width: 0; height: 54px; align-items: center; justify-content: center; gap: 10px; padding: 0 12px; border-radius: 16px;
+  border: 2.5px solid var(--k-ink); background: rgba(0,0,0,0.42); box-shadow: inset 0 2px 0 rgba(255,255,255,0.08); font: 400 15px/1 var(--display); color: rgba(255,255,255,0.7); text-shadow: var(--ol-s); }
+.in-battle .tally { display: flex; }
+.tally > i { font-style: normal; }
+.tally-side { display: inline-flex; align-items: center; gap: 5px; }
+.tally-side b { font-weight: 400; font-size: 26px; color: #fff; min-width: 1.1em; text-align: center; font-variant-numeric: tabular-nums; }
+.tally-side .icon { font-size: 20px; }
+.tally-side.you .icon { color: var(--tide); }
+.tally-side.foe .icon { color: var(--ember); transform: scaleX(-1); }
+.tally-side.hit b { animation: tallyHit 0.3s ease-out; }
+@keyframes tallyHit { 35% { transform: scale(0.82); color: #ffd7c9; } }
 .mode-watch .reroll, .mode-watch .fight { display: none; }
 .mode-watch .speed { display: block; }
 

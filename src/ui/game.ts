@@ -101,7 +101,7 @@ export class GameScreen {
     foeName: HTMLElement; foeHp: HTMLElement; foeHpText: HTMLElement; foeGold: HTMLElement; round: HTMLElement;
     youHp: HTMLElement; youHpText: HTMLElement; gold: HTMLElement; supply: HTMLElement; shop: HTMLElement; reroll: HTMLButtonElement;
     fight: HTMLButtonElement; banner: HTMLElement; pop: HTMLElement; tip: HTMLElement; speed: HTMLButtonElement; skip: HTMLButtonElement;
-    bottom: HTMLElement; top: HTMLElement; status: HTMLElement; menu: HTMLElement;
+    bottom: HTMLElement; top: HTMLElement; status: HTMLElement; menu: HTMLElement; tally: [HTMLElement, HTMLElement];
   };
 
   constructor(host: HTMLElement, opts: GameOpts) {
@@ -184,7 +184,13 @@ export class GameScreen {
     const skip = el("button", { class: "btn small skip" }, ["Skip"]) as HTMLButtonElement;
     skip.addEventListener("click", () => this.skipBattle());
     const status = el("div", { class: "status" }, [el("span")]);
-    const actions = el("div", { class: "actions" }, [reroll, status, speed, skip, fight]);
+    // In the fight: troops still standing on each side, where the reroll button was.
+    const tally = el("div", { class: "tally", role: "status", "aria-label": "Troops standing" }, [
+      el("span", { class: "tally-side you" }, [icon("sword"), el("b", {}, ["0"])]),
+      el("i", {}, ["vs"]),
+      el("span", { class: "tally-side foe" }, [el("b", {}, ["0"]), icon("sword")]),
+    ]);
+    const actions = el("div", { class: "actions" }, [reroll, tally, status, speed, skip, fight]);
     bottom.append(you, shop, actions);
 
     const banner = el("div", { class: "banner" });
@@ -197,7 +203,7 @@ export class GameScreen {
     this.h = {
       foeName: q(".cmdr-name", foe), foeHp: q(".hpbar i", foe), foeHpText: q(".hpbar span", foe), foeGold: q(".cmdr-gold", foe), round,
       youHp: q(".hpbar i", you), youHpText: q(".hpbar span", you), gold: q(".gold", you), supply: q(".supply", you), shop, reroll, fight,
-      banner, pop, tip, speed, skip, bottom, top, status, menu,
+      banner, pop, tip, speed, skip, bottom, top, status, menu, tally: [q(".you b", tally), q(".foe b", tally)],
     };
     this.h.foeName.textContent = this.match.sides[1].name;
   }
@@ -514,6 +520,7 @@ export class GameScreen {
           this.view.consume(this.battle);
           this.acc -= DT;
         }
+        this.updateTally();
         if (this.battle.done) {
           this.endT += dt;
           if (this.endT > 0.9) { this.endT = 0; this.finishBattle(); }
@@ -524,6 +531,18 @@ export class GameScreen {
     this.view.render(this.scene());
     this.raf = requestAnimationFrame(this.frame);
   };
+
+  /** Troops standing per side (as the battle result counts them: no mines, decoys or turrets). */
+  private updateTally() {
+    const n = [0, 0];
+    for (const b of this.battle!.bodies) if (b.alive && b.kind !== "mine" && b.kind !== "decoy" && b.kind !== "turret") n[b.side]++;
+    for (const s of [0, 1] as const) {
+      const t = this.h.tally[s], v = String(n[s]);
+      if (t.textContent === v) continue;
+      t.textContent = v;
+      t.parentElement!.classList.remove("hit"); void t.offsetWidth; t.parentElement!.classList.add("hit");
+    }
+  }
 
   private scene(): Scene {
     if ((this.phase === "battle" || ((this.phase === "result" || this.phase === "over") && this.battle)) && this.battle)

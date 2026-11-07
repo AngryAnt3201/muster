@@ -104,5 +104,18 @@ if (!skip("daily-draft")) {
   await p.context().close();
 }
 
+// 6. The bottom bar mid-fight.
+if (!skip("battle-bar")) {
+  const p = await page();
+  await p.goto(`http://${host}:${port}/?level=10`);
+  await p.waitForTimeout(2500);
+  await deployAI(p);
+  await p.waitForTimeout(600);
+  await p.evaluate(() => void window.__game.fight());
+  await p.waitForTimeout(1800);
+  await shot(p, `battle-bar${tag}`);
+  await p.context().close();
+}
+
 if (errors.length) console.log("ERRORS:\n" + errors.join("\n"));
 await browser.close();
