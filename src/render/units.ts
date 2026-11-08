@@ -2,7 +2,7 @@
 // below, drawn with paths, are the fallback while an atlas loads and the shop-card icons. r is the radius in px.
 import type { BodyKind, Side } from "../core/defs";
 import { INK, STEEL, TEAM, WOOD, ZAP } from "./palette";
-import type { Anim, Frame, Weight } from "./sprites";
+import { onSheetEvict, type Anim, type Frame, type Weight } from "./sprites";
 
 export interface DrawOpts {
   rank?: number;
@@ -114,6 +114,8 @@ const SIL_MAX = 72;
 const silCache = new Map<object, Map<number, HTMLCanvasElement>>();
 let silCount = 0;
 let silOk = typeof document !== "undefined";
+// an evicted sheet's silhouettes go with it
+onSheetEvict((c) => { const m = silCache.get(c); if (m) { silCount -= m.size; silCache.delete(c); } });
 function whiteSilhouette(f: Frame): HTMLCanvasElement | null {
   if (!silOk) return null;
   let m = silCache.get(f.img);

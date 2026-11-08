@@ -115,13 +115,14 @@ export class GameScreen {
     this.buildHud();
     host.append(this.root);
     this.view = new BoardView(this.canvas);
-    // Each side's recruits and the bodies they spawn, in that side's colours, up front; higher tiers tint on
-    // demand (the lower tier shows meanwhile).
+    // Each side's recruits and the bodies they spawn, in that side's colours, warmed up front; higher tiers tint on
+    // demand (the lower tier shows meanwhile). Warm only: a late act's rosters outgrow the sheet budget, so each
+    // fight pins just what is on the board (pinBattle).
     void loadSprites().then(() => {
       for (const side of [0, 1] as const) {
         const roster: string[] = this.match.sides[side].roster;
         const spawns = (Object.keys(BODY_EXTRA) as SpawnKind[]).filter((k) => roster.includes(BODY_EXTRA[k].from));
-        preload([...roster, ...spawns], side, [1]);
+        preload([...roster, ...spawns], side, [1], { pin: false });
       }
     });
     this.view.setObstacles(opts.cfg.obstacles);
@@ -381,6 +382,23 @@ export class GameScreen {
     this.refreshHud();
   }
 
+  /** Pin the sheets this fight draws (every body at its rank, and what it spawns at tier 1) so the sheet budget never
+   *  evicts them mid-battle (sprites.ts preload). */
+  private pinBattle() {
+    const b = this.battle;
+    if (!b) return;
+    for (const side of [0, 1] as const) {
+      const byRank = new Map<number, Set<string>>();
+      const add = (rank: number, kind: string) => { if (!byRank.has(rank)) byRank.set(rank, new Set()); byRank.get(rank)!.add(kind); };
+      for (const bd of b.bodies) {
+        if (bd.side !== side) continue;
+        add(bd.rank, bd.kind);
+        for (const k of Object.keys(BODY_EXTRA) as SpawnKind[]) if (BODY_EXTRA[k].from === bd.kind) add(1, k);
+      }
+      for (const [rank, kinds] of byRank) preload([...kinds], side, [rank]);
+    }
+  }
+
   private async fight() {
     if (this.phase !== "deploy" || this.paused) return;
     unlockAudio();
@@ -393,6 +411,7 @@ export class GameScreen {
     const seen = new Set(m.sides[1].seen.map((p) => p.id));
     this.view.markReveal(m.sides[1].pieces.filter((p) => !seen.has(p.id)).map((p) => p.id));
     this.battle = m.makeBattle(true);
+    this.pinBattle();
     this.phase = "battle";
     this.acc = 0;
     // A beat to see what the rival added before the clash starts.

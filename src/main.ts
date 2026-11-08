@@ -736,6 +736,8 @@ async function boot() {
   settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
+  // Dev only: play any level from a script without a reload (tools/sprite-mem.mjs plays several back to back).
+  if (import.meta.env.DEV) (window as any).__playLevel = (id: number) => { const l = LEVELS.find((x) => x.id === id); if (l) playLevel(l); return !!l; };
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
   if (q.has("skin")) await import("./ui/skins").then((m) => m.debugSkin(q.get("skin")!, q.get("keepstate")));
   if (q.has("level")) { const l = LEVELS.find((x) => x.id === Number(q.get("level"))); if (l) return playLevel(l); }

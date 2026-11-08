@@ -142,5 +142,13 @@ Runtime juice on top of the frames (board.ts, all off in calm mode / reduce moti
 a springy stretch on the blow (`strikeSquash`, scaled by motion class), the existing hit-stop (2-4 frames at 60 Hz on
 big hits, juice.ts), a white hit flash and a knockback nudge away from the blow, ranged recoil on each shot, the
 drop-in and battle-start hop with landing squash and dust, a contact shadow that shrinks and fades with hop height,
-and heavy footfall dust. Until a sheet has loaded and tinted, the drawn token stands in. Card portraits stay in
+and heavy footfall dust. Until a sheet has loaded and tinted, the drawn token stands in.
+
+Tinted sheets are a budgeted cache (`SHEET_BUDGET` 256 MiB in sprites.ts; one team's full set is ~1.1 GB decoded).
+Each canvas counts w x h x 4 bytes and when `frame()` last asked for it; over budget, the least recently used sheets go
+first (canvas resized to 0 x 0 so WebKit frees it at once) and rebuild on demand, the lower tier standing in meanwhile.
+Never evicted: sheets pinned by `preload()` for the current battle (game.ts pins every body on the board at its rank,
+and what it spawns, as each fight starts; the roster warm-up at level start is unpinned) and sheets drawn in the last
+3 s on the current screen. `pickEvictions` is the pure policy (tests/sheetCache.test.ts); `node tools/sprite-mem.mjs`
+plays ten levels back to back in headless WebKit and prints the peak (385.5 MiB unbounded, 255.9 MiB budgeted). Card portraits stay in
 `public/portraits`.

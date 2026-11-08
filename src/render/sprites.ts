@@ -44,8 +44,83 @@ export interface Manifest {
 let manifest: Manifest | null = null;
 let loading: Promise<void> | null = null;
 const portraits = new Map<string, HTMLImageElement | null>();
-/** "<sheet key>|<side>" -> that team's tinted canvas, "loading", or null when the files failed. */
-const tinted = new Map<string, HTMLCanvasElement | "loading" | null>();
+
+// ---- the tinted sheet cache: a byte budget with least-recently-used eviction
+/** Most decoded bytes the tinted sheet canvases may hold. One team's full set is ~1.1 GB and iOS kills a WKWebView
+ *  long before that on smaller phones; a battle needs ~140 MB. */
+export const SHEET_BUDGET = 256 * 1024 * 1024;
+/** A sheet drawn this recently (ms) belongs to the screen being shown and is never evicted. */
+export const SHEET_RECENT_MS = 3000;
+/** preload() calls this close together (ms) are one screen's: a later call starts a new screen's pins. */
+const SCENE_GAP_MS = 1000;
+interface Slot { c: HTMLCanvasElement | "loading" | null; bytes: number; used: number; }
+/** "<sheet key>|<side>" -> that team's tinted canvas ("loading", or null when the file failed), its decoded bytes and
+ *  when it was last asked for. */
+const tinted = new Map<string, Slot>();
+/** Sheets the current battle or screen preloaded: never evicted while it lasts. */
+let pins = new Set<string>();
+let pinAt = -Infinity;
+/** When the current screen's pins were set: sheets last drawn before it belong to a screen that is gone. */
+let sceneStart = -Infinity;
+let lastEnforce = -Infinity;
+let budget = SHEET_BUDGET, total = 0, peak = 0, evictions = 0;
+const evictListeners: ((c: HTMLCanvasElement) => void)[] = [];
+const clock = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+export interface CacheEntry { id: string; bytes: number; used: number; pinned: boolean; }
+/** Which sheets to evict to bring `total` decoded bytes under `budget`: least recently used first, skipping pinned
+ *  ones, ones drawn in the last `recentMs` since the current screen began (`sceneStart`; sheets last drawn before it
+ *  belong to a screen that is gone) and ones still loading (no bytes). Pure, for the cache and its tests. */
+export function pickEvictions(entries: CacheEntry[], total: number, budget: number, now: number, recentMs = SHEET_RECENT_MS, sceneStart = -Infinity): string[] {
+  if (total <= budget) return [];
+  const out: string[] = [];
+  const inUse = (e: CacheEntry) => e.pinned || (e.used >= sceneStart && now - e.used < recentMs);
+  const free = entries.filter((e) => e.bytes > 0 && !inUse(e)).sort((a, b) => a.used - b.used);
+  for (const e of free) {
+    if (total <= budget) break;
+    out.push(e.id);
+    total -= e.bytes;
+  }
+  return out;
+}
+
+/** Let go of a canvas's pixels now (WebKit frees a canvas's backing store when it is resized to nothing). */
+function release(c: HTMLCanvasElement) { c.width = 0; c.height = 0; }
+
+function drop(id: string) {
+  const sl = tinted.get(id);
+  if (!sl) return;
+  if (sl.c && sl.c !== "loading") { for (const f of evictListeners) f(sl.c); release(sl.c); }
+  total -= sl.bytes;
+  tinted.delete(id);
+  evictions++;
+}
+
+/** Evict least-recently-used sheets the current screen isn't using until the cache (plus `incoming` bytes about to be
+ *  added) is within budget. */
+function enforceBudget(incoming = 0) {
+  lastEnforce = clock();
+  if (total + incoming <= budget) return;
+  const entries = [...tinted].map(([id, sl]) => ({ id, bytes: sl.bytes, used: sl.used, pinned: pins.has(id) }));
+  for (const id of pickEvictions(entries, total + incoming, budget, lastEnforce, SHEET_RECENT_MS, sceneStart)) drop(id);
+}
+
+/** Called with each canvas the cache evicts, before its pixels go (caches keyed by it can let go too). */
+export function onSheetEvict(f: (c: HTMLCanvasElement) => void) { evictListeners.push(f); }
+/** The cache's decoded bytes now and at most so far, its canvases, evictions and budget (tools/sprite-mem.mjs). */
+export function sheetCacheStats() {
+  let sheets = 0, pinned = 0, inUse = 0;
+  const now = clock();
+  for (const [id, sl] of tinted) {
+    if (!sl.c || sl.c === "loading") continue;
+    sheets++;
+    if (pins.has(id)) pinned += sl.bytes;
+    if (pins.has(id) || (sl.used >= sceneStart && now - sl.used < SHEET_RECENT_MS)) inUse += sl.bytes;
+  }
+  return { bytes: total, peak, sheets, evictions, budget, pinned, inUse };
+}
+/** Change the byte budget (tools and tests; Infinity keeps every sheet, as before the cache was bounded). */
+export function setSheetBudget(b: number) { budget = b; enforceBudget(); }
 
 const base = () => (import.meta as any).env?.BASE_URL ?? "./";
 
@@ -114,7 +189,9 @@ function pixels(img: HTMLImageElement): ImageData {
   c.width = img.naturalWidth; c.height = img.naturalHeight;
   const g = c.getContext("2d", { willReadFrequently: true })!;
   g.drawImage(img, 0, 0);
-  return g.getImageData(0, 0, c.width, c.height);
+  const d = g.getImageData(0, 0, c.width, c.height);
+  release(c); // the scratch canvas: its pixels are in d now
+  return d;
 }
 
 function buildSheet(key: string, side: Side) {
@@ -122,19 +199,27 @@ function buildSheet(key: string, side: Side) {
   if (!manifest || tinted.has(id)) return;
   const sheet = manifest.sheets[key];
   if (!sheet) return;
-  tinted.set(id, "loading");
+  tinted.set(id, { c: "loading", bytes: 0, used: clock() });
   loadImage(`${base()}atlas/${key}.webp`)
     .then((img) => {
       const src = pixels(img);
+      img.src = "";
       const out = new ImageData(src.width, src.height);
       // the active direction's team colours, so units match the rest of the app even before a re-render
       tintIndexed(src.data, tintPalette(decodePalette(sheet.pal), TEAM[side]), out.data);
       const c = document.createElement("canvas");
       c.width = out.width; c.height = out.height;
       c.getContext("2d")!.putImageData(out, 0, 0);
-      tinted.set(id, c);
+      const sl = tinted.get(id);
+      if (!sl) { release(c); return; } // dropped while it loaded
+      const bytes = c.width * c.height * 4;
+      enforceBudget(bytes); // make room first, so the cache never holds more than the budget (unless all of it is in use)
+      sl.c = c;
+      sl.bytes = bytes;
+      total += bytes;
+      peak = Math.max(peak, total);
     })
-    .catch(() => tinted.set(id, null));
+    .catch(() => { const sl = tinted.get(id); if (sl) sl.c = null; });
 }
 
 /** A frame ready to draw: the source rect in `img`, the ground anchor inside it, and whether to mirror it. */
@@ -170,14 +255,19 @@ export function frame(kind: string, tier: number, side: Side, anim: Anim, phase:
   if (t == null) return null;
   let key = `${kind}_t${t}`;
   if (!manifest.sheets[key]) return null;
-  let tc = tinted.get(`${key}|${side}`);
-  if (tc === undefined) buildSheet(key, side);
+  const now = clock();
+  // sheets age out of "recent" while nothing new is built: re-check the budget a few times a second
+  if (total > budget && now - lastEnforce > 250) enforceBudget();
+  const sl = tinted.get(`${key}|${side}`);
+  if (sl === undefined) buildSheet(key, side);
+  else sl.used = now;
+  let tc = sl?.c;
   if (!tc || tc === "loading") {
-    // While a newly reached tier tints, keep showing the highest lower tier that is ready.
+    // While a newly reached tier tints (or rebuilds after an eviction), keep showing the highest lower tier that is ready.
     tc = undefined;
     for (const lt of manifest.units[kind].tiers.filter((x) => x < t).reverse()) {
-      const c = tinted.get(`${kind}_t${lt}|${side}`);
-      if (c && c !== "loading") { key = `${kind}_t${lt}`; tc = c; break; }
+      const lo = tinted.get(`${kind}_t${lt}|${side}`);
+      if (lo?.c && lo.c !== "loading") { key = `${kind}_t${lt}`; tc = lo.c; lo.used = now; break; }
     }
     if (!tc) return null;
   }
@@ -228,14 +318,25 @@ export function whenPortrait(kind: string, tier = 1): Promise<HTMLImageElement |
   }));
 }
 
-/** Warm one team's atlases for a set of kinds at the given tiers (all rendered tiers when omitted). */
-export function preload(kinds: string[], side: Side, tiers?: number[]) {
+/** Warm one team's atlases for a set of kinds at the given tiers (all rendered tiers when omitted). A call starts the
+ *  battle or screen being set up (calls within SCENE_GAP_MS of each other are one screen's; a later call releases the
+ *  previous screen's pins and lets its sheets go first). With pin (the default) the budget never evicts these sheets
+ *  while the screen lasts: pin what is actually on the board; warm a whole roster with pin: false. */
+export function preload(kinds: string[], side: Side, tiers?: number[], opts: { pin?: boolean } = {}) {
   if (!manifest) return;
+  const now = clock();
+  if (now - pinAt > SCENE_GAP_MS) { pins = new Set(); sceneStart = now; }
+  pinAt = now;
   for (const k of kinds) {
     const u = manifest.units[k];
     if (!u) continue;
-    for (const t of tiers ? [...new Set(tiers.map((x) => tierFor(k, x)!))] : u.tiers) buildSheet(`${k}_t${t}`, side);
+    for (const t of tiers ? [...new Set(tiers.map((x) => tierFor(k, x)!))] : u.tiers) {
+      const key = `${k}_t${t}`;
+      if (opts.pin !== false) pins.add(`${key}|${side}`);
+      buildSheet(key, side);
+    }
   }
+  enforceBudget();
 }
 
 const heights = new Map<string, number>();

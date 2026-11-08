@@ -117,9 +117,11 @@ export class TdView {
     this.gctx = this.groundCanvas.getContext("2d", { alpha: false })!;
     this.run = run;
     this.cam = new TdCamera(run.map.w, run.map.h);
-    const kinds = new Set<string>();
-    for (const w of run.waves) for (const g of w.groups) kinds.add(g.kind);
-    preload([...kinds, "mite", "thrall", "golemling"], 1, [1, 2, 3, 4]);
+    // Pin each wave's kinds at that wave's rank (not every tier of every kind: that outgrows the sheet budget).
+    const byRank = new Map<number, Set<string>>();
+    for (const w of run.waves) for (const g of w.groups) { if (!byRank.has(w.rank)) byRank.set(w.rank, new Set()); byRank.get(w.rank)!.add(g.kind); }
+    preload(["mite", "thrall", "golemling"], 1, [1]);
+    for (const [rank, kinds] of byRank) preload([...kinds], 1, [rank]);
     void loadVfx();
     void loadBackdrop(run.map.id).then((b) => {
       this.backdropPending = false;
