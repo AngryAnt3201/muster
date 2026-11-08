@@ -71,22 +71,142 @@ class Pal:
                 setattr(self, name, t(col, spec=spec.get(name, 0.0) * K.STYLE.SPEC))
 
 
-# Animation state for the v3 frame renderer. gait is the walk-cycle phase (0..1) while rendering walk frames,
-# None otherwise. Builders keep their (k, P, tier, pose) signature; body plans read this to step their legs.
-ANIM = {"gait": None}
+# Animation state for the v3 frame renderer (art/render_all.py frame_plan sets it before each build). Builders keep
+# their (k, P, tier, pose) signature and read it through the helpers below:
+#   clip    idle | walk | attack | death | cast
+#   gait    walk-cycle phase 0..1 (None outside walk); step() turns it into foot motion
+#   idle    idle-loop phase 0..1 (None outside idle); breath() and flap() read it
+#   blend   pose weight for attack/cast frames: < 0 wind-up (away from the strike), 0 ready, 1 strike, > 1 overshoot
+#   fx      the strike's own effects (arcs, sparks, muzzle flash, spell bursts) show on this frame
+#   bob     upper-body lift in body units (walk bounce, breathing); humanoid() applies it above the hips
+#   swing   walk arm swing in body units (0 outside walk)
+#   death   death progress 0..1 (None outside death): arms fling, wings go limp
+#   weight  heavy | mid | light (the kind's motion class)
+ANIM = {"gait": None, "clip": "idle", "idle": None, "blend": None, "fx": None, "bob": 0.0, "swing": 0.0, "death": None,
+        "weight": "mid", "stride": 0.0}
+
+
+def reset_anim():
+    ANIM.update(gait=None, clip="idle", idle=None, blend=None, fx=None, bob=0.0, swing=0.0, death=None, weight="mid", stride=0.0)
 
 
 def gait():
     return ANIM["gait"]
 
 
-def step(phase_offset=0.0, stride=1.0, lift=1.0):
-    """(dx, dz) foot offset for a leg whose cycle is shifted by phase_offset (0..1). (0, 0) when not walking."""
+def clip():
+    return ANIM["clip"]
+
+
+def breath():
+    """-1..1 breathing phase in the idle loop (0 elsewhere)."""
+    p = ANIM["idle"]
+    return 0.0 if p is None else math.sin(2 * math.pi * p)
+
+
+def blend(pose):
+    """Pose weight towards the attack/cast pose (see ANIM). A plain build with pose='attack' gets 1."""
+    if pose == "idle":
+        return 0.0
+    b = ANIM["blend"]
+    return 1.0 if b is None else b
+
+
+def strike(pose):
+    """Whether the strike's own effects (arcs, sparks, bursts) belong on this frame."""
+    if pose == "idle":
+        return False
+    f = ANIM["fx"]
+    return True if f is None else bool(f)
+
+
+def mix(pose, rest, hit, wind=None, k=0.5, cast=None):
+    """Blend a point between the rest pose and the attack pose by blend(pose). Below 0 it moves towards `wind`
+    (default: the rest pose pushed away from the strike by k), above 1 it overshoots past the strike. In the cast clip
+    `cast` (when given) is the target instead of the attack pose."""
+    if pose == "cast" and cast is not None:
+        hit = cast
+    t = blend(pose)
+    a, b = Vector(rest), Vector(hit)
+    if t >= 0:
+        return a + (b - a) * t
+    w = Vector(wind) if wind is not None else a + (a - b) * k
+    return a + (w - a) * (-t)
+
+
+def mixd(pose, rest, hit, wind=None, k=0.5, cast=None):
+    """mix() for a direction (normalised)."""
+    if pose == "cast" and cast is not None:
+        hit = cast
+    v = mix(pose, Vector(rest).normalized(), Vector(hit).normalized(), None if wind is None else Vector(wind).normalized(), k)
+    return v.normalized() if v.length > 1e-6 else Vector(hit).normalized()
+
+
+def mixf(pose, rest, hit, wind=None, k=0.5, cast=None):
+    if pose == "cast" and cast is not None:
+        hit = cast
+    t = blend(pose)
+    if t >= 0:
+        return rest + (hit - rest) * t
+    w = wind if wind is not None else rest + (rest - hit) * k
+    return rest + (w - rest) * (-t)
+
+
+def casting(pose):
+    return pose == "cast"
+
+
+def flap(cruise=34.0, hover=24.0):
+    """Wing flap angle in degrees for fliers: a full beat over the walk (flight) cycle, a softer hover beat over the
+    idle loop, wings swept and still for the strike and folding limp as it dies."""
+    g, p, d = ANIM["gait"], ANIM["idle"], ANIM["death"]
+    if g is not None:
+        return cruise * math.cos(2 * math.pi * g)
+    if p is not None:
+        return hover * math.cos(2 * math.pi * p)
+    if d is not None:
+        return 20.0 - 50.0 * d
+    b = ANIM["blend"]
+    return 0.0 if b is None else -10.0 * max(-1.0, min(1.0, b))
+
+
+def push(k, m):
+    """Push a transform that lasts until the enclosing k.at()/k.mat() frame ends (everything the builder draws after
+    this call follows it: weapons, packs, capes)."""
+    k.stack.append(k.stack[-1] @ m)
+
+
+def _scale_of(k):
+    m = k.stack[-1]
+    return (m.col[0].xyz.length + m.col[1].xyz.length) / 2
+
+
+def step(phase_offset=0.0, stride=1.0, lift=1.0, k=None):
+    """(dx, dz) foot offset for a leg whose cycle is shifted by phase_offset (0..1). (0, 0) when not walking.
+
+    Contact at phase 0 with the foot stride ahead, planted for half the cycle while it slides back at a constant rate
+    (so a planted foot keeps pace with the ground when the runtime plays one cycle per manifest `stride` travelled),
+    then lifted and swung forward with an ease. Pass k to record the stride for the manifest."""
     g = ANIM["gait"]
     if g is None:
         return 0.0, 0.0
-    a = 2 * math.pi * (g + phase_offset)
-    return stride * math.sin(a), lift * max(0.0, math.cos(a))
+    if k is not None:
+        ANIM["stride"] = max(ANIM["stride"], 4.0 * stride * _scale_of(k))
+    ph = (g + phase_offset) % 1.0
+    if ph < 0.5:
+        return stride * (1.0 - 4.0 * ph), 0.0
+    u = (ph - 0.5) / 0.5
+    e = u * u * (3 - 2 * u)
+    return stride * (-1.0 + 2.0 * e), lift * math.sin(math.pi * u)
+
+
+def arm_swing(side):
+    """Walk arm swing for a hand (+x forward), opposite to the leg on the same side (L leg contacts at phase 0)."""
+    g = ANIM["gait"]
+    if g is None:
+        return 0.0
+    ph = g + (0.5 if side == "L" else 0.0)
+    return ANIM["swing"] * math.cos(2 * math.pi * ph)
 
 
 # tier scale: the silhouette grows with rank
@@ -140,18 +260,42 @@ HEAD = Vector((0.02, 0.0, 0.54))
 HEAD_R = 0.108
 
 
-def humanoid(k, P, tier, hands, look=None, bulk=1.0, lean=0.0, head_turn=0.0, elbows=None):
-    """hands: {'R': (x,y,z), 'L': (x,y,z)} in body frame. Returns dict of anchor points."""
+def humanoid(k, P, tier, hands, look=None, bulk=1.0, lean=0.0, head_turn=0.0, elbows=None, seated=False, grip2=False):
+    """hands: {'R': (x,y,z), 'L': (x,y,z)} in body frame. Returns dict of anchor points.
+
+    Motion (ANIM): the upper body (torso, arms, head and everything the builder draws after this call) rides the walk
+    bounce and breathing through a transform pushed until the builder's frame ends; legs step from the bobbing hips
+    to feet that stay on the ground. Hands passed as Vectors are moved in place by the arm swing and the death fling,
+    so weapons the builder draws at them afterwards follow. seated: a rider (no stepping, no own bounce). grip2: both
+    hands hold one weapon, so the off hand swings with the weapon hand."""
     lk = look or look_for(tier)
     sh = SHOULDER * bulk
+    bob = 0.0 if seated else ANIM["bob"]
+    d = ANIM["death"]
+    # per-hand secondary motion, applied in place so the builder's weapons follow
+    for side in ("R", "L"):
+        hp = hands.get(side)
+        if not isinstance(hp, Vector):
+            continue
+        s = -1 if side == "R" else 1
+        sw = 0.0 if seated else arm_swing("R" if grip2 else side) * (0.55 if (side == "R" or grip2) else 1.0)
+        off = Vector((sw, 0.0, abs(sw) * 0.25))
+        if d is not None:
+            # thrown up and out by the blow, then flopping down
+            f = math.sin(math.pi * min(1.0, d * 1.6))
+            off += Vector((-0.05, s * 0.06, 0.1)) * f + Vector((0.0, s * 0.03, -0.12)) * max(0.0, d - 0.55)
+        hp += off
     with k.at(rot=(0, lean, 0)):
-        # legs + boots
+        # legs + boots (hips ride the bounce, planted feet stay put)
         for s in (1, -1):
-            fx, fz = step(0.0 if s > 0 else 0.5, stride=0.075, lift=0.04)
-            k.rod((0.0, s * 0.065, 0.21), (0.015 + fx, s * 0.075, 0.05 + fz), 0.042, _m(P, lk["legs"]))
+            fx, fz = (0.0, 0.0) if seated else step(0.0 if s > 0 else 0.5, stride=STRIDE.get(ANIM["weight"], 0.08), lift=0.05, k=k)
+            k.rod((0.0, s * 0.065, 0.21 + bob), (0.015 + fx, s * 0.075, 0.05 + fz), 0.042, _m(P, lk["legs"]))
             k.sphere(0.05, _m(P, lk["boots"]), loc=(0.035 + fx, s * 0.076, 0.035 + fz), scale=(1.45, 1.0, 0.72))
-        # torso
-        k.sphere(1.0, _m(P, lk["torso"]), loc=(0, 0, 0.31), scale=(0.122, 0.158 * bulk, 0.148))
+    push(k, Matrix.Translation((0.0, 0.0, bob)))
+    br = breath()
+    with k.at(rot=(0, lean, 0)):
+        # torso (the chest swells a touch on the in-breath)
+        k.sphere(1.0, _m(P, lk["torso"]), loc=(0, 0, 0.31), scale=(0.122, 0.158 * bulk, 0.148 * (1 + 0.025 * br)))
         k.sphere(1.0, _m(P, lk["belt"]), loc=(0.0, 0, 0.225), scale=(0.124, 0.152 * bulk, 0.04))
         if lk.get("chest"):
             k.sphere(1.0, _m(P, lk["chest"]), loc=(0.03, 0, 0.33), scale=(0.11, 0.14 * bulk, 0.115))
@@ -161,7 +305,7 @@ def humanoid(k, P, tier, hands, look=None, bulk=1.0, lean=0.0, head_turn=0.0, el
         # shoulders + arms
         anchors = {}
         for side, s in (("R", -1), ("L", 1)):
-            sp = Vector((0.0, s * sh, 0.405))
+            sp = Vector((0.0, s * sh, 0.405 + 0.006 * br))
             hp = Vector(hands[side])
             # elbow: out to the side and a little down/back
             mid = (sp + hp) / 2
@@ -183,6 +327,10 @@ def humanoid(k, P, tier, hands, look=None, bulk=1.0, lean=0.0, head_turn=0.0, el
             halo(k, P, Vector(HEAD) + Vector((0, 0, 0.15)))
     anchors["head"] = Vector(HEAD)
     return anchors
+
+
+# humanoid stride (half a step, body units) by motion class: heavy bodies take long slow steps, light ones short quick ones
+STRIDE = {"heavy": 0.09, "mid": 0.085, "light": 0.08}
 
 
 def pauldron(k, P, tier, kind, sp, s, bulk=1.0):

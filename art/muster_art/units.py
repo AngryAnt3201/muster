@@ -64,7 +64,9 @@ def emblem(k, P, kind, mat, z=0.145):
 @unit("mine", 0.22)
 def mine(k, P, tier, pose):
     S = 0.22 / 0.2 * T(tier, 0.9, 1.0, 1.08, 1.16)
-    armed = pose == "attack"
+    armed = H.strike(pose)
+    press = H.mixf(pose, 0.0, 0.012, wind=-0.006)
+    pulse = 1.0 + 0.12 * H.breath()
     with k.at(scale=S):
         if tier == 1:
             k.cyl(0.16, 0.07, P.wood, loc=(0, 0, 0.035), seg=18, bevel=0.015)
@@ -87,10 +89,10 @@ def mine(k, P, tier, pose):
                 p = V((math.cos(a) * 0.12, math.sin(a) * 0.12, 0.072))
                 k.sphere(0.014, P.iron_dk if tier == 2 else P.gold, loc=p, outline=0.005)
                 if tier >= 3:
-                    out = 0.26 if armed else 0.22
+                    out = H.mixf(pose, 0.22, 0.26, wind=0.2)
                     k.spike(V((math.cos(a) * 0.15, math.sin(a) * 0.15, 0.04)), V((math.cos(a) * out, math.sin(a) * out, 0.04)), 0.025, P.steel if tier == 3 else P.glow_lt)
-            k.cyl(0.075, 0.035, P.team, loc=(0, 0, 0.085 - (0.012 if armed else 0)), seg=16, bevel=0.01)
-            k.sphere(0.04, P.team_lt if tier == 2 else P.glow, loc=(0, 0, 0.1 - (0.012 if armed else 0)), scale=(1, 1, 0.6))
+            k.cyl(0.075, 0.035, P.team, loc=(0, 0, 0.085 - press), seg=16, bevel=0.01)
+            k.sphere(0.04 * pulse, P.team_lt if tier == 2 else P.glow, loc=(0, 0, 0.1 - press), scale=(1, 1, 0.6))
             if tier == 4:
                 for i in range(3):
                     a = 2 * math.pi * i / 3 + 0.5
@@ -106,19 +108,15 @@ def mine(k, P, tier, pose):
 @unit("blades", 0.24)
 def blades(k, P, tier, pose):
     S = hum_scale(0.24, tier) * 0.95
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, cape=T(tier, None, None, "short", "energy"), head=T(tier, "hair", "helm", "helm", "helm"))
-    if atk:
-        hand = V((0.27, -0.05, 0.38))
-        d = H.dir2(60, -0.05)
-        off = V((0.12, 0.2, 0.3))
-    else:
-        hand = V((0.2, -0.19, 0.3))
-        d = H.dir2(-15, 0.12)
-        off = V((0.12, 0.2, 0.3))
+    # cocked back over the right shoulder, then a flat sweep across the front
+    hand = H.mix(pose, (0.2, -0.19, 0.3), (0.27, -0.05, 0.38), wind=(0.04, -0.25, 0.46))
+    d = H.mixd(pose, H.dir2(-15, 0.12), H.dir2(60, -0.05), wind=H.dir2(-105, 0.45))
+    off = H.mix(pose, (0.12, 0.2, 0.3), (0.16, 0.2, 0.34), wind=(0.2, 0.16, 0.38))
     L = T(tier, 0.28, 0.33, 0.38, 0.42)
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": hand, "L": off}, lk, head_turn=15 if atk else 0)
+        humanoid(k, P, tier, {"R": hand, "L": off}, lk, head_turn=H.mixf(pose, 0, 15, wind=-8))
         H.sword(k, P, hand, d, L, tier, width=0.05 + 0.006 * tier)
         if atk:
             arc_fx(k, P, tier, 0.5, -40, 70, 0.36)
@@ -128,7 +126,6 @@ def blades(k, P, tier, pose):
 @unit("ranger", 0.25)
 def ranger(k, P, tier, pose):
     S = hum_scale(0.25, tier)
-    drawn = pose == "attack"
     lk = look_for(tier, head="hood", crest=None,
                   pads=T(tier, None, None, "steel", "crystal"),
                   chest=T(tier, None, "leather", "leather", "pearl"),
@@ -136,16 +133,30 @@ def ranger(k, P, tier, pose):
                   legs=T(tier, "cloth_dk", "leather", "leather_dk", "pearl"),
                   arms=T(tier, None, "leather", "leather", None),
                   halo=False, gloves="leather")
-    grip = V((0.33, 0.0, 0.40)) if drawn else V((0.24, 0.07, 0.36))
-    draw_hand = V((0.03, -0.03, 0.42)) if drawn else V((0.12, -0.12, 0.34))
+    # wind-up = the draw (bow raised, string back to the cheek); the blow = the release (string snaps forward, the
+    # drawing hand flies back open), then the bow lowers to rest
+    b = H.blend(pose)
+    rest_g, aim_g = V((0.24, 0.07, 0.36)), V((0.33, 0.0, 0.40))
+    rest_h, full_h, loose_h = V((0.12, -0.12, 0.34)), V((0.03, -0.03, 0.42)), V((-0.03, -0.09, 0.46))
+    if b < 0:
+        t = -b
+        grip, draw_hand = rest_g.lerp(aim_g, min(1, t * 1.4)), rest_h.lerp(full_h, t)
+        drawn, twist = t > 0.3, 25 * (1 - min(1, t * 1.4))
+    else:
+        t = min(1.0, b)
+        grip, draw_hand = rest_g.lerp(aim_g, t), rest_h.lerp(loose_h, t)
+        drawn, twist = False, 25 * (1 - t)
     span = T(tier, 0.2, 0.29, 0.32, 0.36)
     with k.at(scale=S):
         humanoid(k, P, tier, {"L": grip, "R": draw_hand}, lk)
         if drawn:
             H.bow(k, P, grip, tier, True, span=span, draw_to=draw_hand)
         else:
-            with k.at(grip, rot=(0, 0, 25)):
+            with k.at(grip, rot=(0, 0, twist)):
                 H.bow(k, P, (0, 0, 0), tier, False, span=span)
+        if H.strike(pose) and b > 0.95:
+            # the loosed arrow's streak just off the bow
+            k.tube([grip + V((0.06, 0, 0.0)), grip + V((0.3, 0, -0.01))], 0.012, P.white if tier < 4 else P.glow_lt, r_end=0.003, outline=0)
         if tier >= 2:
             k.rod((-0.12, 0.06, 0.3), (-0.15, -0.04, 0.5), 0.035, P.leather_dk)
             for i in range(3):
@@ -191,19 +202,20 @@ def tower_shield(k, P, tier, center, normal, w, h):
 @unit("bulwark", 0.4)
 def bulwark(k, P, tier, pose):
     S = hum_scale(0.4, tier) * 0.68
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, pads=T(tier, "cloth", "steel", "gold", "crystal"), chest=T(tier, "leather", "steel", "steel", "pearl"),
                   head=T(tier, "cap", "helm", "helm", "helm"), crest=T(tier, None, "team", "plume", "plume"),
                   cape=T(tier, None, None, "long", "energy"))
-    sx = 0.36 if atk else 0.27
+    # mace hauled up behind the shield, then brought down in front as the shield shoves forward
+    sx = H.mixf(pose, 0.27, 0.36, wind=0.24)
     sh_c = V((sx, 0.02, 0.33))
-    nrm = V((1, 0, 0.75 if not atk else 0.55)).normalized()
-    mace_hand = V((0.12, -0.22, 0.5)) if atk else V((0.16, -0.21, 0.3))
+    nrm = V((1, 0, H.mixf(pose, 0.75, 0.55, wind=0.8))).normalized()
+    mace_hand = H.mix(pose, (0.16, -0.21, 0.3), (0.3, -0.14, 0.36), wind=(0.02, -0.24, 0.62))
     with k.at(scale=S):
         humanoid(k, P, tier, {"L": sh_c + V((-0.06, 0.06, 0.0)), "R": mace_hand}, lk, bulk=1.25)
         w = T(tier, 0.44, 0.5, 0.54, 0.58)
         tower_shield(k, P, tier, sh_c, nrm, w, T(tier, 0.36, 0.48, 0.52, 0.56))
-        md = H.dir2(-25, 0.6 if atk else 0.25).normalized()
+        md = H.mixd(pose, H.dir2(-25, 0.25), H.dir2(15, -0.4), wind=H.dir2(-80, 1.6))
         k.rod(mace_hand - md * 0.05, mace_hand + md * 0.2, 0.018, P.wood_dk)
         mh = mace_hand + md * 0.22
         k.ball(0.05 + 0.006 * tier, T(tier, P.iron, P.steel, P.gold, P.glow_lt), loc=mh)
@@ -219,13 +231,15 @@ def bulwark(k, P, tier, pose):
 @unit("medic", 0.25)
 def medic(k, P, tier, pose):
     S = hum_scale(0.25, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     lk = look_for(tier, head="hood_light", torso="team", pads=T(tier, None, "cloth", "gold", "crystal"),
                   chest=T(tier, None, None, "pearl", "pearl"), cape=T(tier, None, "short", "long", "energy"),
                   legs="cloth_dk", belt=T(tier, "leather", "leather", "gold", "gold"))
-    sh = V((0.3, -0.1, 0.5)) if atk else V((0.14, -0.2, 0.3))
-    top = V((0.46, -0.08, 0.7)) if atk else V((0.2, -0.24, 0.72))
-    off = V((0.25, 0.12, 0.42)) if atk else V((0.1, 0.19, 0.3))
+    # heal: the staff swings out over the patient; revive (cast): raised high in both hands
+    sh = H.mix(pose, (0.14, -0.2, 0.3), (0.3, -0.1, 0.5), cast=(0.12, -0.1, 0.64))
+    top = H.mix(pose, (0.2, -0.24, 0.72), (0.46, -0.08, 0.7), cast=(0.18, -0.06, 1.04))
+    off = H.mix(pose, (0.1, 0.19, 0.3), (0.25, 0.12, 0.42), cast=(0.14, 0.16, 0.62))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": sh, "L": off}, lk)
         H.staff(k, P, sh, top, tier)
@@ -243,6 +257,10 @@ def medic(k, P, tier, pose):
         if atk:
             k.ball(0.06 + 0.01 * tier, P.heal, loc=top + V((0.03, 0, 0)), outline=0)
             k.torus(0.11 + 0.01 * tier, 0.01, P.heal, loc=top, outline=0)
+            if cast:
+                # the revive: a wide ring of light on the ground and a column over the staff
+                k.torus(0.3 + 0.02 * tier, 0.014, P.heal, loc=(0.0, 0, 0.02), outline=0)
+                k.ball(0.09 + 0.01 * tier, P.heal, loc=top + V((0, 0, 0.1)), outline=0)
 
 
 # ================================================================== 6 grenadier
@@ -262,15 +280,17 @@ def bomb(k, P, c, r, tier, lit=False):
 @unit("grenadier", 0.27)
 def grenadier(k, P, tier, pose):
     S = hum_scale(0.27, tier)
-    atk = pose == "attack"
     lk = look_for(tier, head=T(tier, "cap", "helm", "helm", "helm"), crest=T(tier, None, None, "team", "plume"),
                   cape=T(tier, None, None, None, "energy"), chest=T(tier, None, "leather", "steel", "pearl"))
-    throw = V((-0.08, -0.22, 0.58)) if atk else V((0.17, -0.18, 0.32))
-    off = V((0.28, 0.08, 0.42)) if atk else V((0.12, 0.2, 0.3))
+    # cocked back overhead, then the overarm lob: the bomb leaves the hand on the blow and a fresh one comes up after
+    b = H.blend(pose)
+    throw = H.mix(pose, (0.17, -0.18, 0.32), (0.3, -0.12, 0.52), wind=(-0.1, -0.22, 0.6))
+    off = H.mix(pose, (0.12, 0.2, 0.3), (0.2, 0.18, 0.36), wind=(0.3, 0.1, 0.46))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": throw, "L": off}, lk, bulk=1.05)
         br = T(tier, 0.075, 0.08, 0.088, 0.095)
-        bomb(k, P, throw + V((0.02, 0, br * 0.6)), br, tier, lit=True)
+        if b < 0.6:
+            bomb(k, P, throw + V((0.02, 0, br * 0.6)), br, tier, lit=True)
         if tier >= 2:
             # bandolier with small bombs across the chest
             pts = [V((0.07, 0.15, 0.42)), V((0.11, 0.0, 0.36)), V((0.07, -0.14, 0.27))]
@@ -292,18 +312,16 @@ def grenadier(k, P, tier, pose):
 @unit("shade", 0.24)
 def shade(k, P, tier, pose):
     S = hum_scale(0.24, tier)
-    atk = pose == "attack"
     lk = look_for(tier, head="hood_dark", torso="dark", crest=None, pads=T(tier, None, None, None, "crystal"),
                   chest=T(tier, None, "darker", "darker", "darker"), cape=None, legs="darker", boots="darker",
                   belt=T(tier, "leather_dk", "leather_dk", "team", "gold"), arms="dark", gloves="darker")
-    if atk:
-        r_h, l_h = V((0.33, -0.06, 0.36)), V((0.33, 0.07, 0.36))
-        rd, ld = H.dir2(8, -0.1), H.dir2(-8, -0.1)
-    else:
-        r_h, l_h = V((0.12, -0.2, 0.3)), V((0.12, 0.2, 0.3))
-        rd, ld = H.dir2(-50, 0.0), H.dir2(50, 0.0)
+    # both daggers drawn back wide, then a crossing double stab
+    r_h = H.mix(pose, (0.12, -0.2, 0.3), (0.33, -0.06, 0.36), wind=(0.0, -0.25, 0.42))
+    l_h = H.mix(pose, (0.12, 0.2, 0.3), (0.33, 0.07, 0.36), wind=(0.0, 0.25, 0.42))
+    rd = H.mixd(pose, H.dir2(-50, 0.0), H.dir2(8, -0.1), wind=H.dir2(-125, 0.3))
+    ld = H.mixd(pose, H.dir2(50, 0.0), H.dir2(-8, -0.1), wind=H.dir2(125, 0.3))
     L = T(tier, 0.16, 0.18, 0.22, 0.26)
-    with k.at(scale=S, rot=(0, 10 if atk else 0, 0)):
+    with k.at(scale=S, rot=(0, H.mixf(pose, 0, 10), 0)):
         humanoid(k, P, tier, {"R": r_h, "L": l_h}, lk, lean=6)
         # team scarf trailing behind: the colour cue from above
         sc = [V((0.0, 0.08, 0.47)), V((-0.12, 0.1, 0.45)), V((-0.24, 0.05, 0.42)), V((-0.34, 0.1, 0.38))]
@@ -314,7 +332,7 @@ def shade(k, P, tier, pose):
             for i, s in enumerate((-1, 1)):
                 k.prism([(0, 0), (-0.28, s * 0.12), (-0.2, s * 0.2), (-0.32, s * 0.26), (-0.02, s * 0.2)], 0.018, P.darker,
                         loc=(-0.03, s * 0.02, 0.42), rot=(0, -12, 0))
-        blades = [(r_h, rd)] + ([(l_h, ld)] if tier >= 2 or atk else [])
+        blades = [(r_h, rd)] + ([(l_h, ld)] if tier >= 2 or pose != "idle" else [])
         for hand, d in blades:
             H.sword(k, P, hand, d, L, tier, width=0.038, blade=T(tier, P.iron, P.steel, P.steel, P.glow_lt), guard=P.darker)
         if tier == 4:
@@ -325,18 +343,26 @@ def shade(k, P, tier, pose):
 
 # ================================================================== 8 lancer
 def mount(k, P, tier, gallop):
+    """The horse. gallop (0..1+, the attack blend) stretches the legs into the charge and drops the neck. Its body
+    bounces on the trot and pitches with it; the rider and saddle gear drawn after it ride along (parts.push)."""
+    from mathutils import Matrix
     coat = T(tier, P.coat, P.coat, P.coat_dk, P.pearl)
     mane = T(tier, P.hair, P.hair, P.darker, P.glow)
-    legs_f = 0.12 if gallop else 0.0
+    gal = max(-0.5, min(1.2, gallop))
+    legs_f = 0.12 * gal
+    bob = H.ANIM["bob"] * 1.3
+    g = H.gait()
+    pitch = 0.0 if g is None else 3.5 * math.sin(2 * math.pi * g)
     for sx, sy in ((0.17, 0.08), (0.17, -0.08), (-0.17, 0.08), (-0.17, -0.08)):
         dx = legs_f if sx > 0 else -legs_f
         # diagonal pairs move together in the gait
-        gx, gz = H.step(0.0 if (sx > 0) == (sy > 0) else 0.5, stride=0.11, lift=0.06)
+        gx, gz = H.step(0.0 if (sx > 0) == (sy > 0) else 0.5, stride=0.15, lift=0.08, k=k)
         dx += gx
-        k.rod((sx, sy, 0.36), (sx + dx, sy, 0.04 + gz), 0.035, coat)
+        k.rod((sx, sy, 0.36 + bob + sx * math.radians(pitch)), (sx + dx, sy, 0.04 + gz), 0.035, coat)
         k.cyl(0.04, 0.05, P.darker if tier < 4 else P.glow, loc=(sx + dx, sy, 0.03 + gz))
-    k.sphere(1.0, coat, loc=(0, 0, 0.42), scale=(0.31, 0.175, 0.15))
-    neck_top = V((0.36, 0, 0.62)) if not gallop else V((0.42, 0, 0.56))
+    H.push(k, Matrix.Translation((0, 0, bob)) @ Matrix.Rotation(math.radians(-pitch), 4, "Y"))
+    k.sphere(1.0, coat, loc=(0, 0, 0.42), scale=(0.31, 0.175, 0.15 * (1 + 0.03 * H.breath())))
+    neck_top = V((0.36, 0, 0.62)).lerp(V((0.42, 0, 0.56)), max(0.0, min(1.0, gal)))
     k.tube([V((0.2, 0, 0.45)), neck_top], 0.08, coat, r_end=0.055)
     hd = neck_top + V((0.08, 0, -0.03))
     k.sphere(1.0, coat, loc=hd, scale=(0.13, 0.065, 0.065), rot=(0, 25, 0))
@@ -360,16 +386,16 @@ def mount(k, P, tier, gallop):
 @unit("lancer", 0.36)
 def lancer(k, P, tier, pose):
     S = TIER_SCALE[tier] * 1.12
-    atk = pose == "attack"
     lk = look_for(tier, head=T(tier, "hair", "helm", "helm", "helm"), crest=T(tier, None, "team", "plume", "plume"),
                   cape=T(tier, None, None, "short", "energy"), pads=T(tier, None, "steel", "gold", "crystal"))
     with k.at(scale=S):
-        mount(k, P, tier, atk)
-        with k.at((-0.04, 0, 0.3), scale=0.78, rot=(0, 12 if atk else 0, 0)):
-            hand = V((0.12, -0.18, 0.38))
-            humanoid(k, P, tier, {"R": hand, "L": V((0.2, 0.12, 0.34))}, lk)
-            d = V((1, 0.05, -0.05 if atk else 0.12)).normalized()
-            tip = H.spear(k, P, hand, d, T(tier, 0.62, 0.72, 0.78, 0.84) + (0.12 if atk else 0), tier, back=0.3, head_len=0.14)
+        mount(k, P, tier, H.blend(pose))
+        # the lance lifts and draws back, then couches low and drives through
+        with k.at((-0.04, 0, 0.3), scale=0.78, rot=(0, H.mixf(pose, 0, 12, wind=-6), 0)):
+            hand = H.mix(pose, (0.12, -0.18, 0.38), (0.16, -0.16, 0.36), wind=(0.0, -0.2, 0.44))
+            humanoid(k, P, tier, {"R": hand, "L": V((0.2, 0.12, 0.34))}, lk, seated=True)
+            d = H.mixd(pose, (1, 0.05, 0.12), (1, 0.05, -0.05), wind=(1, 0.05, 0.35))
+            tip = H.spear(k, P, hand, d, T(tier, 0.62, 0.72, 0.78, 0.84) + H.mixf(pose, 0, 0.12, wind=-0.04), tier, back=0.3, head_len=0.14)
             if tier >= 3:
                 # pennant on the lance
                 base = V(hand) + d * 0.45
@@ -384,7 +410,16 @@ def lancer(k, P, tier, pose):
 @unit("ballista", 0.42)
 def ballista(k, P, tier, pose):
     S = T(tier, 0.88, 1.0, 1.08, 1.16) * 1.3
-    fire = pose == "attack"
+    fire = H.strike(pose)
+    b = H.blend(pose)
+    # wind-up: the winch takes the string back a notch more; the blow: string snaps forward and the bolt leaves;
+    # follow-through: arms quiver loose; recover: the string is hauled back and a new bolt nocked
+    if b <= 0:
+        nock_x, bend, bolt_x = -0.12 + 0.05 * b, 0.16 - 0.02 * b, -0.12 + 0.05 * b
+    elif b >= 0.8:
+        nock_x, bend, bolt_x = 0.27, 0.05, (0.3 + 0.35 * (b - 1.0)) if fire else None
+    else:
+        nock_x, bend, bolt_x = 0.27 + (-0.12 - 0.27) * (1 - b / 0.8), 0.05 + 0.11 * (1 - b / 0.8), (-0.12 if b < 0.3 else None)
     wood = T(tier, P.wood, P.wood, P.wood_dk, P.pearl)
     with k.at(scale=S):
         if tier >= 3:
@@ -400,22 +435,21 @@ def ballista(k, P, tier, pose):
         # bow arms
         arm = T(tier, P.wood_dk, P.wood_dk, P.wood_dk, P.glow)
         span = T(tier, 0.36, 0.4, 0.44, 0.48)
-        bend = 0.05 if fire else 0.16
         for s in (1, -1):
             pts = [V((0.32, s * 0.08, 0.34)), V((0.3, s * span * 0.6, 0.35)), V((0.32 - bend, s * span, 0.36))]
             k.tube(pts, 0.042 if tier < 4 else 0.046, arm, r_end=0.026, smooth_n=3)
             if tier >= 2:
                 k.sphere(0.03, P.iron if tier == 2 else P.gold, loc=pts[-1])
-        nock_x = 0.32 - bend if fire else -0.12
         for s in (1, -1):
             k.rod(V((0.32 - bend, s * span, 0.36)), V((nock_x, 0, 0.35)), 0.007, P.bone if tier < 4 else P.glow_lt, outline=0.004)
         # bolt
-        bx0 = 0.3 if fire else -0.12
+        bx0 = bolt_x if bolt_x is not None else 0.3
         bl = T(tier, 0.52, 0.54, 0.56, 0.58)
-        k.rod(V((bx0, 0, 0.37)), V((bx0 + bl, 0, 0.37)), 0.02, P.wood if tier < 4 else P.glow_lt)
-        k.spike(V((bx0 + bl, 0, 0.37)), V((bx0 + bl + 0.1, 0, 0.37)), 0.032, P.steel if tier < 4 else P.white)
-        for s in (1, -1):
-            k.prism([(0, 0), (0.08, 0), (0.0, s * 0.045)], 0.008, P.team, loc=(bx0 + 0.01, 0, 0.375))
+        if bolt_x is not None:
+            k.rod(V((bx0, 0, 0.37)), V((bx0 + bl, 0, 0.37)), 0.02, P.wood if tier < 4 else P.glow_lt)
+            k.spike(V((bx0 + bl, 0, 0.37)), V((bx0 + bl + 0.1, 0, 0.37)), 0.032, P.steel if tier < 4 else P.white)
+            for s in (1, -1):
+                k.prism([(0, 0), (0.08, 0), (0.0, s * 0.045)], 0.008, P.team, loc=(bx0 + 0.01, 0, 0.375))
         if fire:
             for i in range(3):
                 k.rod(V((bx0 - 0.1 - i * 0.12, (i - 1) * 0.03, 0.37)), V((bx0 - 0.02 - i * 0.12, (i - 1) * 0.03, 0.37)), 0.006,
@@ -438,7 +472,9 @@ def ballista(k, P, tier, pose):
 @unit("hive", 0.45)
 def hive(k, P, tier, pose):
     S = T(tier, 0.82, 0.95, 1.06, 1.16)
-    spawn = pose == "attack"
+    b = H.blend(pose)
+    spawn = b > 0.5
+    gape = max(0.0, min(1.2, b))
     shell = T(tier, P.mud, P.mud, P.chitin, P.chitin)
     with k.at(scale=S):
         k.sphere(0.32, shell, loc=(0, 0, 0.0), scale=(1.0, 1.0, 0.75), seg=20)
@@ -453,7 +489,7 @@ def hive(k, P, tier, pose):
             from mathutils import Matrix
             with k.mat(Matrix.Translation(p) @ look_mat(nrm)):
                 k.cyl(T(tier, 0.095, 0.085, 0.08, 0.08), 0.07, P.team if tier < 4 else P.pearl, seg=6, loc=(0, 0, 0.0))
-                op = 0.05 if (spawn and i % 2 == 0) else 0.035
+                op = 0.035 + (0.015 * gape if i % 2 == 0 else 0.0) - (0.008 * -b if b < 0 else 0.0)
                 k.cyl(op, 0.08, P.black if tier < 3 else P.team_dk, seg=6, loc=(0, 0, 0.005), outline=0)
                 if spawn and i % 2 == 0:
                     k.ball(0.03, P.glow if tier == 4 else P.team_lt, loc=(0, 0, 0.05), outline=0.005)
@@ -473,8 +509,9 @@ def hive(k, P, tier, pose):
                 a = 2 * math.pi * i / 5
                 k.crystal_at(c + V((math.cos(a) * 0.05, math.sin(a) * 0.05, 0)), c + V((math.cos(a) * 0.14, math.sin(a) * 0.14, 0.18)), 0.04, P.glow)
             k.crystal_at(c, c + V((0, 0, 0.26)), 0.06, P.glow_lt)
-        if spawn:
-            with k.at((0.32, -0.12, 0.05), scale=0.8):
+        if b >= 0.4:
+            # a mite scrambles out of the comb
+            with k.at((0.26 + 0.12 * min(1.1, b), -0.12, 0.05), scale=0.8):
                 bug(k, P, 1, True)
 
 
@@ -495,13 +532,15 @@ def bolt(k, P, a, b, mat, jag=0.05, n=5, seed=1):
 @unit("storm", 0.27)
 def storm(k, P, tier, pose):
     S = hum_scale(0.27, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, head=T(tier, "hood", "hood", "hood", "hood"), torso="team", pads=T(tier, None, "steel", "gold", "crystal"),
                   chest=T(tier, None, None, "dark", "pearl"), cape=T(tier, None, "short", "long", "energy"), legs="team_dk",
                   belt=T(tier, "leather", "copper", "gold", "gold"))
-    hand = V((0.34, -0.1, 0.5)) if atk else V((0.15, -0.2, 0.3))
-    top = V((0.5, -0.1, 0.62)) if atk else V((0.22, -0.24, 0.75))
-    off = V((0.28, 0.14, 0.44)) if atk else V((0.12, 0.19, 0.32))
+    # staff hoisted overhead to gather the charge, then thrust at the foe
+    hand = H.mix(pose, (0.15, -0.2, 0.3), (0.34, -0.1, 0.5), wind=(0.1, -0.14, 0.64))
+    top = H.mix(pose, (0.22, -0.24, 0.75), (0.5, -0.1, 0.62), wind=(0.06, -0.12, 1.04))
+    off = H.mix(pose, (0.12, 0.19, 0.32), (0.28, 0.14, 0.44), wind=(0.08, 0.24, 0.56))
+    charging = H.blend(pose) < -0.7
     with k.at(scale=S, rot=(0, 0, 0)):
         humanoid(k, P, tier, {"R": hand, "L": off}, lk)
         H.staff(k, P, hand, top, tier, shaft=T(tier, P.wood, P.wood_dk, P.dark, P.pearl))
@@ -519,6 +558,11 @@ def storm(k, P, tier, pose):
         if tier == 4:
             H.crown(k, P, H.HEAD + V((0, 0, 0.12)), R=0.08)
             H.orbit_shards(k, P, V((0, 0, 0.3)), 0.28, n=4, h=0.08)
+        if charging:
+            o = top + V((0, 0, 0.04))
+            for j in range(3):
+                a = 2 * math.pi * j / 3 + 0.4
+                bolt(k, P, o, o + V((math.cos(a) * 0.1, math.sin(a) * 0.1, 0.06)), P.zap if tier < 4 else P.glow_lt, jag=0.02, n=3, seed=j)
         if atk:
             o = top + V((0.03, 0, 0.03))
             bolt(k, P, o, o + V((0.26, 0.02, -0.1)), P.zap if tier < 4 else P.glow_lt, seed=tier)
@@ -534,14 +578,15 @@ def rock(k, mat, c, r, scale=(1, 1, 1), rot=None):
 @unit("golem", 0.55)
 def golem(k, P, tier, pose):
     S = 0.55 / 0.5 * T(tier, 0.9, 1.0, 1.07, 1.14)
-    atk = pose == "attack"
+    atk = H.strike(pose)
     st = T(tier, P.stone, P.stone, P.stone, P.stone_dk)
+    bob = H.ANIM["bob"] * 1.4
     with k.at(scale=S):
         # legs
         for s in (1, -1):
-            gx, gz = H.step(0.0 if s > 0 else 0.5, stride=0.09, lift=0.05)
-            rock(k, P.stone_dk, (gx, s * 0.16, 0.15 + gz), 0.155, scale=(1, 1, 1.2))
-        with k.at((0, 0, 0.12)):
+            gx, gz = H.step(0.0 if s > 0 else 0.5, stride=0.11, lift=0.06, k=k)
+            rock(k, P.stone_dk, (gx, s * 0.16, 0.15 + gz + bob * 0.4), 0.155, scale=(1, 1, 1.2))
+        with k.at((0, 0, 0.12 + bob)):
             # torso boulders
             rock(k, st, (0, 0, 0.42), 0.27, scale=(0.95, 1.15, 0.9))
             rock(k, P.stone_dk, (-0.12, 0, 0.48), 0.2, scale=(1, 1.2, 0.9), rot=(0, 0, 20))
@@ -555,11 +600,10 @@ def golem(k, P, tier, pose):
             for s in (1, -1):
                 sh = V((0.0, s * 0.33, 0.55))
                 rock(k, st, sh, 0.15, scale=(1.05, 1, 0.9))
-                if atk:
-                    fist = V((0.42, s * 0.18, 0.4))
-                else:
-                    fist = V((0.18, s * 0.44, 0.22))
-                el = (sh + fist) / 2 + V((-0.04 if atk else -0.05, s * 0.06, 0.05))
+                # both fists hauled high overhead, then a two-handed slam into the ground ahead
+                fist = H.mix(pose, (0.18, s * 0.44, 0.22 + 0.01 * H.breath()), (0.52, s * 0.17, 0.06), wind=(0.02, s * 0.24, 1.0))
+                fist.x += 1.4 * H.arm_swing("L" if s > 0 else "R")
+                el = (sh + fist) / 2 + V((-0.045, s * 0.07, 0.05))
                 rock(k, P.stone_dk, el, 0.1)
                 rock(k, st, fist, T(tier, 0.13, 0.14, 0.15, 0.16), scale=(1.15, 1, 0.9))
                 if tier >= 2:
@@ -592,7 +636,10 @@ def golem(k, P, tier, pose):
                 k.tube([V((0.15, -0.2, 0.62)), V((0.05, -0.05, 0.68)), V((0.12, 0.12, 0.66)), V((0.05, 0.22, 0.6))], 0.014, P.glow_lt, outline=0, smooth_n=2)
             if atk:
                 for s in (1, -1):
-                    spark(k, P, V((0.56, s * 0.18, 0.4)), 0.06, mat=P.white if tier < 4 else P.glow_lt)
+                    spark(k, P, V((0.6, s * 0.18, -0.02)), 0.07, mat=P.white if tier < 4 else P.glow_lt)
+                for j in range(5):
+                    a = 2 * math.pi * j / 5 + 0.3
+                    rock(k, P.stone_dk, V((0.6 + math.cos(a) * 0.16, math.sin(a) * 0.26, 0.0)), 0.035)
 
 
 # ================================================================== 13 sapper
@@ -607,13 +654,15 @@ def pick(k, P, grip, d, tier, length=0.3):
 @unit("sapper", 0.26)
 def sapper(k, P, tier, pose):
     S = hum_scale(0.26, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, head=T(tier, "cap", "helm", "helm", "helm"), crest=None, cape=T(tier, None, None, None, "energy"),
                   chest=T(tier, "leather", "leather", "steel", "pearl"), pads=T(tier, None, "steel", "gold", "crystal"))
-    hand = V((0.28, -0.08, 0.42)) if atk else V((0.16, -0.2, 0.3))
-    d = V((1, 0.1, -0.5)).normalized() if atk else V((0.3, -0.3, 1)).normalized()
+    # pick swung up over the head in both hands, then down into the ground ahead
+    hand = H.mix(pose, (0.16, -0.2, 0.3), (0.3, -0.08, 0.38), wind=(0.02, -0.1, 0.62))
+    d = H.mixd(pose, (0.3, -0.3, 1), (1, 0.1, -0.55), wind=(-0.7, 0.0, 0.7))
+    two = H.mix(pose, (0.12, 0.2, 0.3), (0.26, 0.04, 0.38), wind=(-0.02, 0.02, 0.62))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": hand, "L": hand + V((-0.04, 0.12, 0.0)) if atk else V((0.12, 0.2, 0.3))}, lk)
+        humanoid(k, P, tier, {"R": hand, "L": two}, lk)
         pick(k, P, hand, d, tier, T(tier, 0.24, 0.28, 0.32, 0.36))
         # lamp on the helmet + goggles
         if tier >= 2:
@@ -630,7 +679,7 @@ def sapper(k, P, tier, pose):
         if tier == 4:
             H.orbit_shards(k, P, V((0, 0, 0.18)), 0.3, n=5, h=0.08)
         if atk:
-            tipp = hand + d * 0.36
+            tipp = hand + d * 0.34
             spark(k, P, tipp, 0.05, mat=P.white if tier < 4 else P.glow_lt)
             for i in range(4):
                 a = 2 * math.pi * i / 4 + 0.4
@@ -662,13 +711,15 @@ def wing(k, P, tier, s, sweep, span, flap=0.0):
 @unit("harrier", 0.3)
 def harrier(k, P, tier, pose):
     S = 0.3 / 0.3 * T(tier, 0.85, 1.0, 1.1, 1.2)
-    dive = pose == "attack"
+    b = H.blend(pose)
+    dive = b > 0.4
     body = T(tier, P.feather, P.feather, P.feather, P.pearl)
     with k.at(scale=S):
-        span = T(tier, 0.36, 0.42, 0.46, 0.5) * (0.82 if dive else 1.0)
-        flap = 0.0 if H.gait() is None else 32.0 * math.cos(2 * math.pi * H.gait())
+        # rears with wings thrown wide, then folds them back into the stoop, talons first
+        span = T(tier, 0.36, 0.42, 0.46, 0.5) * H.mixf(pose, 1.0, 0.82, wind=1.06)
+        flap = H.flap(32.0, 22.0) + (34.0 * -b if b < 0 else 0.0)
         for s in (1, -1):
-            wing(k, P, tier, s, 38 if dive else -6, span, flap=flap)
+            wing(k, P, tier, s, H.mixf(pose, -6, 38, wind=-18), span, flap=flap)
         k.sphere(1.0, body, loc=(0, 0, 0.45), scale=(0.2, 0.1, 0.09))
         k.sphere(1.0, P.feather_lt, loc=(0.02, 0, 0.41), scale=(0.17, 0.08, 0.07))
         # tail fan
@@ -676,7 +727,7 @@ def harrier(k, P, tier, pose):
         k.prism([(0, 0.03), (0, -0.03), (-0.2, -0.1), (-0.24, 0.0), (-0.2, 0.1)], 0.02, tail, loc=(-0.14, 0, 0.45), bevel=0.005)
         k.prism([(0, 0.02), (0, -0.02), (-0.12, -0.05), (-0.14, 0), (-0.12, 0.05)], 0.022, P.team if tier < 4 else P.glow, loc=(-0.24, 0, 0.452), bevel=0.004)
         # head + beak
-        hp = V((0.22, 0, 0.48)) if not dive else V((0.26, 0, 0.44))
+        hp = H.mix(pose, (0.22, 0, 0.48), (0.26, 0, 0.44), wind=(0.19, 0, 0.53))
         k.sphere(0.075, body, loc=hp)
         k.sphere(0.06, P.feather_lt, loc=hp + V((0.025, 0, -0.02)))
         k.cone(0.03, 0.08, P.gold, loc=hp + V((0.06, 0, -0.005)), rot=(0, 100, 0))
@@ -694,24 +745,27 @@ def harrier(k, P, tier, pose):
                 d = V((-math.cos(math.radians(a)), math.sin(math.radians(a)), 0.5)).normalized()
                 k.crystal_at(hp + V((-0.03, 0, 0.06)), hp + V((-0.03, 0, 0.06)) + d * 0.14, 0.025, P.glow_lt, sides=4, mid=0.5)
         # talons
-        if dive:
+        if dive or b < -0.5:
             for s in (1, -1):
-                k.rod(V((0.05, s * 0.05, 0.38)), V((0.2, s * 0.06, 0.3)), 0.016, P.gold)
+                tc = V((0.2, s * 0.06, 0.3)) if dive else V((0.14, s * 0.07, 0.34))
+                k.rod(V((0.05, s * 0.05, 0.38)), tc, 0.016, P.gold)
                 for j in (-1, 0, 1):
-                    k.spike(V((0.2, s * 0.06, 0.3)), V((0.26, s * 0.06 + j * 0.03, 0.28)), 0.01, P.darker)
+                    k.spike(tc, tc + V((0.06, j * 0.03, -0.02)), 0.01, P.darker)
 
 
 # ================================================================== 15 standard bearer
 @unit("banner", 0.26)
 def banner(k, P, tier, pose):
     S = hum_scale(0.26, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, head=T(tier, "hair", "helm", "helm", "helm"), crest=T(tier, None, "team", "plume", "plume"),
                   cape=T(tier, None, None, "long", "energy"))
-    h1, h2 = (V((0.2, -0.12, 0.42)), V((0.14, -0.02, 0.52))) if atk else (V((0.1, -0.16, 0.34)), V((0.13, -0.1, 0.48)))
+    # attack: the pole hauled back and swung down onto the foe; rally (cast): thrust straight up and waved
+    h1 = H.mix(pose, (0.1, -0.16, 0.34), (0.2, -0.12, 0.42), wind=(0.0, -0.16, 0.42), cast=(0.12, -0.1, 0.52))
+    h2 = H.mix(pose, (0.13, -0.1, 0.48), (0.14, -0.02, 0.52), wind=(0.02, -0.08, 0.6), cast=(0.14, -0.06, 0.68))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": h1, "L": h2}, lk)
-        up = V((0.5, -0.25, 0.85)).normalized() if atk else V((-0.3, -0.22, 1)).normalized()
+        humanoid(k, P, tier, {"R": h1, "L": h2}, lk, grip2=True)
+        up = H.mixd(pose, (-0.3, -0.22, 1), (0.5, -0.25, 0.85), wind=(-0.65, -0.2, 0.75), cast=(0.12, -0.06, 1))
         foot = h1 - up * 0.15
         L = T(tier, 0.75, 0.85, 0.9, 0.95)
         top = h1 + up * L
@@ -746,18 +800,22 @@ def banner(k, P, tier, pose):
                 k.ball(0.04, P.glow_lt, loc=top + V((0, 0, 0.04)), outline=0)
         if tier == 4:
             H.halo(k, P, top + V((0, 0, 0.08)), R=0.14)
+        if atk and H.casting(pose):
+            # the rally flare at the finial
+            k.ball(0.06 + 0.01 * tier, P.glow_lt, loc=top + V((0, 0, 0.06)), outline=0)
+            k.torus(0.12 + 0.015 * tier, 0.01, P.glow, loc=top + V((0, 0, 0.06)), rot=(90, 0, 0), outline=0)
 
 
 # ================================================================== 16 rimecaller
 @unit("rime", 0.27)
 def rime(k, P, tier, pose):
     S = hum_scale(0.27, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, head="hood", torso="team", pads=T(tier, None, "cloth", "gold", "crystal"),
                   chest=T(tier, None, "fur", "ice", "pearl"), cape=T(tier, None, "short", "long", "energy"), legs="team_dk", belt="leather_dk")
-    hand = V((0.34, -0.1, 0.48)) if atk else V((0.15, -0.2, 0.3))
-    top = V((0.5, -0.12, 0.6)) if atk else V((0.2, -0.24, 0.74))
-    off = V((0.26, 0.14, 0.44)) if atk else V((0.12, 0.19, 0.32))
+    hand = H.mix(pose, (0.15, -0.2, 0.3), (0.34, -0.1, 0.48), wind=(0.08, -0.16, 0.6))
+    top = H.mix(pose, (0.2, -0.24, 0.74), (0.5, -0.12, 0.6), wind=(0.02, -0.14, 0.98))
+    off = H.mix(pose, (0.12, 0.19, 0.32), (0.26, 0.14, 0.44), wind=(0.14, 0.22, 0.5))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": hand, "L": off}, lk)
         # fur collar
@@ -777,6 +835,9 @@ def rime(k, P, tier, pose):
         if tier == 4:
             H.orbit_shards(k, P, V((0, 0, 0.32)), 0.3, n=6, h=0.1, mat=P.ice_glow)
             H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
+        if H.blend(pose) < -0.7:
+            # frost gathering on the crystal
+            k.ball(0.05 + 0.006 * tier, P.ice_glow, loc=top + d * 0.1, outline=0)
         if atk:
             o = top + d * 0.12
             k.crystal_at(o + V((0.04, 0, 0)), o + V((0.22, 0.0, -0.04)), 0.04, P.ice_glow)
@@ -788,16 +849,15 @@ def rime(k, P, tier, pose):
 @unit("ravager", 0.3)
 def ravager(k, P, tier, pose):
     S = hum_scale(0.3, tier) * 0.84
-    atk = pose == "attack"
+    atk = H.strike(pose)
     lk = look_for(tier, torso="skin", arms="skin", head=T(tier, "hair", "helm", "helm", "helm"), crest=None,
                   pads=T(tier, None, "cloth", "spiked", "crystal"), chest=None, belt=T(tier, "leather", "leather_dk", "iron", "gold"),
                   legs=T(tier, "team", "team", "team_dk", "team_dk"), cape=None, gloves=T(tier, "leather", "leather", "iron", "gold"))
-    if atk:
-        r_h, l_h = V((0.3, -0.2, 0.42)), V((0.3, 0.2, 0.42))
-        rd, ld = H.dir2(-15, 0.1), H.dir2(15, 0.1)
-    else:
-        r_h, l_h = V((0.12, -0.25, 0.3)), V((0.12, 0.25, 0.3))
-        rd, ld = H.dir2(-35, 0.6), H.dir2(35, 0.6)
+    # both axes raised behind the head, then a double chop
+    r_h = H.mix(pose, (0.12, -0.25, 0.3), (0.32, -0.16, 0.34), wind=(-0.02, -0.2, 0.6))
+    l_h = H.mix(pose, (0.12, 0.25, 0.3), (0.32, 0.16, 0.34), wind=(-0.02, 0.2, 0.6))
+    rd = H.mixd(pose, H.dir2(-35, 0.6), H.dir2(-12, -0.45), wind=H.dir2(-150, 1.1))
+    ld = H.mixd(pose, H.dir2(35, 0.6), H.dir2(12, -0.45), wind=H.dir2(150, 1.1))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": r_h, "L": l_h}, lk, bulk=1.2)
         # fur mantle across the shoulders + war paint (team) stripes
@@ -833,13 +893,15 @@ def skull(k, P, c, r, eyes=None, mat=None):
 @unit("grave", 0.27)
 def grave(k, P, tier, pose):
     S = hum_scale(0.27, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     lk = look_for(tier, head=T(tier, "hood_dark", "hood_dark", "hood_dark", "hood_dark"), torso="dark", pads=T(tier, None, None, "gold", "crystal"),
                   chest=T(tier, None, "bone", "bone", "bone"), cape=T(tier, None, "short", "long", "energy"), legs="darker", boots="darker",
                   belt="team", arms="dark", gloves="bone")
-    hand = V((0.3, -0.12, 0.52)) if atk else V((0.15, -0.2, 0.3))
-    top = V((0.4, -0.14, 0.78)) if atk else V((0.2, -0.24, 0.76))
-    off = V((0.3, 0.16, 0.5)) if atk else V((0.12, 0.19, 0.32))
+    # attack: a curse flung from the off hand; raise (cast): both arms lifted, the staff high
+    hand = H.mix(pose, (0.15, -0.2, 0.3), (0.3, -0.12, 0.52), cast=(0.12, -0.12, 0.64))
+    top = H.mix(pose, (0.2, -0.24, 0.76), (0.4, -0.14, 0.78), cast=(0.16, -0.12, 1.0))
+    off = H.mix(pose, (0.12, 0.19, 0.32), (0.3, 0.16, 0.5), wind=(0.02, 0.24, 0.46), cast=(0.14, 0.22, 0.7))
     eyes = P.glow if tier >= 3 else P.team
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": hand, "L": off}, lk)
@@ -860,13 +922,17 @@ def grave(k, P, tier, pose):
         if atk:
             k.ball(0.07, P.glow if tier == 4 else P.violet_glow, loc=off + V((0.05, 0, 0.06)), outline=0)
             k.torus(0.1, 0.01, P.violet_glow if tier < 4 else P.glow_lt, loc=off + V((0.05, 0, 0.06)), outline=0)
+            if cast:
+                # the summoning ring on the ground and a skull hand clawing up through it
+                k.torus(0.3 + 0.02 * tier, 0.014, P.violet_glow if tier < 4 else P.glow, loc=(0.32, 0, 0.02), outline=0)
+                skull(k, P, V((0.34, 0.0, 0.05 + 0.04 * min(1.0, H.blend(pose)))), 0.05, eyes=P.glow if tier >= 3 else P.team)
 
 
 # ================================================================== 19 bombard
 @unit("bombard", 0.42)
 def bombard(k, P, tier, pose):
     S = T(tier, 0.88, 1.0, 1.08, 1.16)
-    fire = pose == "attack"
+    fire = H.strike(pose)
     wood = T(tier, P.wood, P.wood, P.wood_dk, P.pearl)
     barrel = T(tier, P.wood_dk, P.iron, P.bronze, P.pearl)
     band = T(tier, P.iron, P.iron_dk, P.gold, P.gold)
@@ -875,8 +941,8 @@ def bombard(k, P, tier, pose):
         for s in (1, -1):
             k.box((0.5, 0.07, 0.07), P.team if tier < 4 else P.gold, loc=(0, s * 0.27, 0.07), bevel=0.018)
             k.box((0.22, 0.08, 0.2), wood, loc=(0.0, s * 0.17, 0.2), bevel=0.02)
-        recoil = -0.06 if fire else 0.0
-        with k.at((recoil, 0, 0.28), rot=(0, 40, 0)):
+        recoil = H.mixf(pose, 0.0, -0.07, wind=0.015)
+        with k.at((recoil, 0, 0.28), rot=(0, H.mixf(pose, 40, 36, wind=43), 0)):
             r0 = T(tier, 0.13, 0.14, 0.15, 0.16)
             k.cyl(r0, 0.42, barrel, loc=(0, 0, 0.1), r2=r0 * 1.12, seg=20, cap=True, bevel=0.01)
             k.cyl(r0 * 0.72, 0.03, P.black, loc=(0, 0, 0.31), seg=18, outline=0)
@@ -924,13 +990,16 @@ def gear(k, P, c, r, mat, rot=(0, 0, 0), teeth=8):
 @unit("tinker", 0.25)
 def tinker(k, P, tier, pose):
     S = hum_scale(0.25, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     lk = look_for(tier, head=T(tier, "cap", "helm", "helm", "helm"), crest=None, cape=T(tier, None, None, None, "energy"),
                   chest=T(tier, "leather", "leather", "leather", "pearl"), pads=T(tier, None, "steel", "gold", "crystal"))
-    hand = V((0.3, -0.1, 0.5)) if atk else V((0.16, -0.2, 0.3))
-    d = V((0.6, 0.0, -0.8)).normalized() if atk else V((0.5, -0.3, 0.8)).normalized()
+    # attack: wrench raised back, then a whack; build (cast): bent over, hammering at the frame on the ground
+    hand = H.mix(pose, (0.16, -0.2, 0.3), (0.32, -0.08, 0.38), wind=(0.08, -0.16, 0.62), cast=(0.34, -0.06, 0.26))
+    d = H.mixd(pose, (0.5, -0.3, 0.8), (0.7, 0.0, -0.7), wind=(-0.35, -0.1, 0.95), cast=(0.45, 0.0, -0.9))
+    off = H.mix(pose, (0.2, 0.12, 0.34), (0.22, 0.12, 0.38), cast=(0.3, 0.1, 0.24))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": hand, "L": V((0.2, 0.12, 0.34))}, lk)
+        humanoid(k, P, tier, {"R": hand, "L": off}, lk)
         wrench(k, P, hand, d, tier, T(tier, 0.2, 0.22, 0.24, 0.26))
         for s in (1, -1):
             k.cyl(0.028, 0.02, P.copper if tier < 3 else P.gold, loc=H.HEAD + V((0.09 if tier == 1 else 0.06, s * 0.04, 0.06 if tier == 1 else 0.09)),
@@ -950,6 +1019,10 @@ def tinker(k, P, tier, pose):
             for i in range(4):
                 a = 2 * math.pi * i / 4
                 gear(k, P, H.HEAD + V((math.cos(a) * 0.15, math.sin(a) * 0.15, 0.16)), 0.03, P.glow, teeth=6)
+        if cast and H.blend(pose) > 0.3:
+            # the turret's frame taking shape on the ground ahead
+            k.box((0.16, 0.12, 0.05), P.wood, loc=(0.46, 0, 0.03), bevel=0.012)
+            gear(k, P, V((0.46, 0, 0.08)), 0.05, P.copper if tier < 3 else P.gold)
         if atk:
             spark(k, P, hand + d * 0.24, 0.05, mat=P.fire if tier < 4 else P.glow_lt)
 
@@ -958,16 +1031,18 @@ def tinker(k, P, tier, pose):
 @unit("duelist", 0.24)
 def duelist(k, P, tier, pose):
     S = hum_scale(0.24, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     lk = look_for(tier, head=T(tier, "hair", "hat", "hat", "hat"), crest=None, pads=T(tier, None, None, "gold", "crystal"),
                   chest=T(tier, None, "cloth", "pearl", "pearl"), cape=T(tier, None, None, "short", "energy"), legs="darker", boots="leather_dk")
-    if atk:
-        hand, d, off = V((0.42, -0.06, 0.42)), H.dir2(2, -0.02), V((-0.12, 0.2, 0.42))
-    else:
-        hand, d, off = V((0.2, -0.17, 0.34)), H.dir2(25, 0.12), V((0.04, 0.22, 0.28))
+    # attack: blade cocked back, then a full lunge; parry (cast): blade snapped up across the body
+    hand = H.mix(pose, (0.2, -0.17, 0.34), (0.42, -0.06, 0.42), wind=(0.04, -0.2, 0.42), cast=(0.22, -0.06, 0.44))
+    d = H.mixd(pose, H.dir2(25, 0.12), H.dir2(2, -0.02), wind=H.dir2(10, 0.15), cast=(0.2, 0.35, 1.0))
+    off = H.mix(pose, (0.04, 0.22, 0.28), (-0.12, 0.2, 0.42), wind=(0.02, 0.24, 0.5), cast=(0.02, 0.22, 0.36))
+    b = H.blend(pose)
     L = T(tier, 0.36, 0.4, 0.44, 0.48)
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": hand, "L": off}, lk, lean=12 if atk else 0, bulk=0.92)
+        humanoid(k, P, tier, {"R": hand, "L": off}, lk, lean=0 if cast else H.mixf(pose, 0, 12, wind=-4), bulk=0.92)
         with k.mat(H.frame_dir(d, origin=hand)):
             k.rod((-0.06, 0, 0), (0.0, 0, 0), 0.014, P.leather_dk)
             k.torus(0.04, 0.009, T(tier, P.iron, P.steel, P.gold, P.gold), loc=(0.0, 0, 0), rot=(0, 90, 0))
@@ -976,11 +1051,17 @@ def duelist(k, P, tier, pose):
             # feather plume on the hat
             k.tube([H.HEAD + V((0.0, 0.05, 0.1)), H.HEAD + V((-0.1, 0.1, 0.13)), H.HEAD + V((-0.2, 0.08, 0.1))], 0.03,
                    T(tier, None, P.cloth, P.team_lt, P.glow), r_end=0.008, smooth_n=3)
-        if tier >= 2 and not atk:
+        if tier >= 2 and (b < 0.5 or cast):
             H.round_shield(k, P, off + V((0.02, 0.02, 0.02)), V((0.7, 0.3, 0.6)), 0.07, tier)
         if tier == 4:
             H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
-        if atk:
+        if atk and cast:
+            # the parry's glint where steel meets steel
+            gl = hand + d * (L * 0.6)
+            k.ball(0.035, P.white, loc=gl, outline=0)
+            for a in (0, 90):
+                k.box((0.16, 0.012, 0.012), P.white if tier < 4 else P.glow_lt, loc=gl, rot=(0, a + 45, 0), outline=0)
+        elif atk:
             k.tube([hand + V((0.05, 0, 0)), hand + V((L + 0.15, 0, 0))], 0.012, P.white if tier < 4 else P.glow_lt, r_end=0.002, outline=0)
 
 
@@ -988,17 +1069,15 @@ def duelist(k, P, tier, pose):
 @unit("pikeman", 0.27)
 def pikeman(k, P, tier, pose):
     S = hum_scale(0.27, tier) * 0.95
-    atk = pose == "attack"
     lk = look_for(tier, head=T(tier, "cap", "helm", "helm", "helm"), crest=T(tier, None, None, "plume", "plume"),
                   cape=T(tier, None, None, "short", "energy"), pads=T(tier, None, "steel", "gold", "crystal"))
-    if atk:
-        rh, lh = V((0.08, -0.08, 0.36)), V((0.3, -0.04, 0.38))
-        d = V((1, 0.04, -0.04)).normalized()
-    else:
-        rh, lh = V((0.1, -0.16, 0.32)), V((0.24, -0.1, 0.4))
-        d = V((1, 0.04, 0.5)).normalized()
+    # attack: the pike drawn back, then driven forward through both hands; brace (cast): crouched, butt grounded,
+    # point set up at the charge
+    rh = H.mix(pose, (0.1, -0.16, 0.32), (0.24, -0.08, 0.36), wind=(-0.06, -0.1, 0.38), cast=(0.04, -0.12, 0.22))
+    lh = H.mix(pose, (0.24, -0.1, 0.4), (0.44, -0.04, 0.38), wind=(0.12, -0.06, 0.4), cast=(0.22, -0.08, 0.28))
+    d = H.mixd(pose, (1, 0.04, 0.5), (1, 0.04, -0.04), wind=(1, 0.04, 0.1), cast=(1, 0.04, 0.34))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": rh, "L": lh}, lk)
+        humanoid(k, P, tier, {"R": rh, "L": lh}, lk, grip2=True)
         L = T(tier, 0.62, 0.7, 0.74, 0.78)
         tip = H.spear(k, P, rh, d, L, tier, back=0.22, head_len=0.13)
         if tier >= 3:
@@ -1031,18 +1110,21 @@ def keg(k, P, c, r, h, tier, axis=(1, 0, 0), fuse=False):
 @unit("keg", 0.25)
 def kegrunner(k, P, tier, pose):
     S = hum_scale(0.25, tier)
-    atk = pose == "attack"
+    b = H.blend(pose)
+    atk = b > 0.5
     lk = look_for(tier, head=T(tier, "hair", "cap", "helm", "helm"), crest=None, cape=None, chest=T(tier, None, "leather", "leather", "pearl"),
                   pads=T(tier, None, None, "steel", "crystal"))
-    with k.at(scale=S, rot=(0, 14 if atk else 6, 0)):
-        if atk:
-            hands = {"R": V((0.24, -0.11, 0.58)), "L": V((0.24, 0.11, 0.58))}
-        else:
-            hands = {"R": V((-0.04, -0.18, 0.56)), "L": V((-0.04, 0.18, 0.56))}
+    with k.at(scale=S, rot=(0, H.mixf(pose, 6, 14, wind=0), 0)):
+        # the keg hoisted back overhead, then slammed down in front (hands carry it: tuples, so no arm swing)
+        rh = H.mix(pose, (-0.04, -0.18, 0.56), (0.24, -0.11, 0.58), wind=(-0.1, -0.16, 0.62))
+        lh = H.mix(pose, (-0.04, 0.18, 0.56), (0.24, 0.11, 0.58), wind=(-0.1, 0.16, 0.62))
+        hands = {"R": tuple(rh), "L": tuple(lh)}
         humanoid(k, P, tier, hands, lk)
         r = T(tier, 0.1, 0.12, 0.12, 0.13)
         if atk:
             keg(k, P, V((0.28, 0, 0.66)), r, r * 2.1, tier, axis=(0, 1, 0), fuse=True)
+        elif b < 0:
+            keg(k, P, H.mix(pose, (-0.12, 0, 0.6), (0.28, 0, 0.66), wind=(-0.18, 0, 0.68)), r, r * 2.1, tier, axis=(0, 1, 0), fuse=True)
         else:
             keg(k, P, V((-0.12, 0, 0.6)), r, r * 2.1, tier, axis=(0, 1, 0), fuse=False)
             if tier >= 3:
@@ -1059,14 +1141,14 @@ def kegrunner(k, P, tier, pose):
 @unit("trickster", 0.25)
 def trickster(k, P, tier, pose, ghost=False):
     S = hum_scale(0.25, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     lk = look_for(tier, head="mask", torso="team", pads=T(tier, None, None, "gold", "crystal"), chest=T(tier, "dark", "dark", "darker", "pearl"),
                   cape=T(tier, None, "short", "long", "energy"), legs="darker", boots="darker", belt="gold" if tier >= 3 else "leather_dk",
                   arms="dark", gloves="pearl")
-    if atk:
-        hands = {"R": V((0.18, -0.3, 0.46)), "L": V((0.18, 0.3, 0.46))}
-    else:
-        hands = {"R": V((0.12, -0.2, 0.3)), "L": V((0.18, 0.12, 0.38))}
+    # attack: arms crossed in, then flung wide with a fan of blades; decoys (cast): hands thrown up in a flourish
+    hands = {"R": H.mix(pose, (0.12, -0.2, 0.3), (0.18, -0.3, 0.46), wind=(0.2, 0.06, 0.36), cast=(0.04, -0.26, 0.64)),
+             "L": H.mix(pose, (0.18, 0.12, 0.38), (0.18, 0.3, 0.46), wind=(0.2, -0.06, 0.4), cast=(0.04, 0.26, 0.64))}
     with k.at(scale=S):
         humanoid(k, P, tier, hands, lk)
         # two-pointed cowl in team colour with gold bells
@@ -1082,13 +1164,20 @@ def trickster(k, P, tier, pose, ghost=False):
                 k.sphere(0.035, P.pearl if i % 2 else P.team, loc=(0.0 + math.cos(a) * 0.1, math.sin(a) * 0.13, 0.45), scale=(1, 1, 0.6))
         # mirror / card in the left hand
         mh = hands["L"]
-        if tier >= 3 or atk:
+        if tier >= 3 or (pose == "attack" and H.blend(pose) > 0.3):
             k.cyl(0.06, 0.015, P.gold, loc=mh + V((0.04, 0, 0.03)), rot=(0, 30, 0), seg=16)
             k.cyl(0.048, 0.02, P.ice if tier < 4 else P.glow_lt, loc=mh + V((0.04, 0, 0.035)), rot=(0, 30, 0), seg=16, outline=0)
         if tier == 4:
             H.orbit_shards(k, P, V((0, 0, 0.36)), 0.3, n=6, h=0.08, mat=P.glow_lt)
             H.crown(k, P, H.HEAD + V((0, 0, 0.12)), R=0.075)
-        if atk:
+        if atk and cast:
+            # a puff of illusion round the raised hands
+            for s in (1, -1):
+                o = hands["R" if s < 0 else "L"]
+                for j in range(3):
+                    a = 2 * math.pi * j / 3 + s
+                    k.ball(0.035, P.violet_glow, loc=V(o) + V((math.cos(a) * 0.07, math.sin(a) * 0.07, 0.05)), outline=0)
+        elif atk:
             for s in (1, -1):
                 o = hands["R" if s < 0 else "L"]
                 for j in range(3):
@@ -1122,27 +1211,35 @@ def iron_hook(k, P, c, d, tier, size=1.0):
 @unit("hook", 0.3)
 def hookwarden(k, P, tier, pose):
     S = hum_scale(0.3, tier) * 0.84
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
+    b = H.blend(pose)
     lk = look_for(tier, head=T(tier, "cap", "helm", "helm", "helm"), crest=T(tier, None, None, "team", "plume"),
                   pads=T(tier, "leather", "steel", "gold", "crystal"), chest=T(tier, "leather", "steel", "steel", "pearl"),
                   cape=T(tier, None, None, "short", "energy"), legs=T(tier, "cloth_dk", "leather_dk", "iron", "pearl"))
     link = T(tier, P.iron_dk, P.iron, P.gold_dk, P.glow)
-    if atk:
-        rh, lh = V((0.36, -0.12, 0.46)), V((0.12, 0.2, 0.32))
-    else:
-        rh, lh = V((0.16, -0.22, 0.26)), V((0.12, 0.2, 0.32))
+    # attack: the hook swung back on its short chain and clubbed forward; tether (cast): wound up and hurled out
+    rh = H.mix(pose, (0.16, -0.22, 0.26), (0.34, -0.1, 0.36), wind=(-0.02, -0.26, 0.48), cast=(0.36, -0.12, 0.46))
+    lh = H.mix(pose, (0.12, 0.2, 0.32), (0.16, 0.2, 0.36), wind=(0.2, 0.16, 0.4))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": rh, "L": lh}, lk, bulk=1.18, lean=10 if atk else 0)
+        humanoid(k, P, tier, {"R": rh, "L": lh}, lk, bulk=1.18, lean=H.mixf(pose, 0, 10, wind=-5))
         # chain coiled over the left shoulder and down across the chest
         for i in range(T(tier, 1, 2, 2, 3)):
             k.torus(0.15 - 0.012 * i, 0.012, link, loc=(0.0, 0.03, 0.32 - 0.03 * i), rot=(0, 62, 18), outline=0.005)
         # the round buckler on the off arm
         H.round_shield(k, P, lh + V((0.04, 0.05, 0.02)), V((0.6, 0.6, 0.4)), T(tier, 0.07, 0.08, 0.085, 0.09), tier)
-        if atk:
+        if cast and b > 0.3:
             # chain thrown out ahead, hook flying at the end
-            tip = rh + V((0.5, 0.02, -0.04))
+            tip = rh + V((0.5 * min(1.0, b), 0.02, -0.04))
             chain(k, P, rh, tip, link)
             iron_hook(k, P, tip, V((1, 0, -0.1)), tier, 1.1)
+        elif pose == "attack" and b != 0:
+            # the hook whirled on a short drop of chain: behind on the wind-up, out in front on the blow
+            low = rh + H.mix(pose, (0.06, -0.02, -0.14), (0.2, 0.0, -0.02), wind=(-0.16, -0.04, -0.06))
+            chain(k, P, rh, low, link)
+            iron_hook(k, P, low, H.mixd(pose, (0.2, 0, -1), (1, 0, -0.2), wind=(-1, 0, -0.3)), tier)
+            if atk:
+                arc_fx(k, P, tier, 0.5, -50, 20, 0.34)
         else:
             # hook hangs from the fist on a short drop of chain
             low = rh + V((0.06, -0.02, -0.14))
@@ -1175,15 +1272,16 @@ def bramble(k, P, base, tier, h=0.22, seed=0):
 @unit("thorn", 0.26)
 def thornweaver(k, P, tier, pose):
     S = hum_scale(0.26, tier)
-    atk = pose == "attack"
+    b = H.blend(pose)
     lk = look_for(tier, head="hood", crest=None, torso="team", pads=T(tier, None, "leather", "gold", "crystal"),
                   chest=T(tier, None, "cloth", "leather", "pearl"), cape=T(tier, "short", "long", "long", "energy"),
                   legs=T(tier, "cloth_dk", "leather_dk", "leather_dk", "pearl"), belt="leather", gloves="leather")
-    sh = V((0.34, -0.12, 0.4)) if atk else V((0.16, -0.2, 0.3))
-    top = V((0.56, -0.12, 0.42)) if atk else V((0.2, -0.24, 0.76))
-    off = V((0.2, 0.18, 0.44)) if atk else V((0.06, 0.2, 0.28))
+    # staff raised, then planted at the ground ahead where the brambles burst up (they grow and recede)
+    sh = H.mix(pose, (0.16, -0.2, 0.3), (0.34, -0.12, 0.4), wind=(0.1, -0.16, 0.6))
+    top = H.mix(pose, (0.2, -0.24, 0.76), (0.56, -0.12, 0.42), wind=(0.12, -0.18, 1.0))
+    off = H.mix(pose, (0.06, 0.2, 0.28), (0.2, 0.18, 0.44), wind=(0.12, 0.24, 0.54))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": sh, "L": off}, lk, lean=8 if atk else 0)
+        humanoid(k, P, tier, {"R": sh, "L": off}, lk, lean=H.mixf(pose, 0, 8, wind=-3))
         # gnarled staff, twisted with a vine, leaves at the head
         k.tube([sh + (sh - top) * 0.35, sh, (sh + top) / 2 + V((0.02, 0.01, 0)), top], 0.017, P.wood_dk, r_end=0.012, smooth_n=2)
         for i in range(4):
@@ -1205,37 +1303,42 @@ def thornweaver(k, P, tier, pose):
             for i in range(5):
                 a = 2 * math.pi * i / 5
                 leaf(k, P, V((math.cos(a) * 0.24, math.sin(a) * 0.24, 0.5 + 0.04 * math.sin(3 * a))), math.degrees(a) + 90, 0.07, P.glow_soft, tilt=10)
-        if atk:
+        if b >= 0.4:
             # brambles bursting from the ground ahead
+            g = min(1.0, b)
             for j, (x, y) in enumerate(((0.62, -0.08), (0.7, 0.08), (0.56, 0.14))):
-                bramble(k, P, (x, y, 0.0), tier, h=0.18 + 0.04 * tier + 0.03 * j, seed=j * 1.7)
+                bramble(k, P, (x, y, 0.0), tier, h=(0.18 + 0.04 * tier + 0.03 * j) * g, seed=j * 1.7)
 
 
 # ================================================================== 27 outrider
 @unit("outrider", 0.34)
 def outrider(k, P, tier, pose):
     S = TIER_SCALE[tier] * 1.08
-    atk = pose == "attack"
+    b = H.blend(pose)
     lk = look_for(tier, head=T(tier, "hood", "hood", "helm_open", "helm"), crest=T(tier, None, None, "team", "plume"),
                   cape=T(tier, None, "short", "long", "energy"), pads=T(tier, None, "leather", "gold", "crystal"),
                   chest=T(tier, "leather", "leather", "steel", "pearl"), gloves="leather")
     with k.at(scale=S):
-        mount(k, P, tier, atk)
+        mount(k, P, tier, 0.0)
         # quiver hung on the saddle
         k.rod((-0.2, 0.18, 0.42), (-0.3, 0.2, 0.62), 0.035, P.leather_dk)
         for i in range(T(tier, 2, 3, 3, 4)):
             k.rod((-0.29 + 0.012 * i, 0.19 + 0.01 * i, 0.62), (-0.31 + 0.012 * i, 0.2 + 0.01 * i, 0.68), 0.006, P.wood)
             k.cone(0.012, 0.03, P.team, loc=(-0.31 + 0.012 * i, 0.2 + 0.01 * i, 0.69))
-        with k.at((-0.04, 0, 0.3), scale=0.78, rot=(0, 0, 50 if atk else 0)):
-            # an atk rider twists in the saddle to shoot to the side
-            grip = V((0.3, 0.0, 0.44)) if atk else V((0.2, 0.12, 0.34))
-            draw = V((0.02, -0.03, 0.44)) if atk else V((0.14, -0.14, 0.36))
-            humanoid(k, P, tier, {"L": grip, "R": draw}, lk)
+        # the rider twists in the saddle and draws (the wind-up), looses on the blow, then turns back
+        t = min(1.0, abs(b))
+        with k.at((-0.04, 0, 0.3), scale=0.78, rot=(0, 0, 50 * t)):
+            rest_g, aim_g = V((0.2, 0.12, 0.34)), V((0.3, 0.0, 0.44))
+            if b < 0:
+                grip, draw = rest_g.lerp(aim_g, min(1, t * 1.4)), V((0.14, -0.14, 0.36)).lerp(V((0.02, -0.03, 0.44)), t)
+            else:
+                grip, draw = rest_g.lerp(aim_g, t), V((0.14, -0.14, 0.36)).lerp(V((-0.04, -0.09, 0.47)), t)
+            humanoid(k, P, tier, {"L": grip, "R": draw}, lk, seated=True)
             span = T(tier, 0.22, 0.26, 0.3, 0.34)
-            if atk:
+            if b < -0.3:
                 H.bow(k, P, grip, tier, True, span=span, draw_to=draw)
             else:
-                with k.at(grip, rot=(0, 0, 30)):
+                with k.at(grip, rot=(0, 0, 30 * (1 - t))):
                     H.bow(k, P, (0, 0, 0), tier, False, span=span)
             if tier == 4:
                 H.halo(k, P, H.HEAD + V((0, 0, 0.18)), R=0.09)
@@ -1260,14 +1363,16 @@ def lantern(k, P, c, tier, lit=True, size=1.0):
 @unit("lamp", 0.25)
 def lamplighter(k, P, tier, pose):
     S = hum_scale(0.25, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     lk = look_for(tier, head="hat", crest=None, pads=T(tier, None, None, "gold", "crystal"),
                   chest=T(tier, None, "cloth", "pearl", "pearl"), cape=T(tier, None, "short", "long", "energy"),
                   legs="cloth_dk", belt=T(tier, "leather", "leather", "gold", "gold"))
     # a long lantern pole: over the shoulder at rest, raised high to cast
-    rh = V((0.22, -0.12, 0.6)) if atk else V((0.14, -0.2, 0.32))
-    top = V((0.34, -0.12, 1.02)) if atk else V((0.36, -0.22, 0.82))
-    off = V((0.18, 0.18, 0.5)) if atk else V((0.06, 0.2, 0.28))
+    # attack: the pole swung down like a club; ward (cast): the lantern raised high and flared
+    rh = H.mix(pose, (0.14, -0.2, 0.32), (0.3, -0.12, 0.42), wind=(0.06, -0.18, 0.56), cast=(0.22, -0.12, 0.6))
+    top = H.mix(pose, (0.36, -0.22, 0.82), (0.66, -0.1, 0.42), wind=(0.0, -0.2, 0.98), cast=(0.34, -0.12, 1.02))
+    off = H.mix(pose, (0.06, 0.2, 0.28), (0.16, 0.18, 0.36), cast=(0.18, 0.18, 0.5))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": rh, "L": off}, lk)
         k.rod(rh + (rh - top) * 0.3, top, 0.014, T(tier, P.wood, P.wood, P.wood_dk, P.pearl))
@@ -1281,32 +1386,36 @@ def lamplighter(k, P, tier, pose):
             for i in range(4):
                 a = 2 * math.pi * i / 4 + 0.4
                 k.ball(0.022, P.glow_lt, loc=(math.cos(a) * 0.26, math.sin(a) * 0.26, 0.46), outline=0)
-        if atk:
+        if atk and cast:
             c = hang + V((0, 0, -0.1))
             k.torus(0.13 + 0.02 * tier, 0.01, P.glow_lt if tier == 4 else P.fire_hot, loc=c, rot=(90, 0, 0), outline=0)
             k.torus(0.2 + 0.02 * tier, 0.007, P.glow_soft if tier == 4 else P.fire, loc=c, rot=(90, 0, 0), outline=0)
+        elif atk:
+            spark(k, P, hang + V((0.04, 0, -0.1)), 0.06, mat=P.fire if tier < 4 else P.glow_lt)
 
 
 # ================================================================== 29 griffin knight (flying, legendary)
 @unit("griffin", 0.34)
 def griffin(k, P, tier, pose):
     S = T(tier, 0.92, 1.02, 1.1, 1.18)
-    dive = pose == "attack"
+    b = H.blend(pose)
+    dive = b > 0.4
     hide = T(tier, P.gold_dk, P.gold_dk, P.bronze, P.pearl)
     head_f = T(tier, P.feather_lt, P.feather_lt, P.fur, P.pearl)
     with k.at(scale=S):
-        span = T(tier, 0.42, 0.46, 0.5, 0.54) * (0.8 if dive else 1.0)
-        flap = 0.0 if H.gait() is None else 30.0 * math.cos(2 * math.pi * H.gait())
+        # rears with wings high and the rider's sword up, then stoops with wings swept back
+        span = T(tier, 0.42, 0.46, 0.5, 0.54) * H.mixf(pose, 1.0, 0.8, wind=1.05)
+        flap = H.flap(30.0, 22.0) + (36.0 * -b if b < 0 else 0.0)
         for s in (1, -1):
             with k.at((0.02, 0, 0.04)):
-                wing(k, P, tier, s, 40 if dive else -4, span, flap=flap)
+                wing(k, P, tier, s, H.mixf(pose, -4, 40, wind=-16), span, flap=flap)
         # lion body
         k.sphere(1.0, hide, loc=(-0.04, 0, 0.47), scale=(0.24, 0.12, 0.11))
         # back legs (paws) tucked, front legs eagle talons
         for s in (1, -1):
             k.rod(V((-0.18, s * 0.07, 0.42)), V((-0.26, s * 0.07, 0.32)), 0.03, hide)
             k.sphere(0.03, hide, loc=(-0.27, s * 0.07, 0.31))
-            fr = V((0.24, s * 0.06, 0.3)) if dive else V((0.12, s * 0.07, 0.33))
+            fr = H.mix(pose, (0.12, s * 0.07, 0.33), (0.24, s * 0.06, 0.3), wind=(0.2, s * 0.08, 0.4))
             k.rod(V((0.1, s * 0.06, 0.42)), fr, 0.022, P.gold)
             for j in (-1, 0, 1):
                 k.spike(fr, fr + V((0.05, j * 0.025, -0.03)), 0.009, P.darker)
@@ -1314,7 +1423,7 @@ def griffin(k, P, tier, pose):
         k.tube([V((-0.26, 0, 0.48)), V((-0.38, 0, 0.5)), V((-0.46, 0, 0.58))], 0.018, hide, r_end=0.01, smooth_n=2)
         k.sphere(0.035, T(tier, P.team, P.team, P.team, P.glow), loc=(-0.47, 0, 0.6))
         # eagle neck + head
-        hp = V((0.26, 0, 0.56)) if not dive else V((0.3, 0, 0.5))
+        hp = H.mix(pose, (0.26, 0, 0.56), (0.3, 0, 0.5), wind=(0.22, 0, 0.62))
         k.tube([V((0.14, 0, 0.5)), hp + V((-0.03, 0, -0.02))], 0.07, head_f, r_end=0.06)
         k.sphere(0.075, head_f, loc=hp)
         k.cone(0.032, 0.09, P.gold, loc=hp + V((0.07, 0, -0.01)), rot=(0, 100, 0))
@@ -1329,10 +1438,10 @@ def griffin(k, P, tier, pose):
         # the knight riding it
         lk = look_for(tier, head="helm", crest=T(tier, None, "team", "plume", "plume"), cape=T(tier, None, "short", "long", "energy"),
                       pads=T(tier, "leather", "steel", "gold", "crystal"), chest=T(tier, "leather", "steel", "steel", "pearl"))
-        with k.at((-0.06, 0, 0.42), scale=0.62, rot=(0, 18 if dive else 0, 0)):
-            hand = V((0.34, -0.12, 0.42)) if dive else V((0.16, -0.18, 0.4))
-            humanoid(k, P, tier, {"R": hand, "L": V((0.18, 0.12, 0.34))}, lk)
-            d = V((1, 0, -0.35)).normalized() if dive else V((0.6, 0, 0.8)).normalized()
+        with k.at((-0.06, 0, 0.42), scale=0.62, rot=(0, H.mixf(pose, 0, 18, wind=-8), 0)):
+            hand = H.mix(pose, (0.16, -0.18, 0.4), (0.34, -0.12, 0.42), wind=(0.06, -0.16, 0.64))
+            humanoid(k, P, tier, {"R": hand, "L": V((0.18, 0.12, 0.34))}, lk, seated=True)
+            d = H.mixd(pose, (0.6, 0, 0.8), (1, 0, -0.35), wind=(-0.25, 0, 1))
             H.sword(k, P, hand, d, T(tier, 0.3, 0.34, 0.38, 0.42), tier)
             if tier == 4:
                 H.halo(k, P, H.HEAD + V((0, 0, 0.18)), R=0.09)
@@ -1355,15 +1464,15 @@ def wave_curl(k, P, c, R, mat, tier, rot=(0, 0, 0)):
 def tidecaller(k, P, tier, pose):
     from . import kit as K
     S = hum_scale(0.27, tier)
-    atk = pose == "attack"
+    atk = H.strike(pose)
     sea = K.toon("#2f9fc4")
     sea_dk = K.toon("#1f6f93")
     foam = K.glow("#bff3ff", 1.25) if tier == 4 else K.toon("#dff7ff")
     lk = look_for(tier, head="hood", torso="team", pads=T(tier, None, "cloth", "gold", "crystal"),
                   chest=T(tier, None, "cloth", "pearl", "pearl"), cape=T(tier, None, "short", "long", "energy"), legs="team_dk", belt="leather_dk")
-    hand = V((0.36, -0.1, 0.5)) if atk else V((0.15, -0.2, 0.3))
-    top = V((0.52, -0.12, 0.66)) if atk else V((0.2, -0.24, 0.78))
-    off = V((0.3, 0.16, 0.5)) if atk else V((0.12, 0.19, 0.32))
+    hand = H.mix(pose, (0.15, -0.2, 0.3), (0.36, -0.1, 0.5), wind=(0.08, -0.14, 0.62))
+    top = H.mix(pose, (0.2, -0.24, 0.78), (0.52, -0.12, 0.66), wind=(0.04, -0.14, 1.02))
+    off = H.mix(pose, (0.12, 0.19, 0.32), (0.3, 0.16, 0.5), wind=(0.1, 0.24, 0.6))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": hand, "L": off}, lk)
         # shell collar
@@ -1389,6 +1498,9 @@ def tidecaller(k, P, tier, pose):
         if tier == 4:
             H.halo(k, P, H.HEAD + V((0, 0, 0.2)), R=0.1)
             H.orbit_shards(k, P, V((0, 0, 0.3)), 0.28, n=5, h=0.08, mat=foam)
+        if H.blend(pose) < -0.7:
+            # water swirling up round the trident
+            k.torus(0.07, 0.016, sea, loc=top + d * 0.06, rot=(0, 90, 0), outline=0.004)
         if atk:
             o = top + d * 0.1
             wave_curl(k, P, o + V((0.12, 0, -0.32)), 0.14, sea, tier)
@@ -1399,17 +1511,18 @@ def tidecaller(k, P, tier, pose):
 @unit("lion", 0.3)
 def lionheart(k, P, tier, pose):
     S = hum_scale(0.3, tier) * 0.88
-    atk = pose == "attack"
+    atk = H.strike(pose)
+    cast = H.casting(pose)
     mane_m = T(tier, P.gold_dk, P.bronze, P.gold, P.glow)
     lk = look_for(tier, head="helm", crest=None, pads=T(tier, "steel", "steel", "gold", "crystal"),
                   chest=T(tier, "steel", "steel", "gold", "pearl"), cape=T(tier, "short", "long", "long", "energy"),
                   legs=T(tier, "iron", "iron", "iron", "pearl"), gloves=T(tier, "leather", "iron", "gold", "gold"))
-    if atk:
-        hand, d, off = V((0.4, -0.08, 0.46)), H.dir2(-4, -0.15), V((0.2, 0.2, 0.4))
-    else:
-        hand, d, off = V((0.18, -0.2, 0.32)), H.dir2(20, 0.75), V((0.16, 0.2, 0.34))
+    # attack: the broadsword hauled back over the shoulder, then a great chop; last stand (cast): raised high
+    hand = H.mix(pose, (0.18, -0.2, 0.32), (0.4, -0.08, 0.42), wind=(0.02, -0.18, 0.64), cast=(0.12, -0.14, 0.7))
+    d = H.mixd(pose, H.dir2(20, 0.75), H.dir2(-4, -0.3), wind=(-0.65, -0.25, 0.7), cast=(0.12, 0, 1))
+    off = H.mix(pose, (0.16, 0.2, 0.34), (0.2, 0.2, 0.4), wind=(0.24, 0.18, 0.42), cast=(0.24, 0.18, 0.42))
     with k.at(scale=S):
-        humanoid(k, P, tier, {"R": hand, "L": off}, lk, bulk=1.1, lean=12 if atk else 0)
+        humanoid(k, P, tier, {"R": hand, "L": off}, lk, bulk=1.1, lean=0 if cast else H.mixf(pose, 0, 12, wind=-5))
         # lion mane crest: a ring of tufts around the helm
         n = T(tier, 10, 11, 12, 13)
         for i in range(n):
@@ -1425,7 +1538,11 @@ def lionheart(k, P, tier, pose):
         if tier == 4:
             H.halo(k, P, H.HEAD + V((0, 0, 0.22)), R=0.11)
             H.orbit_shards(k, P, V((0, 0, 0.32)), 0.26, n=5, h=0.07, mat=P.glow_lt)
-        if atk:
+        if atk and cast:
+            tipp = hand + d * T(tier, 0.4, 0.44, 0.48, 0.54)
+            k.ball(0.06 + 0.01 * tier, P.glow_lt if tier == 4 else P.fire_hot, loc=tipp, outline=0)
+            k.torus(0.1 + 0.01 * tier, 0.01, P.gold if tier < 4 else P.glow, loc=tipp, rot=(90, 0, 0), outline=0)
+        elif atk:
             arc_fx(k, P, tier, 0.42, -60, 40, 0.42)
 
 
@@ -1438,26 +1555,28 @@ def bug(k, P, tier, open_jaw, queen=False):
     k.sphere(0.05, P.chitin_dk, loc=(0.1, 0, 0.1))
     for s in (1, -1):
         k.sphere(0.014, P.glow_lt if queen else P.team_lt, loc=(0.135, s * 0.025, 0.12), outline=0)
-        a = 30 if open_jaw else 8
+        a = open_jaw if not isinstance(open_jaw, bool) else (30 if open_jaw else 8)
         base = V((0.14, s * 0.02, 0.09))
         tip = base + V((math.cos(math.radians(s * a)) * 0.07, math.sin(math.radians(s * a)) * 0.07 + s * 0.0, 0))
         k.tube([base, base + (tip - base) * 0.6 + V((0, s * 0.012, 0)), tip], 0.012, P.bone_dk, r_end=0.004, smooth_n=2)
         for i, x in enumerate((0.06, 0.02, -0.03)):
             p0 = V((x, s * 0.04, 0.1))
-            gx, gz = H.step((i % 2) * 0.5 + (0.0 if s > 0 else 0.5), stride=0.035, lift=0.025)
+            gx, gz = H.step((i % 2) * 0.5 + (0.0 if s > 0 else 0.5), stride=0.035, lift=0.025, k=k)
+            if H.ANIM["death"] is not None:
+                gx, gz = -0.02 * H.ANIM["death"], 0.04 * H.ANIM["death"]  # legs curl up as it flips
             k.tube([p0, p0 + V((0.02 * (1 - i) + gx * 0.5, s * 0.07, 0.03 + gz)), p0 + V((0.04 * (1 - i) - 0.02 + gx, s * 0.12, -0.08 + gz))], 0.011, P.chitin_dk, r_end=0.005, smooth_n=2)
 
 
 @unit("mite", 0.15, spawned=True)
 def mite(k, P, tier, pose):
     with k.at(scale=1.15):
-        bug(k, P, tier, pose == "attack")
+        bug(k, P, tier, H.mixf(pose, 8, 30, wind=2))
 
 
 @unit("queen", 0.3, spawned=True)
 def queen(k, P, tier, pose):
     with k.at(scale=2.0):
-        bug(k, P, tier, pose == "attack", queen=True)
+        bug(k, P, tier, H.mixf(pose, 8, 30, wind=2), queen=True)
         # crown of carapace spikes + glowing abdomen
         for i in range(5):
             a = math.radians(-60 + 30 * i)
@@ -1470,18 +1589,21 @@ def queen(k, P, tier, pose):
 
 @unit("golemling", 0.36, spawned=True)
 def golemling(k, P, tier, pose):
-    atk = pose == "attack"
+    from mathutils import Matrix
+    bob = H.ANIM["bob"] * 1.4
     with k.at(scale=0.36 / 0.5 * 1.05):
         for s in (1, -1):
-            gx, gz = H.step(0.0 if s > 0 else 0.5, stride=0.08, lift=0.045)
-            rock(k, P.stone_dk, (gx, s * 0.15, 0.12 + gz), 0.12)
+            gx, gz = H.step(0.0 if s > 0 else 0.5, stride=0.1, lift=0.05, k=k)
+            rock(k, P.stone_dk, (gx, s * 0.15, 0.12 + gz + bob * 0.4), 0.12)
+        H.push(k, Matrix.Translation((0, 0, bob)))
         rock(k, P.stone, (0, 0, 0.4), 0.25, scale=(0.95, 1.1, 0.9))
         hp = V((0.17, 0, 0.56))
         rock(k, P.stone, hp, 0.1)
         for s in (1, -1):
             k.sphere(0.02, P.team_lt, loc=hp + V((0.09, s * 0.04, 0.0)), outline=0)
             sh = V((0.0, s * 0.3, 0.5))
-            fist = V((0.4, s * 0.16, 0.36)) if atk else V((0.16, s * 0.38, 0.2))
+            fist = H.mix(pose, (0.16, s * 0.38, 0.2), (0.44, s * 0.15, 0.1), wind=(0.04, s * 0.2, 0.78))
+            fist.x += 1.4 * H.arm_swing("L" if s > 0 else "R")
             rock(k, P.stone, sh, 0.12)
             rock(k, P.stone, fist, 0.12)
         for i in range(4):
@@ -1493,11 +1615,10 @@ def golemling(k, P, tier, pose):
 
 @unit("thrall", 0.22, spawned=True)
 def thrall(k, P, tier, pose):
-    atk = pose == "attack"
     lk = dict(torso="bone", pads=None, head="bald", crest=None, cape=None, chest=None, belt="team", legs="bone", boots="bone_dk",
               arms="bone", halo=False, gloves="bone")
-    hand = V((0.27, -0.05, 0.38)) if atk else V((0.18, -0.18, 0.3))
-    d = H.dir2(55, -0.05) if atk else H.dir2(-15, 0.12)
+    hand = H.mix(pose, (0.18, -0.18, 0.3), (0.27, -0.05, 0.38), wind=(0.04, -0.24, 0.48))
+    d = H.mixd(pose, H.dir2(-15, 0.12), H.dir2(55, -0.05), wind=H.dir2(-100, 0.5))
     with k.at(scale=hum_scale(0.22, 1) * 1.05):
         humanoid(k, P, 1, {"R": hand, "L": V((0.12, 0.2, 0.3))}, lk, bulk=0.85)
         skull(k, P, H.HEAD + V((0.0, 0, 0.0)), 0.11, eyes=P.team_lt)
@@ -1511,7 +1632,8 @@ def thrall(k, P, tier, pose):
 
 @unit("turret", 0.24, spawned=True)
 def turret(k, P, tier, pose):
-    fire = pose == "attack"
+    fire = H.strike(pose)
+    b = H.blend(pose)
     with k.at(scale=1.3):
         for i in range(3):
             a = 2 * math.pi * i / 3 + math.pi / 3
@@ -1523,9 +1645,15 @@ def turret(k, P, tier, pose):
         for s in (1, -1):
             k.tube([V((0.18, s * 0.04, 0.34)), V((0.16, s * 0.15, 0.34)), V((0.1, s * 0.22, 0.34))], 0.016, P.iron, smooth_n=2)
         k.ball(0.04, P.copper, loc=(-0.1, 0, 0.36))
-        bx = 0.26 if fire else 0.06
-        k.rod(V((bx, 0, 0.37)), V((bx + 0.22, 0, 0.37)), 0.01, P.wood)
-        k.spike(V((bx + 0.22, 0, 0.37)), V((bx + 0.28, 0, 0.37)), 0.02, P.steel)
+        if b <= 0:
+            bx = 0.06 + 0.03 * b
+        elif b >= 0.8:
+            bx = (0.26 + 0.2 * (b - 1)) if fire else None
+        else:
+            bx = 0.06 if b < 0.3 else None
+        if bx is not None:
+            k.rod(V((bx, 0, 0.37)), V((bx + 0.22, 0, 0.37)), 0.01, P.wood)
+            k.spike(V((bx + 0.22, 0, 0.37)), V((bx + 0.28, 0, 0.37)), 0.02, P.steel)
         if fire:
             spark(k, P, V((0.22, 0, 0.37)), 0.035, mat=P.white)
 

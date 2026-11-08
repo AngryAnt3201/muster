@@ -42,12 +42,46 @@ DIRS = [0, 45, 90, -45, -90]  # E, SE, S, NE, N
 DIR8 = [(0, False), (1, False), (2, False), (1, True), (0, True), (3, True), (4, False), (3, False)]
 
 # ------------------------------------------------------------------ animation plan
-# name -> number of frames. Runtime timing lives in src/render/sprites.ts (ANIM_TIMING).
-ANIMS = {"idle": 2, "walk": 4, "attack": 3, "death": 3}
+# name -> number of frames. Runtime timing lives in src/render/sprites.ts (clip timing) and src/render/units.ts.
+# idle: a breathing / weight-shift loop. walk: contact, down, passing, up for each foot. attack: two wind-up frames,
+# the impact (IMPACT), overshoot, follow-through and recover. death: recoil, buckle, fall, impact, bounce, settle.
+# cast: a special move for kinds in CAST (wind-up, raise, release at IMPACT, hold, settle).
+ANIMS = {"idle": 6, "walk": 8, "attack": 6, "death": 6, "cast": 6}
+# The frame the blow lands on (the runtime plays the frames before it as the wind-up, ahead of the hit).
+IMPACT = {"attack": 2, "cast": 2}
 # Bodies that never move reuse their idle frames for walk (manifest alias, nothing rendered).
 STATIC = {"mine", "ballista", "hive", "bombard", "turret"}
 # Built for the air: deaths tumble instead of toppling.
 FLYING = {"harrier", "griffin"}
+# Clips rendered below the atlas PPU (the runtime scales them back up): the death topple is a short, fading
+# transient, so it ships at 55% resolution to keep the download in budget.
+CLIP_SCALE = {"death": 0.55}
+# Kinds with a special move of their own, played on its battle event (src/render/board.ts castOf).
+CAST = {"medic", "grave", "tinker", "trickster", "lamp", "hook", "banner", "lion", "duelist", "pikeman"}
+# Motion class: heavy bodies wind up longer, bounce and squash more and raise dust as they step; light ones are snappy.
+WEIGHT = {
+    "golem": "heavy", "golemling": "heavy", "bulwark": "heavy", "hook": "heavy", "ravager": "heavy", "lion": "heavy",
+    "ballista": "heavy", "bombard": "heavy", "hive": "heavy", "lancer": "heavy",
+    "blades": "light", "shade": "light", "duelist": "light", "trickster": "light", "decoy": "light", "keg": "light",
+    "mite": "light", "sapper": "light", "ranger": "light", "thrall": "light", "queen": "light",
+}
+
+
+def weight(kind):
+    return WEIGHT.get(kind, "mid")
+
+
+def anims_for(kind):
+    """The clips a body has: walk for anything that moves, cast for kinds with a special move."""
+    out = {"idle": ANIMS["idle"]}
+    if kind not in STATIC:
+        out["walk"] = ANIMS["walk"]
+    out["attack"] = ANIMS["attack"]
+    out["death"] = ANIMS["death"]
+    if kind in CAST:
+        out["cast"] = ANIMS["cast"]
+    return out
+
 
 # ------------------------------------------------------------------ look
 INK = "#0b0f18"

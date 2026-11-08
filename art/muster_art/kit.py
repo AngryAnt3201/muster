@@ -442,11 +442,14 @@ class Kit:
             self.k, self.m = k, m
 
         def __enter__(self):
+            self.n = len(self.k.stack)
             self.k.stack.append(self.k.stack[-1] @ self.m)
             return self.k
 
         def __exit__(self, *a):
-            self.k.stack.pop()
+            # truncate rather than pop: a body plan may push a transform that lasts to the end of the enclosing frame
+            # (parts.humanoid's upper-body bob, parts.push), and it must not leak past it
+            del self.k.stack[self.n:]
 
     def at(self, loc=(0, 0, 0), rot=None, scale=1.0):
         return Kit._Frame(self, Matrix.Translation(Vector(loc)) @ _rot(rot) @ _scale(scale))

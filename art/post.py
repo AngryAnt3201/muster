@@ -124,14 +124,15 @@ def to8(arr):
 
 
 # ------------------------------------------------------------------ v3 battle frames
-def frame(raw_base, ascended, ghost=False):
-    """(colour RGBA, mask RGB) premultiplied floats at final resolution."""
+def frame(raw_base, ascended, ghost=False, scale=1.0):
+    """(colour RGBA, mask RGB) premultiplied floats at final resolution. scale: the frame's resolution against the
+    atlas PPU (style.CLIP_SCALE); ink and halo widths shrink with it so they match once the runtime scales it back."""
     col = load_premul(raw_base + ".png")
     m = load_premul(raw_base + "_m.png")
     # mask pass: team parts emit flat R/G/B, everything else black, same coverage as the colour pass (premultiplied)
     mask = np.clip(m[..., :3], 0, 1) * (col[..., 3:4] > 0)
     al = col[..., 3]
-    ink_a = dilate(al, STYLE.INK_PX)
+    ink_a = dilate(al, max(1, int(round(STYLE.INK_PX * scale))))
     ink = np.zeros_like(col)
     ink[..., :3] = INK * ink_a[..., None]
     ink[..., 3] = ink_a
@@ -140,7 +141,7 @@ def frame(raw_base, ascended, ghost=False):
     if ascended and os.path.exists(gp):
         g = load_premul(gp)
         ga = g[..., 3]
-        r = STYLE.GLOW_PX
+        r = STYLE.GLOW_PX * scale
         gg = STYLE.GLOW_GAIN  # the direction's bloom strength
         wide = np.clip(blur(ga, r * 1.8) * 1.6 * gg, 0, min(0.55 * gg, 0.8))
         near = np.clip(blur(ga, r * 0.7) * 1.8 * gg, 0, min(0.9 * gg, 1.0))
@@ -175,7 +176,7 @@ def post_unit(job):
     os.makedirs(dst, exist_ok=True)
     frames = []
     for fr in meta["frames"]:
-        c, m = frame(os.path.join(src, fr["file"]), tier == 4, ghost=kind == "decoy")
+        c, m = frame(os.path.join(src, fr["file"]), tier == 4, ghost=kind == "decoy", scale=fr.get("s", 1.0))
         h, w = c.shape[:2]
         # trim to visible pixels, keeping the anchor in frame coordinates
         vis = c[..., 3] > 1.5 / 255

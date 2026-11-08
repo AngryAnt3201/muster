@@ -88,14 +88,26 @@ def jobs_list(a):
 
 
 # ------------------------------------------------------------------ animation plan
+# Per-frame curves. Root transforms (whole-body lean, squash and stretch, the death topple) are baked under the model;
+# limb motion goes through parts.ANIM (see parts.py), which the body plans read.
+ATK_BLEND = [-0.55, -1.0, 1.0, 1.12, 0.7, 0.28]   # wind-up, wind-up hold, IMPACT, overshoot, follow-through, recover
+ATK_FX = [False, False, True, True, False, False]
+CAST_BLEND = [-0.4, 0.55, 1.0, 1.06, 0.7, 0.3]
+CAST_FX = [False, False, True, True, True, False]
+AMP = {"heavy": 1.3, "mid": 1.0, "light": 0.8}
+WALK_BOB = {"heavy": 0.024, "mid": 0.018, "light": 0.014}
+WALK_SWING = {"heavy": 0.045, "mid": 0.06, "light": 0.07}
+WALK_LEAN = {"heavy": 4.0, "mid": 6.0, "light": 8.0}
+
+
 def frame_plan(kind, radius):
-    """[(anim, index, pose, gait, root Matrix)] for one body. Root transforms are baked under the model."""
-    from mathutils import Matrix, Vector
+    """[(anim, index, pose, anim state, root Matrix)] for one body."""
+    from mathutils import Matrix
     from muster_art import style as S
 
     def about(pivot, m):
-        p = Vector(pivot)
-        return Matrix.Translation(p) @ m @ Matrix.Translation(-p)
+        p = Matrix.Translation(pivot)
+        return p @ m @ p.inverted()
 
     def rot(axis, deg):
         return Matrix.Rotation(math.radians(deg), 4, axis)
@@ -103,49 +115,102 @@ def frame_plan(kind, radius):
     def scl(x, y, z):
         return Matrix.Diagonal((x, y, z, 1.0))
 
+    def tr(x, y, z):
+        return Matrix.Translation((x, y, z))
+
     static = kind in S.STATIC
     flying = kind in S.FLYING
     bug = kind in BUGS
+    W = S.weight(kind)
+    amp = AMP[W]
     r = radius
+    rs = r / 0.3
+    clips = S.anims_for(kind)
     plan = []
-    # idle: rest + a breath
-    plan.append(("idle", 0, "idle", None, Matrix.Identity(4)))
-    plan.append(("idle", 1, "idle", None, scl(1.02, 1.02, 0.965) if not flying else Matrix.Translation((0, 0, 0.03 * r / 0.3))))
-    # walk: a 4-step cycle (legs/wings read ANIM gait), bob + forward lean
-    if not static:
-        for i in range(S.ANIMS["walk"]):
-            g = i / S.ANIMS["walk"]
-            bob = abs(math.cos(2 * math.pi * g)) * r * 0.06
+
+    def st(clip, **kw):
+        d = dict(gait=None, clip=clip, idle=None, blend=None, fx=None, bob=0.0, swing=0.0, death=None, weight=W)
+        d.update(kw)
+        return d
+
+    # ---- idle: breathing and a slow weight shift (fliers hover on a soft wing beat)
+    n = clips["idle"]
+    for i in range(n):
+        p = i / n
+        br, sw = math.sin(2 * math.pi * p), math.cos(2 * math.pi * p)
+        if flying:
+            m = tr(0, 0, -0.035 * rs * math.cos(2 * math.pi * p)) @ rot("Y", 2.0 * math.sin(2 * math.pi * p))
+        elif static:
+            m = scl(1 + 0.012 * br, 1 + 0.012 * br, 1 - 0.018 * br) if kind == "hive" else rot("Z", 1.2 * sw)
+        elif bug:
+            m = tr(0, 0, 0.004 * br) @ rot("X", 2.5 * sw)
+        else:
+            m = rot("X", 1.3 * sw * amp)
+        plan.append(("idle", i, "idle", st("idle", idle=p, bob=0.007 * br * amp), m))
+    # ---- walk: contact, down, passing, up for each foot; the upper body bounces, the planted foot stays put
+    if "walk" in clips:
+        n = clips["walk"]
+        for i in range(n):
+            g = i / n
             if flying:
-                m = Matrix.Translation((0, 0, math.cos(2 * math.pi * g) * -0.04 * r / 0.3))
+                m = tr(0, 0, -0.05 * rs * math.cos(2 * math.pi * g)) @ rot("Y", 6.0 + 3.0 * math.sin(2 * math.pi * g))
+                s_ = st("walk", gait=g)
             else:
-                m = Matrix.Translation((0, 0, bob)) @ rot("Y", 5.0)
-            plan.append(("walk", i, "idle", g, m))
-    # attack: wind-up, strike, follow-through
-    if static:
-        plan.append(("attack", 0, "idle", None, scl(1.03, 1.03, 0.95)))
-        plan.append(("attack", 1, "attack", None, scl(0.98, 0.98, 1.04)))
-        plan.append(("attack", 2, "attack", None, Matrix.Identity(4)))
-    else:
-        plan.append(("attack", 0, "idle", None, about((-r * 0.3, 0, 0), rot("Y", -8.0)) @ scl(1.0, 1.0, 0.97)))
-        plan.append(("attack", 1, "attack", None, about((r * 0.3, 0, 0), rot("Y", 8.0)) @ scl(1.0, 1.0, 1.02)))
-        plan.append(("attack", 2, "attack", None, about((r * 0.3, 0, 0), rot("Y", 3.0))))
-    # death
-    if static:
-        for i, (sx, sz, tilt) in enumerate(((1.05, 0.82, 4.0), (1.12, 0.58, 8.0), (1.18, 0.34, 10.0))):
-            plan.append(("death", i, "idle", None, rot("X", tilt) @ scl(sx, sx, sz)))
-    elif flying:
-        z = 0.45 * r / 0.3
-        for i, (roll, drop) in enumerate(((35.0, 0.12), (95.0, 0.28), (160.0, 0.4))):
-            plan.append(("death", i, "idle", None, Matrix.Translation((0, 0, -drop * z)) @ about((0, 0, z), rot("X", roll))))
-    elif bug:
-        z = 0.1 * (2.0 if kind == "queen" else 1.15)
-        for i, roll in enumerate((70.0, 140.0, 180.0)):
-            plan.append(("death", i, "idle", None, Matrix.Translation((0, 0, z * 0.6 * i / 2)) @ about((0, 0, z), rot("X", roll))))
-    else:
-        pv = (-r * 0.55, 0, 0)
-        for i, (ang, sz, sink) in enumerate(((-24.0, 1.0, 0.0), (-58.0, 0.95, -0.01), (-84.0, 0.86, -0.02))):
-            plan.append(("death", i, "idle", None, Matrix.Translation((0, 0, sink * r / 0.3)) @ about(pv, rot("Y", ang)) @ scl(1, 1, sz)))
+                m = rot("Y", WALK_LEAN[W])
+                s_ = st("walk", gait=g, bob=-WALK_BOB[W] * math.sin(4 * math.pi * g), swing=WALK_SWING[W])
+            plan.append(("walk", i, "idle", s_, m))
+    # ---- attack: wind-up (lean back, crouch), impact (lunge, stretch), overshoot, follow-through, settle
+    n = clips["attack"]
+    for i in range(n):
+        b, fx = ATK_BLEND[i], ATK_FX[i]
+        if static:
+            m = [scl(1.03, 1.03, 0.94), scl(1.05, 1.05, 0.9) @ tr(0.01 * rs, 0, 0), tr(-0.05 * rs, 0, 0) @ scl(0.98, 0.98, 1.04),
+                 tr(-0.07 * rs, 0, 0) @ scl(1.02, 1.02, 0.97), tr(-0.04 * rs, 0, 0), tr(-0.012 * rs, 0, 0)][i]
+        elif flying:
+            z = 0.45 * rs
+            m = [about((0, 0, z), rot("Y", -10)) @ tr(0, 0, 0.04 * rs), about((0, 0, z), rot("Y", -16)) @ tr(-0.02 * rs, 0, 0.07 * rs),
+                 about((0, 0, z), rot("Y", 22)) @ tr(0.06 * rs, 0, -0.06 * rs), about((0, 0, z), rot("Y", 26)) @ tr(0.07 * rs, 0, -0.08 * rs),
+                 about((0, 0, z), rot("Y", 12)) @ tr(0.035 * rs, 0, -0.035 * rs), about((0, 0, z), rot("Y", 4)) @ tr(0.01 * rs, 0, 0)][i]
+        else:
+            back, front = (-r * 0.3, 0, 0), (r * 0.3, 0, 0)
+            m = [about(back, rot("Y", -6 * amp)) @ scl(1 + 0.015 * amp, 1 + 0.015 * amp, 1 - 0.035 * amp),
+                 about(back, rot("Y", -11 * amp)) @ scl(1 + 0.03 * amp, 1 + 0.03 * amp, 1 - 0.07 * amp),
+                 about(front, rot("Y", 9 * amp)) @ scl(0.98, 0.98, 1 + 0.05 * amp),
+                 about(front, rot("Y", 11 * amp)) @ scl(1.0, 1.0, 1 + 0.02 * amp),
+                 about(front, rot("Y", 5 * amp)) @ scl(1 + 0.02 * amp, 1 + 0.02 * amp, 1 - 0.025 * amp),
+                 about(front, rot("Y", 2 * amp))][i]
+        plan.append(("attack", i, "attack", st("attack", blend=b, fx=fx), m))
+    # ---- cast: the special move (rise, release on IMPACT, hold, settle)
+    if "cast" in clips:
+        n = clips["cast"]
+        for i in range(n):
+            b, fx = CAST_BLEND[i], CAST_FX[i]
+            back = (-r * 0.3, 0, 0)
+            m = [about(back, rot("Y", -4 * amp)) @ scl(1.02, 1.02, 0.95), about(back, rot("Y", -6 * amp)) @ scl(0.99, 0.99, 1.03),
+                 scl(0.98, 0.98, 1.05), scl(0.99, 0.99, 1.03), Matrix.Identity(4), about(back, rot("Y", 1))][i]
+            plan.append(("cast", i, "cast", st("cast", blend=b, fx=fx), m))
+    # ---- death: recoil, buckle, fall, impact, bounce, settle
+    n = clips["death"]
+    for i in range(n):
+        d = i / (n - 1)
+        s_ = st("death", death=d)
+        if static:
+            sx, sz, tilt = ((1.03, 0.9, 3.0), (1.08, 0.75, 6.0), (1.13, 0.58, 8.0), (1.18, 0.4, 10.0), (1.17, 0.44, 9.0), (1.2, 0.34, 10.0))[i]
+            m = rot("X", tilt) @ scl(sx, sx, sz)
+        elif flying:
+            z = 0.45 * rs
+            roll, drop = ((18.0, 0.04), (60.0, 0.14), (120.0, 0.28), (170.0, 0.42), (175.0, 0.36), (180.0, 0.44))[i]
+            m = tr(0, 0, -drop * z) @ about((0, 0, z), rot("X", roll))
+        elif bug:
+            z = 0.1 * (2.0 if kind == "queen" else 1.15)
+            roll, lift = ((35.0, 0.02), (95.0, 0.06), (150.0, 0.07), (180.0, 0.03), (172.0, 0.045), (180.0, 0.03))[i]
+            m = tr(0, 0, lift * (2.0 if kind == "queen" else 1.0)) @ about((0, 0, z), rot("X", roll))
+        else:
+            pv = (-r * 0.55, 0, 0)
+            ang, sz, sink = ((-14.0, 1.0, 0.012), (-38.0, 0.97, -0.004), (-66.0, 0.93, -0.01), (-90.0, 0.85, -0.02),
+                             (-83.0, 0.9, -0.012), (-90.0, 0.84, -0.024))[i]
+            m = tr(0, 0, sink * rs) @ about(pv, rot("Y", ang)) @ scl(1, 1, sz)
+        plan.append(("death", i, "idle", s_, m))
     return plan
 
 
@@ -166,14 +231,18 @@ def render_unit(st, k, P, kind, tier, a):
     margin = 0.045 + (0.07 if tier == 4 else 0.0)
     frames = []
     n = 0
-    for anim, idx, pose, g, root in frame_plan(kind, spec["radius"]):
+    stride = 0.0
+    for anim, idx, pose, state, root in frame_plan(kind, spec["radius"]):
         k.clear()
-        H.ANIM["gait"] = g
+        H.reset_anim()
+        H.ANIM.update(state)
         k.stack = [root]
         spec["build"](k, P, tier, pose)
         k.stack = [Matrix.Identity(4)]
-        H.ANIM["gait"] = None
+        stride = max(stride, H.ANIM["stride"])
+        H.reset_anim()
         v = k.verts_world().astype(np.float64)
+        fs = S.CLIP_SCALE.get(anim, 1.0)
         for di, deg in enumerate(S.DIRS):
             yaw = math.radians(-deg)
             c, s_ = math.cos(yaw), math.sin(yaw)
@@ -181,7 +250,7 @@ def render_unit(st, k, P, kind, tier, a):
             ry = v[:, 0] * s_ + v[:, 1] * c
             px = rx
             py = ry * up[1] + v[:, 2] * up[2]
-            ppu = S.PPU
+            ppu = S.PPU * fs
             x0 = math.floor((px.min() - margin) * ppu) / ppu
             x1 = math.ceil((px.max() + margin) * ppu) / ppu
             y0 = math.floor((py.min() - margin) * ppu) / ppu
@@ -208,10 +277,11 @@ def render_unit(st, k, P, kind, tier, a):
                 st.render(base + "_g.png", (w * S.SS, h * S.SS), span, shift=shift)
                 K.set_glowpass(False)
                 n += 1
-            frames.append({"anim": anim, "i": idx, "dir": di, "w": w, "h": h,
+            frames.append({"anim": anim, "i": idx, "dir": di, "w": w, "h": h, "s": fs,
                            "ax": int(round(-x0 * ppu)), "ay": int(round(y1 * ppu)), "file": f"{anim}{idx}_d{di}"})
     with open(os.path.join(out, "meta.json"), "w") as f:
-        json.dump({"kind": kind, "tier": tier, "radius": spec["radius"], "ppu": S.PPU, "ss": S.SS, "style": S.ID, "frames": frames}, f)
+        json.dump({"kind": kind, "tier": tier, "radius": spec["radius"], "ppu": S.PPU, "ss": S.SS, "style": S.ID,
+                   "anims": S.anims_for(kind), "weight": S.weight(kind), "stride": round(stride, 4), "frames": frames}, f)
     return n
 
 
