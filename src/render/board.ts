@@ -7,8 +7,8 @@ import { arenaFor, backdropRect, propRect, propVariant, type Arena } from "./are
 import { Camera, DIST, SLAB, TILT, sortDrawables, type Drawable, type Rect, type ScreenPt } from "./camera";
 import { Fx, animAlpha, animFrame, frand, type Anim } from "./fx";
 import { BOARD, GOLD, INK, TEAM, VIOLET, ZAP, team } from "./palette";
-import { frame, hasAtlas, spriteHeight } from "./sprites";
-import { animFor, spriteVis, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
+import { frame, hasAtlas, motionOf, spriteHeight, type Weight } from "./sprites";
+import { CAST_TIME, CAST_WIND, STRIKE_TIME, WINDUP, animFor, idleJitter, spriteVis, strikeSquash, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
 import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
 import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playBoom, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
@@ -55,7 +55,8 @@ export const FLYER_Z = 0.6;
 /** An effect at a body's own row draws just after (over) that body. */
 const AIR_SORT_EPS = 0.02;
 
-type TokenOpts = DrawOpts & { rank?: number; flat?: boolean; /** squash-and-stretch [sx, sy] about the feet (juice) */ sq?: readonly [number, number] };
+type TokenOpts = DrawOpts & { rank?: number; flat?: boolean; /** squash-and-stretch [sx, sy] about the feet (juice) */ sq?: readonly [number, number];
+  /** a shooter: no lunge on the blow (it recoils instead) */ ranged?: boolean };
 
 /** Drawn off the ground: flyers, and a Griffin Knight fighting low after its swoop (in reach of swords, still on the wing). */
 const aloft = (bd: Pick<Body, "flying" | "kind">) => bd.flying || bd.kind === "griffin";
@@ -111,6 +112,19 @@ export class BoardView {
   /** Recent screen points of each straight shot in flight, for its trail. */
   private trails = new WeakMap<Proj, { x: number; y: number; z: number }[]>();
   // ---- /JUICE
+  // ---- ANIM (unit motion, docs/ART-V3-ATLAS.md "Runtime"): render-only clocks per body id, in battle time.
+  /** Attacks seen from events (shooters, healers, spawners: the sim marks a swing only for some). */
+  private atkAt = new Map<number, number>();
+  /** The last special move (cast clip). */
+  private castAt = new Map<number, number>();
+  /** The last blow taken, and how hard (the knockback nudge). */
+  private hitAt = new Map<number, { t: number; k: number }>();
+  /** The last shot loosed (the ranged recoil). */
+  private recoilAt = new Map<number, number>();
+  /** Each walker's gait phase (advanced by speed over its stride, so planted feet keep pace with the ground) and the
+   *  board time it was last advanced. */
+  private gaitOf = new Map<number, { ph: number; t: number }>();
+  // ---- /ANIM
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -400,9 +414,95 @@ export class BoardView {
   }
 
   private onEvent(e: BattleEvent, battle: Battle) {
+    this.animEvent(e, battle);
     playEvent(this.fx, e, this.vfxEnv(battle));
     // JUICE: hit-stop, shake and Ascended callouts from the same event.
     this.juice.onEvent(e, (id) => battle.bodies.find((b) => b.id === id));
+  }
+
+  /** ANIM: start the attack, cast, nudge and recoil clocks an event implies. */
+  private animEvent(e: BattleEvent, battle: Battle) {
+    const t = battle.time;
+    const body = (id: number) => battle.bodies.find((b) => b.id === id);
+    const cast = (id: number) => {
+      const bd = body(id);
+      if (!bd) return;
+      if (motionOf(bd.kind, bd.rank).cast) this.castAt.set(id, t); else this.atkAt.set(id, t);
+    };
+    switch (e.t) {
+      case "shot": this.atkAt.set(e.id, t); this.recoilAt.set(e.id, t); break;
+      case "volley": case "twin": case "dive": this.atkAt.set(e.id, t); break;
+      case "heal": if (e.from !== e.to) this.atkAt.set(e.from, t); break;
+      case "wave": this.atkAt.set(e.from, t); break;
+      case "spawn": if (e.kind === "thrall") cast(e.from); else if (e.kind === "mite" || e.kind === "queen") this.atkAt.set(e.from, t); break;
+      case "revive": case "ward": case "decoy": cast(e.from); break;
+      case "build": case "hook": case "laststand": case "parry": case "brace": cast(e.id); break;
+      case "aura": {
+        // the bearer waves the flag as the aura pulses, unless it is mid-blow
+        const bd = body(e.id);
+        if (bd?.kind === "banner" && t - bd.swing > STRIKE_TIME + 0.2) cast(e.id);
+        break;
+      }
+      case "hit": this.hitAt.set(e.id, { t, k: e.big ? 1.5 : e.dmg >= 30 ? 1.15 : 0.8 }); break;
+      default: break;
+    }
+  }
+
+  /** ANIM: 0..1 progress of the wind-up before a body's next blow, if one is about to land: the cooldown is nearly
+   *  up and its target is in reach. */
+  private windupOf(b: Battle, bd: Body, weight: Weight, sp: number): number | undefined {
+    const w = WINDUP[weight];
+    if (!bd.alive || bd.cooldown <= 0 || bd.cd <= 0 || bd.cd > w || sp > 0.25 || bd.stun > 0 || (bd.frozen ?? 0) > 0) return undefined;
+    const tg = bd.target >= 0 ? b.bodies.find((o) => o.id === bd.target) : undefined;
+    if (!tg || !tg.alive || Math.hypot(tg.x - bd.x, tg.y - bd.y) - tg.radius - bd.radius > bd.range + 0.1) return undefined;
+    return 1 - bd.cd / w;
+  }
+
+  /** ANIM: advance a walker's gait phase by its speed over its stride (at the drawn scale) and return it; heavy bodies
+   *  kick up dust on each footfall. undefined when it isn't walking on the ground. */
+  private stepGait(bd: Body, sp: number, mo: { stride: number; weight: Weight }, x: number, y: number): number | undefined {
+    if (sp <= 0.2 || !bd.alive || aloft(bd)) { this.gaitOf.delete(bd.id); return undefined; }
+    const vis = spriteVis(RADIUS(bd.kind)) * (bd.radius / RADIUS(bd.kind));
+    const cadence = Math.max(0.8, Math.min(3.4, mo.stride > 0 ? sp / (mo.stride * vis) : sp / 0.7));
+    let g = this.gaitOf.get(bd.id);
+    if (!g) this.gaitOf.set(bd.id, (g = { ph: idleJitter(bd.id)[0], t: this.time }));
+    const before = g.ph;
+    g.ph += Math.max(0, Math.min(0.1, this.time - g.t)) * cadence;
+    g.t = this.time;
+    const step = Math.floor(g.ph * 2);
+    if (step !== Math.floor(before * 2) && mo.weight === "heavy" && !this.juice.reduced && vfxReady()) {
+      // a footfall (the left foot lands at phase 0, the right at 0.5)
+      const side = step % 2 ? -1 : 1, c = Math.cos(bd.face), s = Math.sin(bd.face);
+      const fx = x - s * side * bd.radius * 0.35 + c * bd.radius * 0.25, fy = y + c * side * bd.radius * 0.35 + s * bd.radius * 0.25;
+      this.fx.anim("dust", fx, fy, { size: Math.max(0.45, bd.radius * 1.7), max: 0.38, tint: "#d6c3a0", layer: "ground", alpha: 0.5 });
+    }
+    return g.ph;
+  }
+
+  /** ANIM: the knockback nudge from a blow and the recoil of a shot, as a ground offset (world units). */
+  private juiceOffset(b: Battle, bd: Body, weight: Weight): [number, number] {
+    if (this.juice.reduced || !bd.alive) return [0, 0];
+    let m = 0;
+    const h = this.hitAt.get(bd.id);
+    if (h && !bd.structure) {
+      const u = (b.time - h.t) / 0.2;
+      if (u >= 0 && u < 1) m += Math.sin(u * Math.PI) * (1 - u * 0.4) * bd.radius * 0.16 * h.k * (weight === "heavy" ? 0.55 : weight === "light" ? 1.2 : 1);
+    }
+    const r = this.recoilAt.get(bd.id);
+    if (r !== undefined) {
+      const u = (b.time - r) / 0.16;
+      if (u >= 0 && u < 1) m += Math.sin(u * Math.PI) * (1 - u) * bd.radius * (bd.structure ? 0.08 : 0.22);
+    }
+    return m ? [-Math.cos(bd.face) * m, -Math.sin(bd.face) * m] : [0, 0];
+  }
+
+  /** ANIM: how high a body is lifted off its shadow right now (the deploy drop, the battle-start hop, a summon). */
+  private liftOf(b: Battle, bd: Body): number {
+    if (!bd.alive) return 0;
+    const t0 = bd.owner === -1 ? this.drop.get(bd.pieceId) : undefined;
+    let z = 0;
+    if (t0 !== undefined) { const u = (this.time - t0) / DROP_TIME; if (u < 1) z += DROP_HEIGHT * (1 - u * u); }
+    return z + this.juiceBody(b, bd).z;
   }
 
   /** A blast (the round-end assault's hits on a keep use the battle's own explosions). */
@@ -597,7 +697,7 @@ export class BoardView {
     }
     // A short lunge towards the target on the strike, along the ground.
     let fx = x, fy = y;
-    if (swing >= 0 && swing < 0.5) {
+    if (swing >= 0 && swing < 0.5 && !o.ranged) {
       const l = Math.sin((swing / 0.5) * Math.PI) * radius * 0.16;
       fx += Math.cos(face) * l; fy += Math.sin(face) * l;
     }
@@ -854,7 +954,10 @@ export class BoardView {
       const fade = fadeOf(bd);
       const z = height(bd);
       // Contact shadow: smaller and fainter the higher the body flies. JUICE: a soft two-layer shadow and a team ring.
-      shadowRing(ctx, this.cam, x, y, bd.radius * (1.1 - z * 0.15), (0.38 - z * 0.08) * fade, bd.kind === "decoy" && bd.side !== 0 ? null : bd.side, bd.alive ? 1 : fade);
+      // ANIM: it also shrinks and fades while a hop or drop lifts the body, and rides the knockback nudge with it.
+      const lift = this.liftOf(b, bd), [ox, oy] = this.juiceOffset(b, bd, motionOf(bd.kind, bd.rank).weight);
+      const lk = 1 - Math.min(0.5, lift * 0.9);
+      shadowRing(ctx, this.cam, x + ox, y + oy, bd.radius * (1.1 - z * 0.15) * lk, (0.38 - z * 0.08) * fade * lk, bd.kind === "decoy" && bd.side !== 0 ? null : bd.side, bd.alive ? 1 : fade);
       // Auras on the ground under the unit.
       const auraOn = bd.alive && ((bd.buff ?? 0) > 0 || (bd.rally ?? 0) > 0);
       if (auraOn && tex) {
@@ -964,6 +1067,7 @@ export class BoardView {
   /** Battle start: every deployed body hops in place, staggered across the line, and lands in a puff of dust. */
   private juiceStart(b: Battle) {
     this.juice.reset();
+    this.atkAt.clear(); this.castAt.clear(); this.hitAt.clear(); this.recoilAt.clear(); this.gaitOf.clear();
     if (this.juice.reduced) return;
     for (const bd of b.bodies) {
       if (bd.owner !== -1 || bd.flying || bd.kind === "mine" || bd.burrowed) continue;
@@ -1017,8 +1121,16 @@ export class BoardView {
 
   private drawBody(b: Battle, bd: Body, [x, y]: readonly [number, number], z: number, fade: number) {
     const ctx = this.ctx;
-    const swing = b.time - bd.swing < 0.35 ? (b.time - bd.swing) / 0.35 : -1;
+    // ANIM: the blow (the sim's swing, or an attack seen from an event), the special move, the wind-up before the
+    // next blow, and the gait phase.
+    const mo = motionOf(bd.kind, bd.rank);
+    const atkT = Math.max(bd.swing, this.atkAt.get(bd.id) ?? -9);
+    const swing = b.time - atkT < STRIKE_TIME ? (b.time - atkT) / STRIKE_TIME : -1;
+    const castT = this.castAt.get(bd.id);
+    const cast = bd.alive && castT !== undefined && b.time - castT < CAST_TIME ? (b.time - castT) / CAST_TIME : undefined;
     const sp = Math.hypot(bd.vx, bd.vy);
+    const windup = swing < 0 && cast === undefined ? this.windupOf(b, bd, mo.weight, sp) : undefined;
+    const gait = this.stepGait(bd, sp, mo, x, y);
     if (bd.kind === "lancer" && bd.state === "charge" && sp > 2.5 && Math.random() < 0.5)
       this.fx.burst(bd.x - Math.cos(bd.face) * 0.3, bd.y - Math.sin(bd.face) * 0.3, 1, { color: "rgba(170,150,120,0.55)", speed: 0.5, size: 0.12, max: 0.45, kind: "smoke", gravity: 0 });
     if (bd.kind === "shade" && bd.hidden && Math.random() < 0.15)
@@ -1031,7 +1143,16 @@ export class BoardView {
     const jz = this.juiceBody(b, bd);
     z += jz.z;
     const scale = (aloft(bd) ? 1 + (bd.z ?? 1.2) * 0.08 : 1) * fall.scale * jz.scale;
-    const sq = mulSq(fall.sq, jz.sq);
+    let sq = mulSq(fall.sq, jz.sq);
+    // ANIM: a crouch through the wind-up, a stretch on the blow that springs back (heavier bodies squash more).
+    if (!this.juice.reduced && bd.alive) {
+      const amp = mo.weight === "heavy" ? 1.3 : mo.weight === "light" ? 0.8 : 1;
+      if (cast !== undefined) sq = mulSq(sq, strikeSquash(cast < CAST_WIND ? -1 + cast / CAST_WIND : (cast - CAST_WIND) / (1 - CAST_WIND), amp * 0.7));
+      else if (swing >= 0) sq = mulSq(sq, strikeSquash(swing, amp));
+      else if (windup !== undefined) sq = mulSq(sq, strikeSquash(-1 + windup, amp));
+    }
+    const [ox, oy] = this.juiceOffset(b, bd, mo.weight);
+    x += ox; y += oy;
     const decoy = bd.kind === "decoy";
     const owner = decoy ? b.bodies.find((o) => o.id === bd.owner) : undefined;
     // A decoy has its own ghostly atlas; the drawn fallback borrows the trickster's token.
@@ -1040,7 +1161,7 @@ export class BoardView {
     const radius = bd.radius * scale * (decoy && !art ? RADIUS("trickster") / RADIUS("decoy") : 1);
     this.token(kind, bd.side, x, y, z, radius, bd.face, {
       t: this.time, alpha: (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1) * (bd.alive ? fade : 1), dying: bd.alive ? undefined : 1 - fade,
-      flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp,
+      flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp, windup, cast, gait, weight: mo.weight, ranged: bd.range > 1.2,
       state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank, sq,
     });
     const at = this.bodyAt(x, y, z, bd.radius);

@@ -84,7 +84,8 @@ export function kickFor(e: BattleEvent, find: Find): Kick {
   const k: Kick = {};
   switch (e.t) {
     case "hit":
-      if (e.big && !e.shielded) { k.stop = 3; k.shake = 0.16; } else if (e.dmg >= 45) k.stop = 2;
+      // heavy blows (a crit, a colossus slam, a bolt, a shell) hold for 3 frames (50 ms)
+      if (e.big && !e.shielded) { k.stop = 3; k.shake = 0.16; } else if (e.dmg >= 36 && !e.shielded) k.stop = 3;
       break;
     case "death":
       if (!SMALL.has(e.kind)) k.stop = e.kind === "golem" ? 4 : 2;

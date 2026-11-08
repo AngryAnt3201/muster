@@ -293,6 +293,9 @@ function playAt(fx: Fx, e: BattleEvent, env: VfxEnv) {
         fx.anim("smoke", e.x, e.y, { size: Math.max(0.9, r * 3.4), max: 0.6, tint: "#e3e6ea", z: 0.1 });
         if (!STRUCT.has(e.kind)) fx.anim("soul", e.x, e.y, { size: Math.max(0.8, r * 2.6), max: 0.9, tint: TEAM[e.side].light, delay: 0.08 });
         else fx.anim("flash", e.x, e.y, { size: 1, max: 0.2, tint: GOLD });
+        // ANIM: the body ends in a poof as it fades at the end of its death clip (board.ts: 0.45 s), never a hard cut
+        fx.anim("smoke", e.x, e.y, { size: Math.max(0.75, r * 2.8), max: 0.5, tint: "#eef0f3", z: 0.06, delay: 0.28, alpha: 0.85, grow: [0.6, 1.15] });
+        fx.anim("shock", e.x, e.y, { size: Math.max(0.7, r * 2.6), max: 0.3, tint: TEAM[e.side].light, layer: "ground", delay: 0.3, alpha: 0.6 });
       }
       if (!env.textured) fx.ring(e.x, e.y, r * 0.6, r * 1.8, 0.35, col, 0.05);
       fx.burst(e.x, e.y, e.kind === "mite" ? 4 : 10, { color: col, speed: 2.2, size: 0.07, max: 0.6, kind: "chunk", vz: 3, spin: 8 });

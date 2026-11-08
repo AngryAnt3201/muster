@@ -2,7 +2,7 @@
 // below, drawn with paths, are the fallback while an atlas loads and the shop-card icons. r is the radius in px.
 import type { BodyKind, Side } from "../core/defs";
 import { INK, STEEL, TEAM, WOOD, ZAP } from "./palette";
-import type { Anim, Frame } from "./sprites";
+import type { Anim, Frame, Weight } from "./sprites";
 
 export interface DrawOpts {
   rank?: number;
@@ -19,6 +19,26 @@ export interface DrawOpts {
   own?: boolean; // viewer's own side (mines and cloaks show faintly)
   dying?: number; // 0..1 progress of the death animation
   noShadow?: boolean; // the caller draws the contact shadow (the diorama board does)
+  windup?: number; // 0..1 progress of the wind-up before the next blow lands
+  cast?: number; // 0..1 progress of the special move (cast clip)
+  gait?: number; // walk-cycle phase kept by the caller (advanced by speed / stride, so feet don't slide)
+  weight?: Weight; // motion class (idle tempo)
+}
+
+/** Seconds per idle breath by motion class: heavy bodies breathe slow and deep, light ones quick. */
+export const IDLE_PERIOD: Record<Weight, number> = { heavy: 1.9, mid: 1.6, light: 1.35 };
+/** How long before a blow lands the wind-up frames start, by motion class. */
+export const WINDUP: Record<Weight, number> = { heavy: 0.2, mid: 0.16, light: 0.12 };
+/** The attack clip's frames after the blow play over this window (the sim's swing). */
+export const STRIKE_TIME = 0.35;
+/** The cast clip's length, and the part of it before the release. */
+export const CAST_TIME = 0.62;
+export const CAST_WIND = 0.3;
+
+/** A body's own idle offset (0..1) and tempo (x0.9..1.1), so a squad never breathes or sways in lockstep. */
+export function idleJitter(id: number): [number, number] {
+  const f = (v: number) => v - Math.floor(v);
+  return [f(Math.sin(id * 12.9898 + 78.233) * 43758.5453), 0.9 + 0.2 * f(Math.sin(id * 39.3468 + 11.135) * 24634.6345)];
 }
 
 /** Atlas sprites draw this much larger than true scale so they read on a phone like the Meadow style frame (collision is unchanged). */
@@ -30,16 +50,35 @@ export function spriteVis(radius: number): number {
   return radius <= 0.3 ? SPRITE_VIS : Math.max(1.25, SPRITE_VIS - (radius - 0.3));
 }
 
-/** Which animation a body plays and where in it (phase 0..1, see sprites.frame). */
+/** Which animation a body plays and where in it (phase, see sprites.clipIndex): death, then the special move, then
+ *  the blow and what follows it, then the wind-up before the next blow, then walking, else idle. */
 export function animFor(o: DrawOpts): { anim: Anim; phase: number } {
   const t = o.t ?? 0, id = o.id ?? 0;
   if (o.dying !== undefined) return { anim: "death", phase: o.dying };
+  if (o.cast !== undefined && o.cast >= 0 && o.cast < 1)
+    return { anim: "cast", phase: o.cast < CAST_WIND ? -1 + o.cast / CAST_WIND : (o.cast - CAST_WIND) / (1 - CAST_WIND) };
   const sw = o.swing ?? -1;
   if (sw >= 0 && sw < 1) return { anim: "attack", phase: sw };
+  if (o.windup !== undefined && o.windup > 0) return { anim: "attack", phase: -1 + Math.min(0.999, o.windup) };
   const sp = o.speed ?? 0;
-  // One stride cycle per ~0.7 world units travelled, kept in a readable cadence band.
-  if (sp > 0.2 && !o.ghost) return { anim: "walk", phase: t * Math.max(1.1, Math.min(2.6, sp / 0.7)) + id * 0.37 };
-  return { anim: "idle", phase: t * 0.75 + id * 0.29 };
+  if (sp > 0.2 && !o.ghost) {
+    if (o.gait !== undefined) return { anim: "walk", phase: o.gait };
+    // One stride cycle per ~0.7 world units travelled, kept in a readable cadence band.
+    return { anim: "walk", phase: t * Math.max(1.1, Math.min(2.6, sp / 0.7)) + id * 0.37 };
+  }
+  const [off, rate] = idleJitter(id);
+  return { anim: "idle", phase: (t * rate) / IDLE_PERIOD[o.weight ?? "mid"] + off };
+}
+
+/** Squash-and-stretch [sx, sy] about the feet for a strike: a crouch through the wind-up (phase -1..0), then a stretch
+ *  on the blow that springs back (phase 0..1). amp scales it by motion class. */
+export function strikeSquash(phase: number, amp = 1): [number, number] {
+  if (phase < 0) {
+    const c = (1 + phase) ** 2;
+    return [1 + 0.05 * c * amp, 1 - 0.06 * c * amp];
+  }
+  const k = Math.exp(-phase * 5) * Math.cos(phase * Math.PI * 2.4);
+  return [1 - 0.06 * k * amp, 1 + 0.08 * k * amp];
 }
 
 /**

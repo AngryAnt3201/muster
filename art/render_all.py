@@ -98,6 +98,7 @@ AMP = {"heavy": 1.3, "mid": 1.0, "light": 0.8}
 WALK_BOB = {"heavy": 0.024, "mid": 0.018, "light": 0.014}
 WALK_SWING = {"heavy": 0.045, "mid": 0.06, "light": 0.07}
 WALK_LEAN = {"heavy": 4.0, "mid": 6.0, "light": 8.0}
+CAST_CROUCH = {"pikeman"}
 
 
 def frame_plan(kind, radius):
@@ -186,8 +187,13 @@ def frame_plan(kind, radius):
         for i in range(n):
             b, fx = CAST_BLEND[i], CAST_FX[i]
             back = (-r * 0.3, 0, 0)
-            m = [about(back, rot("Y", -4 * amp)) @ scl(1.02, 1.02, 0.95), about(back, rot("Y", -6 * amp)) @ scl(0.99, 0.99, 1.03),
-                 scl(0.98, 0.98, 1.05), scl(0.99, 0.99, 1.03), Matrix.Identity(4), about(back, rot("Y", 1))][i]
+            if kind in CAST_CROUCH:
+                # a stance move (the pikeman's brace): sink low and lean into it instead of rising
+                m = [scl(1.02, 1.02, 0.96), scl(1.04, 1.04, 0.9), about(back, rot("Y", 6)) @ scl(1.06, 1.06, 0.84),
+                     about(back, rot("Y", 7)) @ scl(1.06, 1.06, 0.83), about(back, rot("Y", 5)) @ scl(1.05, 1.05, 0.86), scl(1.02, 1.02, 0.94)][i]
+            else:
+                m = [about(back, rot("Y", -4 * amp)) @ scl(1.02, 1.02, 0.95), about(back, rot("Y", -6 * amp)) @ scl(0.99, 0.99, 1.03),
+                     scl(0.98, 0.98, 1.05), scl(0.99, 0.99, 1.03), Matrix.Identity(4), about(back, rot("Y", 1))][i]
             plan.append(("cast", i, "cast", st("cast", blend=b, fx=fx), m))
     # ---- death: recoil, buckle, fall, impact, bounce, settle
     n = clips["death"]

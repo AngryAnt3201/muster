@@ -74,6 +74,7 @@ describe("event kicks", () => {
   it("big hits, big blasts and kills freeze; small ones don't", () => {
     expect(kickFor({ t: "hit", id: 1, x: 4, y: 7, dmg: 30, side: 0, big: true }, find)).toMatchObject({ stop: 3 });
     expect(kickFor({ t: "hit", id: 1, x: 4, y: 7, dmg: 8, side: 0 }, find).stop).toBeUndefined();
+    expect(kickFor({ t: "hit", id: 1, x: 4, y: 7, dmg: 40, side: 0 }, find).stop).toBe(3);
     expect(kickFor({ t: "hit", id: 1, x: 4, y: 7, dmg: 30, side: 0, big: true, shielded: true }, find).stop).toBeUndefined();
     expect(kickFor({ t: "boom", x: 4, y: 7, r: 1.2, kind: "keg", side: 0 }, find)).toMatchObject({ stop: 3 });
     expect(kickFor({ t: "boom", x: 4, y: 7, r: 0.5, kind: "pop", side: 0 }, find).stop).toBeUndefined();

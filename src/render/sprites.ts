@@ -1,13 +1,26 @@
 // Blender-rendered character atlases (public/atlas, see docs/ART-V3-ATLAS.md). One atlas per body and tier holds
-// 5 rendered facings (the other 3 are mirrors) x idle/walk/attack/death frames, with team parts in white and a
-// team mask beside it. Each atlas is tinted for a team into a canvas the first time that team needs it. Until a sheet is
-// ready the renderer falls back to the drawn tokens in units.ts.
+// 5 rendered facings (the other 3 are mirrors) x idle/walk/attack/death (+ cast) frames. A sheet is one 8-bit image of
+// palette indices (lossless WebP) with a joint palette in the manifest: each entry's colour (team parts in white) and
+// team mask. A sheet is tinted for a team by tinting its palette (at most 256 entries) and writing one lookup per
+// pixel, into a canvas the first time that team needs it. Until a sheet is ready the renderer falls back to the drawn
+// tokens in units.ts.
 import type { Side } from "../core/defs";
 import { TEAM } from "./palette";
 
-export type Anim = "idle" | "walk" | "attack" | "death";
-type Rect = [x: number, y: number, w: number, h: number, ax: number, ay: number];
-interface Sheet { w: number; h: number; anims: Record<string, Rect[][] | string>; }
+export type Anim = "idle" | "walk" | "attack" | "death" | "cast";
+/** x, y, w, h in the sheet; ax, ay the ground anchor in the frame; s the frame's resolution against the atlas PPU
+ *  (absent = 1; the death clip ships at a lower resolution and is scaled back up). */
+type Rect = [x: number, y: number, w: number, h: number, ax: number, ay: number, s?: number];
+interface Sheet {
+  w: number; h: number; anims: Record<string, Rect[][] | string>;
+  /** base64 palette, 7 bytes per entry: r, g, b, a, then the team mask (main, dark, light coverage); entry 0 is clear. */
+  pal: string;
+  /** World units the body travels per walk cycle at true scale (0 = not measured). */
+  stride?: number;
+  /** Motion class: heavy bodies wind up longer and raise dust as they step; light ones are snappy. */
+  weight?: Weight;
+}
+export type Weight = "heavy" | "mid" | "light";
 interface TeamCols { main: string; dark: string; light: string; }
 export interface Manifest {
   version: number;
@@ -18,6 +31,8 @@ export interface Manifest {
   dirs: number[];
   dir8: [number, boolean][];
   anims: Record<Anim, number>;
+  /** The frame each strike clip lands its blow on; the frames before it are the wind-up. */
+  impact?: Partial<Record<Anim, number>>;
   /** The team colours the atlases were rendered beside (the runtime tints with the active direction's, TEAM). */
   teams: Record<"tide" | "ember", TeamCols>;
   /** The style direction the atlases were rendered in ("v2" = the built-in look). */
@@ -38,7 +53,7 @@ export function loadSprites(): Promise<void> {
   if (loading) return loading;
   loading = fetch(`${base()}atlas/manifest.json`)
     .then((r) => (r.ok ? r.json() : null))
-    .then((m) => { manifest = m && m.version >= 3 ? m : null; })
+    .then((m) => { manifest = m && m.version >= 4 ? m : null; })
     .catch(() => { manifest = null; });
   return loading;
 }
@@ -60,18 +75,37 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 
-/** rgb = colour * (1 + R*(main-1) + G*(dark-1) + B*(light-1)), for both teams in one pass. */
-export function tintPixels(col: Uint8ClampedArray, mask: Uint8ClampedArray, teams: TeamCols[], out: Uint8ClampedArray[]) {
-  const k = teams.map((t) => [hex(t.main), hex(t.dark), hex(t.light)].map((c) => c.map((v) => (v - 1) / 255)));
-  for (let i = 0; i < col.length; i += 4) {
-    const a = col[i + 3];
-    if (!a) continue;
-    const r = mask[i], g = mask[i + 1], b = mask[i + 2];
-    for (let t = 0; t < teams.length; t++) {
-      const o = out[t], [km, kd, kl] = k[t];
-      for (let c = 0; c < 3; c++) o[i + c] = col[i + c] * (1 + r * km[c] + g * kd[c] + b * kl[c]);
-      o[i + 3] = a;
-    }
+/** Decode a sheet's base64 palette (7 bytes per entry). */
+export function decodePalette(b64: string): Uint8Array {
+  const bin = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("binary");
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** One team's colours for every palette entry, as RGBA bytes:
+ *  rgb = colour * (1 + R*(main-1) + G*(dark-1) + B*(light-1)), entry 0 transparent. */
+export function tintPalette(pal: Uint8Array, team: TeamCols): Uint8ClampedArray {
+  const [km, kd, kl] = [hex(team.main), hex(team.dark), hex(team.light)].map((c) => c.map((v) => (v - 1) / 255));
+  const n = pal.length / 7, out = new Uint8ClampedArray(n * 4);
+  for (let e = 1; e < n; e++) {
+    const p = e * 7, r = pal[p + 4], g = pal[p + 5], b = pal[p + 6];
+    for (let c = 0; c < 3; c++) out[e * 4 + c] = Math.round(pal[p + c] * (1 + r * km[c] + g * kd[c] + b * kl[c]));
+    out[e * 4 + 3] = pal[p + 3];
+  }
+  return out;
+}
+
+/** Index pixels (the red channel of the decoded sheet) through a tinted palette into RGBA, a 32-bit word at a time
+ *  (little-endian: the red byte is the low byte, and a palette word copies its bytes in order). */
+export function tintIndexed(idx: Uint8ClampedArray, lut: Uint8ClampedArray, out: Uint8ClampedArray) {
+  const src = new Uint32Array(idx.buffer, idx.byteOffset, idx.length >> 2);
+  const dst = new Uint32Array(out.buffer, out.byteOffset, out.length >> 2);
+  const pal = new Uint32Array(lut.buffer, lut.byteOffset, lut.length >> 2);
+  const n = pal.length;
+  for (let i = 0; i < src.length; i++) {
+    const e = src[i] & 0xff;
+    if (e && e < n) dst[i] = pal[e];
   }
 }
 
@@ -86,13 +120,15 @@ function pixels(img: HTMLImageElement): ImageData {
 function buildSheet(key: string, side: Side) {
   const id = `${key}|${side}`;
   if (!manifest || tinted.has(id)) return;
+  const sheet = manifest.sheets[key];
+  if (!sheet) return;
   tinted.set(id, "loading");
-  Promise.all([loadImage(`${base()}atlas/${key}.png`), loadImage(`${base()}atlas/${key}_m.png`)])
-    .then(([ci, mi]) => {
-      const col = pixels(ci), mask = pixels(mi);
-      const out = new ImageData(col.width, col.height);
+  loadImage(`${base()}atlas/${key}.webp`)
+    .then((img) => {
+      const src = pixels(img);
+      const out = new ImageData(src.width, src.height);
       // the active direction's team colours, so units match the rest of the app even before a re-render
-      tintPixels(col.data, mask.data, [TEAM[side]], [out.data]);
+      tintIndexed(src.data, tintPalette(decodePalette(sheet.pal), TEAM[side]), out.data);
       const c = document.createElement("canvas");
       c.width = out.width; c.height = out.height;
       c.getContext("2d")!.putImageData(out, 0, 0);
@@ -111,11 +147,22 @@ function tierFor(kind: string, tier: number): number | null {
   return u.tiers.includes(tier) ? tier : u.tiers.filter((x) => x <= tier).pop() ?? u.tiers[0];
 }
 
+/** Which frame of an n-frame clip a phase shows. idle and walk loop (phase 0..1). attack and cast: phase -1..0 is the
+ *  wind-up before the blow (frames before `impact`), 0..1 the blow and what follows it (clamped to the last frame).
+ *  death: 0..1 progress. */
+export function clipIndex(anim: Anim, n: number, phase: number, impact = 0): number {
+  if (anim === "idle" || anim === "walk") return Math.min(n - 1, Math.floor((((phase % 1) + 1) % 1) * n));
+  if ((anim === "attack" || anim === "cast") && impact > 0 && impact < n) {
+    if (phase < 0) return Math.max(0, Math.min(impact - 1, Math.floor((1 + phase) * impact)));
+    return Math.min(n - 1, impact + Math.floor(Math.min(0.999, phase) * (n - impact)));
+  }
+  return Math.min(n - 1, Math.floor(Math.max(0, Math.min(0.999, phase)) * n));
+}
+
 /**
- * The frame of `anim` for a body, or null if its sheet isn't loaded (yet). `phase` is 0..1: the loop position for
- * idle and walk, the progress for attack and death (clamped to the last frame). `dir` is the 8-way screen facing
- * from Camera.facing8 (0 = right, 2 = towards the camera, 6 = away); the manifest maps it to a rendered facing,
- * mirrored for 3, 4 and 5.
+ * The frame of `anim` for a body, or null if its sheet isn't loaded (yet). `phase`: see clipIndex. `dir` is the
+ * 8-way screen facing from Camera.facing8 (0 = right, 2 = towards the camera, 6 = away); the manifest maps it to a
+ * rendered facing, mirrored for 3, 4 and 5. A body without the asked clip (cast) plays its attack instead.
  */
 export function frame(kind: string, tier: number, side: Side, anim: Anim, phase: number, dir: number): Frame | null {
   if (!manifest) return null;
@@ -135,16 +182,22 @@ export function frame(kind: string, tier: number, side: Side, anim: Anim, phase:
     if (!tc) return null;
   }
   const sheet = manifest.sheets[key];
+  if (anim === "cast" && !sheet.anims.cast) anim = "attack";
   let a = sheet.anims[anim] ?? sheet.anims.idle;
   if (typeof a === "string") a = sheet.anims[a] as Rect[][];
   const [di, flip] = manifest.dir8[((dir % 8) + 8) % 8];
   const list = a[di];
   if (!list?.length) return null;
-  const n = list.length;
-  const loop = anim === "idle" || anim === "walk";
-  const p = loop ? ((phase % 1) + 1) % 1 : Math.max(0, Math.min(0.999, phase));
-  const [x, y, w, h, ax, ay] = list[Math.min(n - 1, Math.floor(p * n))];
-  return { img: tc, x, y, w, h, ax, ay, flip, ppu: manifest.ppu };
+  const [x, y, w, h, ax, ay, s] = list[clipIndex(anim, list.length, phase, manifest.impact?.[anim] ?? 0)];
+  return { img: tc, x, y, w, h, ax, ay, flip, ppu: manifest.ppu * (s ?? 1) };
+}
+
+/** A body's motion data: walk stride (world units per cycle at true scale, 0 if unknown), motion class and whether it
+ *  has a cast clip. Defaults until the manifest has loaded. */
+export function motionOf(kind: string, tier = 1): { stride: number; weight: Weight; cast: boolean } {
+  const t = manifest ? tierFor(kind, tier) : null;
+  const sh = t == null ? undefined : manifest!.sheets[`${kind}_t${t}`];
+  return { stride: sh?.stride ?? 0, weight: sh?.weight ?? "mid", cast: !!sh?.anims.cast };
 }
 
 /** Card and menu portrait (3/4 view), or null. */

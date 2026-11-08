@@ -1073,11 +1073,14 @@ def pikeman(k, P, tier, pose):
                   cape=T(tier, None, None, "short", "energy"), pads=T(tier, None, "steel", "gold", "crystal"))
     # attack: the pike drawn back, then driven forward through both hands; brace (cast): crouched, butt grounded,
     # point set up at the charge
-    rh = H.mix(pose, (0.1, -0.16, 0.32), (0.24, -0.08, 0.36), wind=(-0.06, -0.1, 0.38), cast=(0.04, -0.12, 0.22))
-    lh = H.mix(pose, (0.24, -0.1, 0.4), (0.44, -0.04, 0.38), wind=(0.12, -0.06, 0.4), cast=(0.22, -0.08, 0.28))
-    d = H.mixd(pose, (1, 0.04, 0.5), (1, 0.04, -0.04), wind=(1, 0.04, 0.1), cast=(1, 0.04, 0.34))
+    rh = H.mix(pose, (0.1, -0.16, 0.32), (0.24, -0.08, 0.36), wind=(-0.06, -0.1, 0.38), cast=(-0.04, -0.12, 0.17))
+    lh = H.mix(pose, (0.24, -0.1, 0.4), (0.44, -0.04, 0.38), wind=(0.12, -0.06, 0.4), cast=(0.2, -0.07, 0.22))
+    d = H.mixd(pose, (1, 0.04, 0.5), (1, 0.04, -0.04), wind=(1, 0.04, 0.1), cast=(1, 0.04, 0.16))
     with k.at(scale=S):
         humanoid(k, P, tier, {"R": rh, "L": lh}, lk, grip2=True)
+        if H.casting(pose) and H.strike(pose):
+            # the set point catches the light
+            k.ball(0.03, P.white, loc=rh + d * T(tier, 0.68, 0.76, 0.8, 0.84), outline=0)
         L = T(tier, 0.62, 0.7, 0.74, 0.78)
         tip = H.spear(k, P, rh, d, L, tier, back=0.22, head_len=0.13)
         if tier >= 3:
