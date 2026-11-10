@@ -82,7 +82,7 @@ export function strikeSquash(phase: number, amp = 1): [number, number] {
 }
 
 /** How deep one idle breath is (share of height), by motion class. */
-export const IDLE_BREATH: Record<Weight, number> = { heavy: 0.03, mid: 0.036, light: 0.042 };
+export const IDLE_BREATH: Record<Weight, number> = { heavy: 0.042, mid: 0.052, light: 0.06 };
 /** Breaths between two weight-shift dips. */
 export const IDLE_FIDGET_EVERY = 5;
 
@@ -92,12 +92,12 @@ export const IDLE_FIDGET_EVERY = 5;
  *  travel as a share of height) and bob (-1..1, the hover of a flyer). seed (the body id) staggers the dips. */
 export function idleLife(phase: number, weight: Weight = "mid", seed = 0): { sx: number; sy: number; lean: number; bob: number } {
   const a = IDLE_BREATH[weight], b = Math.sin(phase * Math.PI * 2);
-  const lean = Math.sin(phase * Math.PI + seed * 1.7) * (weight === "heavy" ? 0.018 : 0.028);
+  const lean = Math.sin(phase * Math.PI + seed * 1.7) * (weight === "heavy" ? 0.028 : 0.042);
   const c = phase / IDLE_FIDGET_EVERY + ((seed * 0.618) % 1), u = (c - Math.floor(c)) * IDLE_FIDGET_EVERY; // breaths into the cycle
   // the dip: down fast over 0.12 of a breath, then a damped spring back over the rest of that breath
   let dip = 0;
   if (u < 1) dip = u < 0.12 ? u / 0.12 : Math.exp(-(u - 0.12) * 5.5) * Math.cos((u - 0.12) * Math.PI * 3.2);
-  const d = dip * (weight === "heavy" ? 0.045 : 0.06);
+  const d = dip * (weight === "heavy" ? 0.05 : 0.065);
   return { sx: 1 - a * 0.55 * b + d * 0.8, sy: 1 + a * b - d, lean, bob: b };
 }
 

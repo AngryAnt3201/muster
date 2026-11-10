@@ -31,7 +31,28 @@ export interface Banner { winner: -1 | 0 | 1; t: number; }
 export interface HpShown { frac: number; lag: number; hitAt: number; seenAt: number; /** lag when the last hit landed */ from: number; }
 
 /** What one battle event asks of the camera and the clock. */
-export interface Kick { stop?: number; shake?: number; callout?: { id: number; key: string; x: number; y: number; side: Side; text: string }; banner?: -1 | 0 | 1; spawn?: number; }
+export interface Kick { /** a camera push-in (zoom) about a world point */ push?: Push; stop?: number; shake?: number; callout?: { id: number; key: string; x: number; y: number; side: Side; text: string }; banner?: -1 | 0 | 1; spawn?: number; }
+
+/** A camera push-in: zoom by `amp` (0.14 = 14% closer) about world (x, y); in over `attack` s, held `hold` s, out
+ *  over `release` s. x and y are left out when the event has no place of its own (the round's end: the board fills
+ *  in where the last body fell). */
+export interface Push { amp: number; attack: number; hold: number; release: number; x?: number; y?: number; }
+/** The final blow: the camera leans in on it and holds while the moment plays in slow motion. */
+export const FINAL_PUSH: Push = { amp: 0.14, attack: 0.16, hold: 0.7, release: 0.5 };
+/** Board-time scale for the first FINAL_SLOW_FOR real seconds after the last blow. */
+export const FINAL_SLOW = 0.3;
+export const FINAL_SLOW_FOR = 0.55;
+/** The rare heavy moments (a quake, a colossus falling, a griffin landing): a quick punch in and back. Common blasts
+ *  (mines, kegs, shells) don't zoom: scaling the whole picture costs a full-screen resample, and they come in bursts. */
+const punch = (amp: number, x: number, y: number): Push => ({ amp, attack: 0.05, hold: 0, release: 0.26, x, y });
+/** How far in a push is `t` seconds after it began (0..1), and whether it is over. */
+export function pushEnv(p: Push, t: number): number {
+  if (t <= 0) return 0;
+  if (t < p.attack) return 1 - (1 - t / p.attack) ** 3;
+  if (t < p.attack + p.hold) return 1;
+  const u = (t - p.attack - p.hold) / p.release;
+  return u >= 1 ? 0 : 1 - u * u * (3 - 2 * u);
+}
 
 type Find = (id: number) => Pick<Body, "id" | "kind" | "rank" | "side" | "x" | "y"> | undefined;
 const BIG_BOOM = new Set(["mine", "keg", "shell", "quake"]);
@@ -89,17 +110,17 @@ export function kickFor(e: BattleEvent, find: Find): Kick {
       break;
     case "death":
       if (!SMALL.has(e.kind)) k.stop = e.kind === "golem" ? 4 : 2;
-      if (e.kind === "golem") k.shake = 0.3;
+      if (e.kind === "golem") { k.shake = 0.3; k.push = punch(0.035, e.x, e.y); }
       break;
     case "boom":
-      if (BIG_BOOM.has(e.kind)) { k.stop = 3; k.shake = e.kind === "quake" ? 0.45 : 0.35; } else if (e.r >= 1) k.shake = 0.14;
+      if (BIG_BOOM.has(e.kind)) { k.stop = 3; k.shake = e.kind === "quake" ? 0.45 : 0.35; if (e.kind === "quake") k.push = punch(0.045, e.x, e.y); } else if (e.r >= 1) k.shake = 0.14;
       break;
     case "emerge": if (e.big) k.shake = 0.25; break;
     case "impale": k.stop = 3; k.shake = 0.2; break;
-    case "swoop": k.stop = 3; k.shake = 0.3; break;
+    case "swoop": k.stop = 3; k.shake = 0.3; k.push = punch(0.03, e.x, e.y); break;
     case "wave": k.shake = 0.12; break;
     case "spawn": k.spawn = e.id; break;
-    case "end": k.banner = e.winner; k.stop = 4; k.shake = 0.2; break;
+    case "end": k.banner = e.winner; k.stop = 4; k.shake = 0.2; k.push = FINAL_PUSH; break;
     default: break;
   }
   const c = ascendedOf(e, find);
@@ -141,6 +162,30 @@ export class Juice {
   private hp = new Map<number, HpShown>();
   /** Body id -> board time it was summoned (pop-in). */
   spawned = new Map<number, number>();
+  /** The camera push-in playing now (age in real seconds), if any. */
+  private pushing: { p: Push; t: number; x: number; y: number } | null = null;
+  /** Where the last body fell, and when: the final blow's push-in centres on it. */
+  private lastFall: { x: number; y: number; at: number } | null = null;
+  /** Real seconds since the round's last blow (-1 before it): the board runs in slow motion for the first few. */
+  sinceEnd = -1;
+
+  /** The camera zoom now: k (1 = none) about world (x, y). */
+  zoom(): { k: number; x: number; y: number } {
+    const z = this.pushing;
+    if (!z || this.reduced) return { k: 1, x: 0, y: 0 };
+    return { k: 1 + z.p.amp * pushEnv(z.p, z.t), x: z.x, y: z.y };
+  }
+
+  /** How fast the board's clock runs now: slow for a moment after the final blow, else 1. */
+  get timeScale() { return !this.reduced && this.sinceEnd >= 0 && this.sinceEnd < FINAL_SLOW_FOR ? FINAL_SLOW : 1; }
+
+  /** Start a push-in about (x, y) unless a stronger one is still playing. */
+  push(p: Push, x: number, y: number) {
+    if (this.reduced) return;
+    const cur = this.pushing;
+    if (cur && cur.p.amp * pushEnv(cur.p, cur.t) > p.amp) return;
+    this.pushing = { p, t: 0, x, y };
+  }
 
   get frozen() { return this.stop > 0; }
 
@@ -186,6 +231,13 @@ export class Juice {
         this.callouts.push({ id: c.id, x: c.x, y: c.y, side: c.side, text: c.text, life: CALLOUT_LIFE, max: CALLOUT_LIFE });
       } else if (k.stop === MAX_STOP_FRAMES && e.t !== "end") k.stop = 0; // a repeat: no freeze either
     }
+    if (e.t === "death") this.lastFall = { x: e.x, y: e.y, at: this.time };
+    if (e.t === "end") this.sinceEnd = 0;
+    if (k.push) {
+      // The final blow leans in on the body that just fell (within the last half second), else on mid-board.
+      const f = this.lastFall && this.time - this.lastFall.at < 0.5 ? this.lastFall : null;
+      this.push(k.push, k.push.x ?? f?.x ?? 4.5, k.push.y ?? f?.y ?? 7);
+    }
     if (k.stop) this.hitStop(k.stop);
     if (k.shake) this.shake(k.shake);
     if (k.spawn !== undefined) this.spawned.set(k.spawn, this.time);
@@ -195,6 +247,8 @@ export class Juice {
   /** Advance by dt seconds. Returns false while a hit-stop holds the frame (the shake and callouts wait for it). */
   update(dt: number): boolean {
     this.cool = Math.max(0, this.cool - dt);
+    if (this.sinceEnd >= 0) this.sinceEnd += dt;
+    if (this.pushing) { this.pushing.t += dt; if (this.pushing.t >= this.pushing.p.attack + this.pushing.p.hold + this.pushing.p.release) this.pushing = null; }
     if (this.stop > 0) {
       this.stop = this.stop - dt < 1e-4 ? 0 : this.stop - dt;
       return false;
@@ -224,6 +278,7 @@ export class Juice {
   reset() {
     this.hp.clear(); this.spawned.clear(); this.lastCall.clear(); this.callouts = []; this.banner = null; this.lastAny = -Infinity;
     this.stop = 0; this.trauma = 0; this.cool = 0; this.drawn = true;
+    this.pushing = null; this.lastFall = null; this.sinceEnd = -1;
   }
 }
 

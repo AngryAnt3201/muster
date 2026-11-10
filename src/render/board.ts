@@ -110,6 +110,8 @@ export class BoardView {
   set reducedMotion(v: boolean) { this.juice.reduced = v; if (v) { this.juice.stop = 0; this.juice.trauma = 0; } }
   /** True while a hit-stop holds the frame (a game loop may also hold its sim steps while this is set). */
   get hitStopping() { return this.juice.frozen; }
+  /** Board seconds since the battle's last blow (slow at first, see update). */
+  private endT = 0;
   /** Recent screen points of each straight shot in flight, for its trail. */
   private trails = new WeakMap<Proj, { x: number; y: number; z: number }[]>();
   /** Each straight shot's last drawn position, heading and colour: when it leaves the battle, that is where it landed. */
@@ -605,8 +607,12 @@ export class BoardView {
     // JUICE: hit-stop and shake clocks. The effects keep ageing through a stop (the sim does too, it runs in game.ts):
     // only the picture is held (see render), so nothing piles up while the frame is frozen.
     this.juice.update(dt);
-    this.time += dt;
-    this.fx.update(dt);
+    // JUICE: the final blow plays in slow motion: the board's clock and its effects run slow for a moment, and the
+    // bodies caught mid-fall finish falling on that clock (the battle's own time has stopped).
+    const ts = this.juice.timeScale;
+    if (this.juice.sinceEnd >= 0) this.endT += dt * ts;
+    this.time += dt * ts;
+    this.fx.update(dt * ts);
     if (this.showKeeps) this.updateKeeps(dt);
   }
 
@@ -621,10 +627,17 @@ export class BoardView {
     // JUICE: a smooth trauma shake (the effects' own kicks feed in through fx.shake).
     // Whole device pixels only: a sub-pixel offset resamples the full-screen background blit every frame.
     const [sx, sy] = this.juice.offset(this.s * 0.16, this.fx.shake * 0.75);
-    const dx = Math.round(sx * this.dpr) / this.dpr, dy = Math.round(sy * this.dpr) / this.dpr;
-    ctx.setTransform(1, 0, 0, 1, dx * this.dpr, dy * this.dpr);
+    let dx = Math.round(sx * this.dpr) / this.dpr, dy = Math.round(sy * this.dpr) / this.dpr;
+    // JUICE: the camera push-in (the final blow, big blasts): the whole picture scales about the blow.
+    const zm = scene.mode === "battle" ? this.juice.zoom() : null;
+    let zk = 1;
+    if (zm && zm.k > 1.001) {
+      const f = this.cam.project(zm.x, zm.y, 0.3);
+      zk = zm.k; dx += f.x * (1 - zk); dy += f.y * (1 - zk);
+    }
+    ctx.setTransform(zk, 0, 0, zk, dx * this.dpr, dy * this.dpr);
     ctx.drawImage(this.bg, 0, 0);
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, dx * this.dpr, dy * this.dpr);
+    ctx.setTransform(this.dpr * zk, 0, 0, this.dpr * zk, dx * this.dpr, dy * this.dpr);
     ctx.save();
     // Heads and flyers over the far edge may use the whole layout area.
     ctx.beginPath(); ctx.rect(this.area.x, this.area.y, this.area.w, this.area.h); ctx.clip();
@@ -944,8 +957,10 @@ export class BoardView {
     // illusions fade out on the assault's clock instead of hanging on the field.
     const vanish = as ? Math.max(0, 1 - as.t / VANISH) : 1;
     const fading = (bd: Body) => !!as && (!bd.alive || bd.kind === "decoy");
-    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || b.time - bd.diedAt < 0.45) && !(fading(bd) && vanish <= 0));
-    const fadeOf = (bd: Body) => (bd.alive ? 1 : 1 - (b.time - bd.diedAt) / 0.45) * (fading(bd) ? vanish : 1);
+    // The battle's clock stops with its last blow; the bodies that fell with it finish falling on the board's.
+    const now = b.time + (b.done ? this.endT : 0);
+    const live = b.bodies.filter((bd) => bd.kind !== "mine" && (bd.alive || now - bd.diedAt < 0.45) && !(fading(bd) && vanish <= 0));
+    const fadeOf = (bd: Body) => (bd.alive ? 1 : Math.max(0, 1 - (now - bd.diedAt) / 0.45)) * (fading(bd) ? vanish : 1);
     for (const bd of live) {
       const [x, y] = pos(bd);
       const st = as?.pose(bd.id);
@@ -1082,6 +1097,7 @@ export class BoardView {
   /** Battle start: every deployed body hops in place, staggered across the line, and lands in a puff of dust. */
   private juiceStart(b: Battle) {
     this.juice.reset();
+    this.endT = 0;
     this.atkAt.clear(); this.castAt.clear(); this.hitAt.clear(); this.recoilAt.clear(); this.gaitOf.clear(); this.shotAt.clear();
     if (this.juice.reduced) return;
     for (const bd of b.bodies) {
@@ -1362,9 +1378,9 @@ export class BoardView {
         const grow = 1 + Math.min(3.2, p.z) * 0.16;
         this.groundSheet("shadow", 0, wx, wy, pv.size * 1.1 * (1 - Math.min(0.45, p.z * 0.14)), { alpha: 0.65 - Math.min(0.3, p.z * 0.1) });
         if (pfx === "fire" && Math.random() < 0.7) this.fx.burst(p.x, p.y, 1, { color: "#ff9a3d", speed: 0.3, size: 0.05, max: 0.3, kind: "spark", gravity: 0, z: zh * 2 - 0.6 });
-        // A steady smoke trail (a puff every 45 ms of board time), not a random one.
+        // A steady smoke trail (a puff every 70 ms of board time), not a random one.
         const puffed = this.puffAt.get(p) ?? -1;
-        if (this.time - puffed >= 0.045) {
+        if (this.time - puffed >= 0.07) {
           this.puffAt.set(p, this.time);
           this.fx.anim("smoke", p.x, p.y, { size: 0.3 * grow, max: 0.5, z: zh, tint: pfx === "fire" ? "#4a3a34" : "#c9c2b8", alpha: 0.6, grow: [0.7, 1.5], fadeOut: 0.3 });
         }
@@ -1380,7 +1396,20 @@ export class BoardView {
       const tint = p.kind === "shard" || pfx === "freeze" ? ICE : p.kind === "pellet" ? GOLD : p.kind === "bolt" ? "#ffe6be" : "#ffffff";
       this.shotTrail(p, wx, wy, hAt(wx, wy), tint, (p.kind === "bolt" ? 0.11 : p.kind === "pellet" ? 0.05 : 0.07) * s); // JUICE
       this.shadow(wx, wy, p.kind === "bolt" ? 0.1 : 0.07, 0.3);
-      if (pv.trail) this.sheet("streak", 0, head.x - Math.cos(ang) * pv.size * s * 2.4, head.y - Math.sin(ang) * pv.size * s * 2.4, pv.size * s * 0.9, { a: ang, w: pv.size * s * 5.2, tint, alpha: 0.85 });
+      if (pv.trail) {
+        // A comet tail in the shooter's colour with a bright core, tapering back from the head: the shot reads as a
+        // streak of its team's colour even when the arrow itself is a few pixels long.
+        const len = (p.kind === "bolt" ? 1.25 : 0.95) * s, hw = pv.size * s * (p.kind === "bolt" ? 0.5 : 0.62);
+        const cx = Math.cos(ang), cy = Math.sin(ang), bx = head.x - cx * len, by = head.y - cy * len;
+        const wedge = (w: number, color: string, alpha: number) => {
+          ctx.save();
+          ctx.globalAlpha *= alpha; ctx.fillStyle = color;
+          ctx.beginPath(); ctx.moveTo(head.x - cy * w, head.y + cx * w); ctx.lineTo(bx, by); ctx.lineTo(head.x + cy * w, head.y - cx * w); ctx.closePath(); ctx.fill();
+          ctx.restore();
+        };
+        wedge(hw, TEAM[p.side].main, 0.7);
+        wedge(hw * 0.45, tint, 0.9);
+      }
       this.sheet(pv.sheet, 0, head.x, head.y, pv.size * s, { a: ang });
       return;
     }
@@ -1437,14 +1466,14 @@ export class BoardView {
     let pts = this.trails.get(p);
     if (!pts) this.trails.set(p, (pts = []));
     const last = pts[pts.length - 1];
-    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 9) pts.shift(); }
+    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 6) pts.shift(); }
     // Where it is now, for the landing (shotImpacts).
     this.shotAt.set(p, { x, y, z, a: Math.atan2(p.vy, p.vx), color });
     if (pts.length < 2) return;
     const scr = pts.map((q) => this.cam.project(q.x, q.y, q.z));
     scr.push(this.cam.project(x, y, z));
-    // A wide team-coloured wake under a bright core: whose shot it is reads from the trail alone.
-    drawTrail(this.ctx, scr, TEAM[p.side].main, width * 2.4, 0.5);
+    // Shots without a comet tail of their own (turret pellets, the drawn fallback) get a team-coloured wake under the core.
+    if (!PROJ_VFX[p.kind]?.trail || !vfxReady()) drawTrail(this.ctx, scr, TEAM[p.side].main, width * 2.4, 0.5);
     drawTrail(this.ctx, scr, color, width, 0.85);
   }
 

@@ -103,30 +103,20 @@ export function gustAt(g: number, time: number): { x: number; y: number; len: nu
 const BUTTERFLY = ["#ffffff", "#ffe27a", "#ffb3d1"];
 
 export class AmbientLife {
-  private blob?: HTMLCanvasElement;
-
-  private shadeBlob(): HTMLCanvasElement {
-    if (this.blob) return this.blob;
-    const c = document.createElement("canvas");
-    c.width = 128; c.height = 64;
-    const g = c.getContext("2d")!;
-    g.translate(64, 32); g.scale(2, 1);
-    const gr = g.createRadialGradient(0, 0, 4, 0, 0, 32);
-    gr.addColorStop(0, "rgba(16,38,64,1)"); gr.addColorStop(0.6, "rgba(16,38,64,0.7)"); gr.addColorStop(1, "rgba(16,38,64,0)");
-    g.fillStyle = gr; g.fillRect(-32, -32, 64, 64);
-    return (this.blob = c);
-  }
-
   /** Under the units: cloud shadows, gusts, and the shadows of the flock. */
   ground(ctx: CanvasRenderingContext2D, cfg: AmbientCfg, cam: Camera, time: number) {
     ctx.save();
     if (cfg.shade > 0) {
-      const blob = this.shadeBlob(), span = W + 14;
-      for (let i = 0; i < 3; i++) {
-        const x = frac((rnd(i, 51) * span + time * (0.28 + 0.1 * i)) / span) * span - 7, y = 1.5 + i * 4.6 + Math.sin(time * 0.05 + i) * 0.8;
-        const p = cam.project(x, y), w = (5.5 + i) * p.s, h = w * 0.5 * cam.squashAt(y);
-        ctx.globalAlpha = 0.25 * cfg.shade;
-        ctx.drawImage(blob, p.x - w / 2, p.y - h / 2, w, h);
+      // Two flat cloud shadows (three overlapping lobes each, one fill): flat like the arena's own baked shadows, and
+      // a plain path fill costs far less than blending a soft image this size every frame.
+      const span = W + 14;
+      ctx.fillStyle = "#10263f";
+      ctx.globalAlpha = 0.11 * cfg.shade;
+      for (let i = 0; i < 2; i++) {
+        const x = frac((rnd(i, 51) * span + time * (0.28 + 0.1 * i)) / span) * span - 7, y = 3 + i * 7 + Math.sin(time * 0.05 + i) * 0.8;
+        ctx.beginPath();
+        for (const [ox, oy, r] of [[-1.5, 0.15, 1.5], [0, -0.2, 2], [1.7, 0.2, 1.4]]) { cam.groundPath(ctx, x + ox, y + oy, r); ctx.closePath(); }
+        ctx.fill("nonzero");
       }
     }
     if (cfg.gust) {

@@ -189,8 +189,8 @@ if (only.has("battle")) {
     drive(20);
     const me = m.sides[0].pieces;
     trigger("idle", seq(0, 90, 10), 240, () => [me[2].x + 0.7, me[2].y]);
-    trigger("ambient-arena", [0, 20, 40, 60, 80, 100], "full", () => [4.5, 7]);
-    drive(110);
+    trigger("ambient-arena", [0, 60, 120, 180, 240, 300], "full", () => [4.5, 7]);
+    drive(310);
     view.dropIn(me.map((p) => ({ id: p.id, x: p.x, y: p.y, radius: UNITS[p.kind].radius, side: 0 })));
     trigger("deploy-drop", [0, 4, 8, 12, 16, 20, 24, 30, 38, 48], 240, () => [me[2].x + 0.7, me[2].y]);
     drive(60);

@@ -136,8 +136,8 @@ export const FIELD_VFX = {
 
 /** Projectile kind -> sprite (all face +x) and whether it trails a streak. */
 export const PROJ_VFX: Record<string, { sheet: string; size: number; trail?: boolean }> = {
-  // Sized to read on a phone: an arrow is ~7 px thick at the board's middle on a 390 pt screen, a shell ~20 px.
-  arrow: { sheet: "arrow", size: 0.17, trail: true },
+  // Sized to read on a phone: an arrow is ~8 px thick at the board's middle on a 390 pt screen, a shell ~20 px.
+  arrow: { sheet: "arrow", size: 0.2, trail: true },
   bolt: { sheet: "bolt", size: 0.27, trail: true },
   shard: { sheet: "shard", size: 0.25, trail: true },
   grenade: { sheet: "bomb", size: 0.38 },

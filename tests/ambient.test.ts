@@ -81,9 +81,9 @@ describe("idle life", () => {
       expect(Math.abs(l.lean)).toBeLessThan(0.05);
       expect(l.sx).toBeGreaterThan(0.9); expect(l.sx).toBeLessThan(1.1);
     }
-    expect(max).toBeLessThan(1.06);
+    expect(max).toBeLessThan(1.07);
     expect(min).toBeLessThan(1 - IDLE_BREATH.mid - 0.02); // the dip goes below a plain breath out
-    expect(min).toBeGreaterThan(0.88);
+    expect(min).toBeGreaterThan(0.85);
     const a = idleLife(0.4, "mid", 3), b = idleLife(0.4 + IDLE_FIDGET_EVERY, "mid", 3);
     expect(b.sy).toBeCloseTo(a.sy, 6); expect(b.sx).toBeCloseTo(a.sx, 6);
     // two bodies don't dip together

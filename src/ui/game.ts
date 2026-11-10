@@ -12,6 +12,8 @@ import { loadSprites, preload, whenPortrait } from "../render/sprites";
 import * as Defs from "../core/defs";
 import { levelDmg, levelHp, levelOf } from "../core/levels";
 
+/** Seconds the board holds on the final blow (slow motion and the camera's push-in, juice.ts) before the round's result. */
+const END_BEAT = 1.15;
 export const TIER_NAMES = ["Recruit", "Veteran", "Elite", "Ascended"];
 /** The rank-4 signature ability, if the build has them. */
 export const abilityOf = (k: UnitKind): { name: string; text: string } | undefined => (Defs as any).ABILITIES?.[k];
@@ -542,7 +544,7 @@ export class GameScreen {
         this.updateTally();
         if (this.battle.done) {
           this.endT += dt;
-          if (this.endT > 0.9) { this.endT = 0; this.finishBattle(); }
+          if (this.endT > END_BEAT) { this.endT = 0; this.finishBattle(); }
         }
       } else if (this.assault && (this.phase === "result" || this.phase === "over")) this.stepAssault(dt);
       this.view.update(dt * (this.phase === "battle" ? Math.min(this.speed, 2) : 1));
