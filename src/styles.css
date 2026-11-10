@@ -94,9 +94,10 @@ button { font-family: inherit; color: inherit; }
   font: 400 18px/1.1 var(--display); letter-spacing: 0.02em; color: #fff; text-shadow: var(--ol-s);
   background: var(--gloss), var(--b);
   box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), inset 0 -3px 0 rgba(0,0,0,0.16), 0 4px 0 var(--k-ink), 0 7px 10px rgba(0,0,0,0.22);
-  transition: transform 0.07s, box-shadow 0.07s, filter 0.15s; }
+  transition: transform 0.34s cubic-bezier(.3, 2.6, .5, 1), box-shadow 0.12s, filter 0.15s; }
+/* Press: down fast and a touch smaller; release: it springs back past its rest size and settles. */
 .btn::after { content: ""; position: absolute; left: 6px; right: 6px; top: 3px; height: 34%; border-radius: 10px 10px 16px 16px / 8px 8px 8px 8px; background: rgba(255,255,255,0.2); pointer-events: none; }
-.btn:active:not(:disabled) { transform: translateY(3px); box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), inset 0 -3px 0 rgba(0,0,0,0.16), 0 1px 0 var(--k-ink); }
+.btn:active:not(:disabled) { transition-duration: 0.05s, 0.05s, 0.15s; transform: translateY(3px) scale(0.955); box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), inset 0 -3px 0 rgba(0,0,0,0.16), 0 1px 0 var(--k-ink); }
 .btn:disabled { filter: saturate(0.55) brightness(0.86); cursor: default; }
 .btn.primary { --b: var(--k-go); }
 .btn.gold, .btn.up { --b: var(--k-accent); }
@@ -110,7 +111,8 @@ button { font-family: inherit; color: inherit; }
 .btn .glyph { vertical-align: -0.12em; }
 .icon-btn { --b: var(--k-blue); appearance: none; position: relative; flex: none; width: 42px; height: 42px; padding: 0; border: 2.5px solid var(--k-ink); border-radius: 12px; display: grid; place-items: center; cursor: pointer; font-size: 18px;
   background: var(--gloss), var(--b); box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), 0 3px 0 var(--k-ink); }
-.icon-btn:active { transform: translateY(2px); box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), 0 1px 0 var(--k-ink); }
+.icon-btn { transition: transform 0.34s cubic-bezier(.3, 2.6, .5, 1), box-shadow 0.12s; }
+.icon-btn:active { transition-duration: 0.05s; transform: translateY(2px) scale(0.92); box-shadow: inset 0 2px 0 rgba(255,255,255,0.5), 0 1px 0 var(--k-ink); }
 .icon-btn .icon { filter: drop-shadow(0 1.5px 0 var(--k-ink)); }
 
 /* ---------------------------------------------------------------- plates, panels, ribbons */
@@ -569,7 +571,8 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 .chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .chip { --b: var(--k-panel-dk); appearance: none; position: relative; padding: 6px 11px 7px; border-radius: 10px; border: 2px solid var(--k-ink); cursor: pointer;
   background: var(--gloss), var(--b); font: 400 14px/1 var(--display); text-transform: capitalize; color: #fff; text-shadow: var(--ol-s); box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.45), 0 3px 0 var(--k-ink); }
-.chip:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--k-ink); }
+.chip { transition: transform 0.3s cubic-bezier(.3, 2.6, .5, 1); }
+.chip:active { transition-duration: 0.05s; transform: translateY(2px) scale(0.94); box-shadow: 0 1px 0 var(--k-ink); }
 .chip.on { --b: var(--k-blue); }
 .toggle { display: flex; align-items: center; gap: 10px; padding: 8px 6px; font: 400 18px/1.1 var(--display); color: #fff; text-shadow: var(--ol-s); }
 .toggle input { -webkit-appearance: none; appearance: none; position: relative; width: 28px; height: 28px; margin: 0; border-radius: 8px; border: 2.5px solid var(--k-ink); background: var(--k-panel); box-shadow: inset 0 2px 0 rgba(0,0,0,0.12), 0 2px 0 var(--k-ink); }
@@ -768,3 +771,5 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 28p
 .btn.tile-gate .icon { grid-row: 1 / 3; font-size: 26px; }
 .btn.tile-gate b { font-weight: 400; font-size: 18px; }
 .btn.tile-gate small { font-size: 13px; opacity: 0.8; }
+
+@media (prefers-reduced-motion: reduce) { .btn, .icon-btn, .chip { transition-duration: 0.07s; transition-timing-function: ease; } }

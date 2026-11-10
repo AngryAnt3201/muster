@@ -43,6 +43,23 @@ export interface BattleTabOpts {
   army?: () => void;
 }
 
+const BIRD = `<svg viewBox="0 0 20 9" aria-hidden="true"><path d="M1.5 3 Q5.5 0.5 10 6 Q14.5 0.5 18.5 3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/** Life behind the Battle tab (home.css .hm-life): the key art on a slow drift, clouds sliding across its sky, a flock
+ *  crossing now and then and pollen rising off the meadow. Decoration only: no pointer events, hidden from readers. */
+function homeLife(): HTMLElement {
+  const v = (o: Record<string, string | number>) => Object.entries(o).map(([k, x]) => `--${k}:${x}`).join(";");
+  const clouds = [[7, 96, 78, -8, 0.9], [15, 64, 104, -51, 0.75], [24, 118, 90, -70, 0.85], [11, 52, 122, -97, 0.7]]
+    .map(([y, w, d, del, o]) => el("i", { class: "hm-cloud", style: v({ y: `${y}%`, w: `${w}px`, d: `${d}s`, del: `${del}s`, o }) }));
+  const flock = el("span", { class: "hm-flock" });
+  for (const [x, y, del] of [[0, 0, 0], [-22, 10, 0.12], [-20, -12, 0.2], [-44, 20, 0.05]]) {
+    const b = el("i", { class: "hm-bird", style: `left:${x}px;top:${y}px;animation-delay:${del}s` });
+    b.innerHTML = BIRD;
+    flock.append(b);
+  }
+  const motes = Array.from({ length: 10 }, (_, i) => el("i", { class: "hm-mote", style: v({ x: `${6 + ((i * 37) % 88)}%`, y: `${48 + ((i * 23) % 34)}%`, d: `${6 + (i % 4) * 1.7}s`, del: `${-i * 1.3}s`, s: `${3 + (i % 3)}px` }) }));
+  return el("div", { class: "hm-life", "aria-hidden": "true" }, [...clouds, flock, ...motes]);
+}
+
 /** The Battle tab: the key art has the room; the Battle button, map button and chest rack sit low, over the meadow. */
 export function battleTab(o: BattleTabOpts): HTMLElement {
   const n = o.next;
@@ -55,6 +72,7 @@ export function battleTab(o: BattleTabOpts): HTMLElement {
   map.append(el("b", {}, ["Map"]));
   const rack = el("div", { class: "hm-rack" }, [chestBar()]);
   return el("div", { class: "hm-battle" }, [
+    homeLife(),
     homeTopBar(o.settings, o.army),
     el("div", { class: "hm-stage" }, [
       el("div", { class: "hm-arena" }, [el("small", {}, [`Level ${n.id} of ${n.of}`]), el("b", {}, [n.actName])]),
