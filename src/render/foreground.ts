@@ -8,6 +8,7 @@
 import { H, W, ZONE_DEPTH } from "../core/defs";
 import { backdropRect, type Arena } from "./arena";
 import type { Camera, Rect } from "./camera";
+import { AMBIENT, AmbientLife } from "./ambient";
 
 /** Alpha of a foreground cell with a unit under it. */
 export const FG_FADED = 0.4;
@@ -96,8 +97,18 @@ export class ArenaLayers {
   private glints = glintSpots();
   private sides = sideSpots();
 
+  private life = new AmbientLife();
+
+  /** Ambient life in the air, over the units: motes, butterflies and the flock (ambient.ts). Off in calm mode. */
+  overhead(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number, calm = false) {
+    const cfg = AMBIENT[a.info.obstacle];
+    if (cfg && !calm) this.life.air(ctx, cfg, cam, time);
+  }
+
   /** Ambient motion on the ground, under the units. */
-  ambient(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number) {
+  ambient(ctx: CanvasRenderingContext2D, a: Arena, cam: Camera, time: number, calm = false) {
+    const cfg = AMBIENT[a.info.obstacle];
+    if (cfg && !calm) this.life.ground(ctx, cfg, cam, time);
     if (a.info.obstacle === "fenlamp") this.shimmer(ctx, cam, time);
     else if (a.info.obstacle === "obelisk") this.clouds(ctx, a, cam, time);
     else if (a.info.obstacle === "seastack") this.rise(ctx, cam, time, "#f2fbff", 0.5, 1.6);

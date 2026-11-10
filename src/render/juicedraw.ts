@@ -147,7 +147,7 @@ export function drawCallout(ctx: CanvasRenderingContext2D, cam: Camera, c: Callo
 }
 
 /** A tapered fading trail through screen points (oldest first). */
-export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly { x: number; y: number }[], color: string, width: number) {
+export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly { x: number; y: number }[], color: string, width: number, alpha = 0.55) {
   const n = pts.length;
   if (n < 2) return;
   ctx.save();
@@ -155,7 +155,7 @@ export function drawTrail(ctx: CanvasRenderingContext2D, pts: readonly { x: numb
   ctx.strokeStyle = color;
   for (let i = 1; i < n; i++) {
     const k = i / (n - 1);
-    ctx.globalAlpha = 0.55 * k * k;
+    ctx.globalAlpha = alpha * k * k;
     ctx.lineWidth = Math.max(0.75, width * (0.25 + 0.75 * k));
     ctx.beginPath(); ctx.moveTo(pts[i - 1].x, pts[i - 1].y); ctx.lineTo(pts[i].x, pts[i].y); ctx.stroke();
   }

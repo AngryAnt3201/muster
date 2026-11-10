@@ -81,6 +81,26 @@ export function strikeSquash(phase: number, amp = 1): [number, number] {
   return [1 - 0.06 * k * amp, 1 + 0.08 * k * amp];
 }
 
+/** How deep one idle breath is (share of height), by motion class. */
+export const IDLE_BREATH: Record<Weight, number> = { heavy: 0.03, mid: 0.036, light: 0.042 };
+/** Breaths between two weight-shift dips. */
+export const IDLE_FIDGET_EVERY = 5;
+
+/** Procedural idle life on top of the idle clip, in step with it (phase = the clip's phase, one breath per cycle):
+ *  the body swells and settles about its feet, leans from foot to foot at half that tempo, and every few breaths
+ *  dips and springs back (a weight shift). Returns the scale about the feet, the lean (a shear: the head's sideways
+ *  travel as a share of height) and bob (-1..1, the hover of a flyer). seed (the body id) staggers the dips. */
+export function idleLife(phase: number, weight: Weight = "mid", seed = 0): { sx: number; sy: number; lean: number; bob: number } {
+  const a = IDLE_BREATH[weight], b = Math.sin(phase * Math.PI * 2);
+  const lean = Math.sin(phase * Math.PI + seed * 1.7) * (weight === "heavy" ? 0.018 : 0.028);
+  const c = phase / IDLE_FIDGET_EVERY + ((seed * 0.618) % 1), u = (c - Math.floor(c)) * IDLE_FIDGET_EVERY; // breaths into the cycle
+  // the dip: down fast over 0.12 of a breath, then a damped spring back over the rest of that breath
+  let dip = 0;
+  if (u < 1) dip = u < 0.12 ? u / 0.12 : Math.exp(-(u - 0.12) * 5.5) * Math.cos((u - 0.12) * Math.PI * 3.2);
+  const d = dip * (weight === "heavy" ? 0.045 : 0.06);
+  return { sx: 1 - a * 0.55 * b + d * 0.8, sy: 1 + a * b - d, lean, bob: b };
+}
+
 /**
  * Draws an atlas frame with its ground anchor at the current origin. k = screen px per atlas px.
  * flash (0..1) adds a white hit flash on top using additive blending (no extra image needed).

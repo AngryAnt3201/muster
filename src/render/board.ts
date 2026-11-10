@@ -8,7 +8,7 @@ import { Camera, DIST, SLAB, TILT, sortDrawables, type Drawable, type Rect, type
 import { Fx, animAlpha, animFrame, frand, type Anim } from "./fx";
 import { BOARD, GOLD, INK, TEAM, VIOLET, ZAP, team } from "./palette";
 import { frame, hasAtlas, motionOf, spriteHeight, type Weight } from "./sprites";
-import { CAST_TIME, CAST_WIND, STRIKE_TIME, WINDUP, animFor, idleJitter, spriteVis, strikeSquash, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
+import { CAST_TIME, CAST_WIND, STRIKE_TIME, WINDUP, animFor, idleJitter, idleLife, spriteVis, strikeSquash, drawFrame, drawRank, drawUnit, type DrawOpts } from "./units";
 import { Assault, type AssaultEvent, type Shot, type Striker } from "./assault";
 import { BOMBLET_FLIGHT, DROP_TIME, PROJ_VFX, loadVfx, playBoom, playDrop, playEvent, vfxFrame, vfxReady, vfxSheet } from "./vfx";
 import { KEEP_RY, KEEP_SCALE, KEEP_STATES, behindKeep, keepAnchor, keepHitPoint, keepImage, keepManifest, keepState, loadKeeps, type KeepState } from "./keeps";
@@ -56,7 +56,8 @@ export const FLYER_Z = 0.6;
 const AIR_SORT_EPS = 0.02;
 
 type TokenOpts = DrawOpts & { rank?: number; flat?: boolean; /** squash-and-stretch [sx, sy] about the feet (juice) */ sq?: readonly [number, number];
-  /** a shooter: no lunge on the blow (it recoils instead) */ ranged?: boolean };
+  /** a shooter: no lunge on the blow (it recoils instead) */ ranged?: boolean;
+  /** held still (frozen solid): no idle breathing */ still?: boolean };
 
 /** Drawn off the ground: flyers, and a Griffin Knight fighting low after its swoop (in reach of swords, still on the wing). */
 const aloft = (bd: Pick<Body, "flying" | "kind">) => bd.flying || bd.kind === "griffin";
@@ -111,6 +112,10 @@ export class BoardView {
   get hitStopping() { return this.juice.frozen; }
   /** Recent screen points of each straight shot in flight, for its trail. */
   private trails = new WeakMap<Proj, { x: number; y: number; z: number }[]>();
+  /** Each straight shot's last drawn position, heading and colour: when it leaves the battle, that is where it landed. */
+  private shotAt = new Map<Proj, { x: number; y: number; z: number; a: number; color: string }>();
+  /** Board time of each lobbed shot's last smoke puff. */
+  private puffAt = new WeakMap<Proj, number>();
   // ---- /JUICE
   // ---- ANIM (unit motion, docs/ART-V3-ATLAS.md "Runtime"): render-only clocks per body id, in battle time.
   /** Attacks seen from events (shooters, healers, spawners: the sim marks a swing only for some). */
@@ -626,10 +631,11 @@ export class BoardView {
     this.drawAnims("ground");
     this.airSorted = false;
     // ---- arena layers (polish/arenas, foreground.ts): ambient ground motion under the units, border canopy over them
-    if (this.arena) arenaLayers(this).ambient(ctx, this.arena, this.cam, this.time);
+    if (this.arena) arenaLayers(this).ambient(ctx, this.arena, this.cam, this.time, this.juice.reduced);
     if (scene.mode === "deploy") this.drawDeploy(scene);
     else this.drawBattle(scene);
     if (this.arena) arenaLayers(this).foreground(ctx, this.arena, this.cam, this.time, sceneFigures(scene));
+    if (this.arena) arenaLayers(this).overhead(ctx, this.arena, this.cam, this.time, this.juice.reduced);
     // ---- end arena layers
     this.drawFx();
     ctx.restore();
@@ -705,6 +711,13 @@ export class BoardView {
     ctx.save();
     ctx.translate(feet.x, feet.y);
     if (o.sq) ctx.scale(o.sq[0], o.sq[1]); // JUICE: squash-and-stretch about the feet
+    // ANIM: idle life on top of the idle clip: breathing, a slow lean from foot to foot and a weight-shift dip now and
+    // then (units.ts idleLife); flyers hover instead. Not for structures, buried mines, the ghost or frozen bodies.
+    if (anim === "idle" && !this.juice.reduced && !o.flat && !o.ghost && !o.still && (bodyDef(kind)?.speed ?? 1) > 0) {
+      const life = idleLife(phase, o.weight ?? motionOf(kind, o.rank ?? 1).weight, o.id ?? 0);
+      if (z > 0.3) ctx.translate(0, -life.bob * feet.s * radius * 0.22);
+      else { ctx.transform(1, 0, -life.lean, 1, 0, 0); ctx.scale(life.sx, life.sy); }
+    }
     // Death frames play out first, then the body fades over the last part of the window.
     ctx.globalAlpha *= (o.alpha ?? 1) * Math.min(1, alive * 2.5);
     if (o.hidden) ctx.globalAlpha *= o.own ? 0.42 : 0.14;
@@ -910,6 +923,8 @@ export class BoardView {
       }
       if (Math.random() < 0.35) this.fx.burst(z.x + frand(-z.r, z.r) * 0.7, z.y + frand(-z.r, z.r) * 0.7, 1, { color: "#ffb347", speed: 0.4, size: 0.05, max: 0.6, kind: "spark", gravity: -1.5, vz: 1 });
     }
+    this.shotImpacts(b); // JUICE
+    if (!as) for (const p of b.projs) if (p.alive && (p.kind === "grenade" || p.kind === "shell")) this.drawLanding(p, a);
     if (!this.arena?.props.length) for (const o of this.obstacles) this.shadow(o.x, o.y, o.r * 1.05, 0.3);
     for (const bd of b.bodies) {
       if (bd.kind !== "mine" || !bd.alive) continue;
@@ -1067,7 +1082,7 @@ export class BoardView {
   /** Battle start: every deployed body hops in place, staggered across the line, and lands in a puff of dust. */
   private juiceStart(b: Battle) {
     this.juice.reset();
-    this.atkAt.clear(); this.castAt.clear(); this.hitAt.clear(); this.recoilAt.clear(); this.gaitOf.clear();
+    this.atkAt.clear(); this.castAt.clear(); this.hitAt.clear(); this.recoilAt.clear(); this.gaitOf.clear(); this.shotAt.clear();
     if (this.juice.reduced) return;
     for (const bd of b.bodies) {
       if (bd.owner !== -1 || bd.flying || bd.kind === "mine" || bd.burrowed) continue;
@@ -1163,6 +1178,7 @@ export class BoardView {
       t: this.time, alpha: (decoy ? 0.85 + 0.1 * Math.sin(this.time * 9 + bd.id) : 1) * (bd.alive ? fade : 1), dying: bd.alive ? undefined : 1 - fade,
       flash: bd.flash / 0.12, swing, swingA: bd.swingA, speed: sp, windup, cast, gait, weight: mo.weight, ranged: bd.range > 1.2,
       state: bd.state, id: bd.id, hidden: bd.hidden, own: bd.side === 0, rank: decoy ? owner?.rank ?? bd.rank : bd.rank, sq,
+      still: (bd.frozen ?? 0) > 0,
     });
     const at = this.bodyAt(x, y, z, bd.radius);
     const tex = vfxReady(), feet = this.cam.project(x, y, z);
@@ -1342,10 +1358,17 @@ export class BoardView {
       const pfx = p.fx ?? "";
       if (p.kind === "grenade" || p.kind === "shell") {
         const zh = 0.25 + p.z * 0.6, q = cam.project(wx, wy, zh);
-        this.groundSheet("shadow", 0, wx, wy, pv.size * 1.1, { alpha: 0.65 });
+        // It swells as it climbs towards the camera and its shadow shrinks and thins under it, so the arc reads.
+        const grow = 1 + Math.min(3.2, p.z) * 0.16;
+        this.groundSheet("shadow", 0, wx, wy, pv.size * 1.1 * (1 - Math.min(0.45, p.z * 0.14)), { alpha: 0.65 - Math.min(0.3, p.z * 0.1) });
         if (pfx === "fire" && Math.random() < 0.7) this.fx.burst(p.x, p.y, 1, { color: "#ff9a3d", speed: 0.3, size: 0.05, max: 0.3, kind: "spark", gravity: 0, z: zh * 2 - 0.6 });
-        if (Math.random() < 0.35) this.fx.anim("smoke", p.x, p.y, { size: 0.28, max: 0.45, z: zh, tint: pfx === "fire" ? "#4a3a34" : "#c9c2b8", alpha: 0.6 });
-        this.sheet(pv.sheet, this.loopFrame(pv.sheet, 16, p.id), q.x, q.y, pv.size * q.s, { a: p.kind === "grenade" ? this.time * 9 : Math.atan2(p.vy, p.vx) });
+        // A steady smoke trail (a puff every 45 ms of board time), not a random one.
+        const puffed = this.puffAt.get(p) ?? -1;
+        if (this.time - puffed >= 0.045) {
+          this.puffAt.set(p, this.time);
+          this.fx.anim("smoke", p.x, p.y, { size: 0.3 * grow, max: 0.5, z: zh, tint: pfx === "fire" ? "#4a3a34" : "#c9c2b8", alpha: 0.6, grow: [0.7, 1.5], fadeOut: 0.3 });
+        }
+        this.sheet(pv.sheet, this.loopFrame(pv.sheet, 16, p.id), q.x, q.y, pv.size * q.s * grow, { a: p.kind === "grenade" ? this.time * 9 : Math.atan2(p.vy, p.vx) });
         return;
       }
       const arc = shotArc(p);
@@ -1355,9 +1378,9 @@ export class BoardView {
       const tail = cam.project(tx, ty, hAt(tx, ty));
       const ang = Math.atan2(head.y - tail.y, head.x - tail.x), s = head.s;
       const tint = p.kind === "shard" || pfx === "freeze" ? ICE : p.kind === "pellet" ? GOLD : p.kind === "bolt" ? "#ffe6be" : "#ffffff";
-      this.shotTrail(p, wx, wy, hAt(wx, wy), tint, (p.kind === "bolt" ? 0.09 : 0.05) * s); // JUICE
-      this.shadow(wx, wy, 0.06, 0.25);
-      if (pv.trail) this.sheet("streak", 0, head.x - Math.cos(ang) * pv.size * s * 2, head.y - Math.sin(ang) * pv.size * s * 2, pv.size * s * 0.9, { a: ang, w: pv.size * s * 4.4, tint, alpha: 0.75 });
+      this.shotTrail(p, wx, wy, hAt(wx, wy), tint, (p.kind === "bolt" ? 0.11 : p.kind === "pellet" ? 0.05 : 0.07) * s); // JUICE
+      this.shadow(wx, wy, p.kind === "bolt" ? 0.1 : 0.07, 0.3);
+      if (pv.trail) this.sheet("streak", 0, head.x - Math.cos(ang) * pv.size * s * 2.4, head.y - Math.sin(ang) * pv.size * s * 2.4, pv.size * s * 0.9, { a: ang, w: pv.size * s * 5.2, tint, alpha: 0.85 });
       this.sheet(pv.sheet, 0, head.x, head.y, pv.size * s, { a: ang });
       return;
     }
@@ -1414,11 +1437,49 @@ export class BoardView {
     let pts = this.trails.get(p);
     if (!pts) this.trails.set(p, (pts = []));
     const last = pts[pts.length - 1];
-    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 5) pts.shift(); }
+    if (!last || Math.hypot(last.x - x, last.y - y) > 0.04) { pts.push({ x, y, z }); if (pts.length > 9) pts.shift(); }
+    // Where it is now, for the landing (shotImpacts).
+    this.shotAt.set(p, { x, y, z, a: Math.atan2(p.vy, p.vx), color });
     if (pts.length < 2) return;
     const scr = pts.map((q) => this.cam.project(q.x, q.y, q.z));
     scr.push(this.cam.project(x, y, z));
-    drawTrail(this.ctx, scr, color, width);
+    // A wide team-coloured wake under a bright core: whose shot it is reads from the trail alone.
+    drawTrail(this.ctx, scr, TEAM[p.side].main, width * 2.4, 0.5);
+    drawTrail(this.ctx, scr, color, width, 0.85);
+  }
+
+  /** JUICE: a straight shot that was in flight last frame and is gone now has landed: sparks thrown back along its
+   *  path, a splinter star and a small ring where it stopped. */
+  private shotImpacts(b: Battle) {
+    if (!this.shotAt.size) return;
+    const flying = new Set(b.projs);
+    for (const [p, at] of this.shotAt) {
+      if (p.alive && flying.has(p)) continue;
+      this.shotAt.delete(p);
+      if (this.assault) continue;
+      const big = p.kind === "bolt";
+      this.fx.burst(at.x, at.y, big ? 7 : 4, { color: at.color, speed: big ? 3 : 2.3, spread: 1.5, dir: at.a + Math.PI, size: big ? 0.06 : 0.045, max: 0.3, gravity: 5, kind: "spark", z: at.z });
+      if (vfxReady()) this.fx.anim("spark", at.x, at.y, { size: big ? 0.8 : 0.5, max: 0.16, tint: at.color, a: at.a, z: at.z });
+      if (!this.juice.reduced) this.fx.ring(at.x, at.y, 0.06, big ? 0.55 : 0.34, 0.2, "rgba(255,255,255,0.75)", 0.045);
+    }
+  }
+
+  /** JUICE: where a lobbed shot will land: a team-coloured ring on the ground that tightens as the bomb comes down. */
+  private drawLanding(p: Proj, a: number) {
+    const wx = p.px + (p.x - p.px) * a, wy = p.py + (p.y - p.py) * a;
+    const u = Math.max(0, Math.min(1, progress(p, wx, wy)));
+    const r = (p.kind === "shell" ? 0.85 : 0.6) * (1 - 0.55 * u), ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha *= 0.25 + 0.55 * u;
+    ctx.strokeStyle = TEAM[p.side].main;
+    ctx.lineWidth = Math.max(1.5, this.cam.scaleAt(p.ty) * 0.05);
+    ctx.setLineDash([6, 5]); ctx.lineDashOffset = -this.time * 30;
+    ctx.beginPath(); this.cam.groundPath(ctx, p.tx, p.ty, r); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha *= 0.35;
+    ctx.fillStyle = TEAM[p.side].main;
+    ctx.beginPath(); this.cam.groundPath(ctx, p.tx, p.ty, r * 0.35); ctx.fill();
+    ctx.restore();
   }
 
   // ------------------------------------------------------------ keeps and the round-end assault
