@@ -24,7 +24,7 @@ jobs:
       - run: npx vite build
   versus:
     name: Two players, one match (browser)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # the newest runner image is ahead of what this Playwright version installs browsers for
     timeout-minutes: 15
     needs: check
     steps:
