@@ -2,6 +2,7 @@
 // paying coins plus War Pass XP when tapped. Progress comes from the [pass] events (src/progression/passEvents.ts).
 // A finished quest left unclaimed at midnight is paid automatically on the next day's first look, so nothing is lost.
 // Pure rules over a save-shaped object, plus a thin binding to the device save. Numbers: outputs/economy/pass.md.
+import { int, none, op } from "../sync";
 import { load, save, type Save } from "../save";
 import { earn } from "../economy/wallet";
 import { hash, localDay, rng } from "./chests";
@@ -129,8 +130,9 @@ export function questState(): QuestSave {
   return q.day === localDay() ? q : blankQuests(localDay());
 }
 /** Pays yesterday's finished-but-unclaimed quests, if any (call on boot; it also happens on any quest write). */
-export const settleQuests = () => commit(() => undefined);
-export function claimQuest(i: number): QuestPay | null {
+export const settleQuests = op("quests.settle", () => commit(() => undefined), none);
+export const claimQuest = op("quests.claim", claimQuest_, (r): [number] => [int(r[0], 0, QUESTS_PER_DAY - 1)]);
+function claimQuest_(i: number): QuestPay | null {
   const pay = commit((q) => claimQuestIn(q, localDay(), i));
   if (!pay) return null;
   earn("coins", pay.coins, `quest ${i}`);

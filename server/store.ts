@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { SCRIPTED_CAP, SCRIPTED_FLAGS, applyTrophies, trophyChange } from "../src/net/ladder";
 import { NAME_MAX, type PlayerCard } from "../src/net/protocol";
-import { newAccount, type Account } from "./account";
+import { newRecord, type AccountRecord } from "./account";
 
 // Loaded through process so bundlers and vite-node, which do not know this newer built-in, leave it alone.
 const sqlite = (process as unknown as { getBuiltinModule(id: string): typeof import("node:sqlite") }).getBuiltinModule("node:sqlite");
@@ -85,11 +85,22 @@ export class Store {
   houseBots() { return this.all<PlayerRow>("SELECT * FROM players WHERE kind = 'house' ORDER BY rating"); }
 
   // ------------------------------------------------------------ accounts (the economy: server/account.ts)
-  account(id: string): Account {
+  account(id: string): AccountRecord {
     const row = this.one<{ state: string }>("SELECT state FROM accounts WHERE player = ?", id);
-    return row ? { ...newAccount(), ...JSON.parse(row.state) } : newAccount();
+    if (!row) return newRecord();
+    const fresh = newRecord(), got = JSON.parse(row.state) as Partial<AccountRecord>;
+    return { save: { ...fresh.save, ...got.save }, meta: { ...fresh.meta, ...got.meta } };
   }
-  saveAccount(id: string, a: Account) { this.run("INSERT OR REPLACE INTO accounts (player, state) VALUES (?, ?)", id, JSON.stringify(a)); }
+  saveAccount(id: string, a: AccountRecord) { this.run("INSERT OR REPLACE INTO accounts (player, state) VALUES (?, ?)", id, JSON.stringify(a)); }
+  /** A value the server keeps for itself (the dice secret). */
+  secret(name: string, make: () => string) {
+    this.db.exec("CREATE TABLE IF NOT EXISTS secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL)");
+    const row = this.one<{ value: string }>("SELECT value FROM secrets WHERE name = ?", name);
+    if (row) return row.value;
+    const value = make();
+    this.run("INSERT INTO secrets (name, value) VALUES (?, ?)", name, value);
+    return value;
+  }
   /** Runs `fn` as one transaction: all of it lands or none of it. */
   atomic<T>(fn: () => T): T {
     this.db.exec("BEGIN");

@@ -5,7 +5,11 @@ import { DEFAULT_AI, TACTICS, type AIProfile } from "../src/core/ai";
 import { uniformLevels, type Levels } from "../src/core/levels";
 import { hashSeed } from "../src/core/rng";
 import { SCRIPTED_CAP, leagueOf } from "../src/net/ladder";
-import type { AccountView, Action, FriendsView, Me, MatchReward, Placement, PlayerCard, Push, RoundView, Seat } from "../src/net/protocol";
+import { earn } from "../src/economy/wallet";
+import type { AccountView, Action, FriendsView, Me, MatchReward, Placement, PlayerCard, Push, RoundView, Seat, SoloReply, SoloState } from "../src/net/protocol";
+import { withSave } from "../src/save";
+import { Refused } from "../src/sync";
+import { createCheckout, type Fetch, type Paid } from "./stripe";
 import * as Acct from "./account";
 import { Room, type RoomEnd } from "./room";
 import { card, cleanCode, cleanName, Store, type PlayerRow } from "./store";
@@ -25,6 +29,12 @@ export interface HubOptions {
   botWaitMs?: number;
   /** Randomness for reward rolls (tests pass their own). */
   rand?: () => number;
+  /** Stripe's secret key (unset = nothing is sold). */
+  stripeKey?: string;
+  /** Where players come back to after paying (default: the page they left from). */
+  publicUrl?: string;
+  /** Tests: stands in for the call to Stripe. */
+  stripeFetch?: Fetch;
   /** Milliseconds a player in a match may be disconnected before they forfeit. */
   goneMs?: number;
 }
@@ -46,7 +56,9 @@ export class Hub {
   private challenges = new Map<string, Challenge>();
   private gone = new Map<string, number>();
 
+  private dice: Acct.Dice;
   constructor(readonly store: Store, private opts: HubOptions = {}) {
+    this.dice = new Acct.Dice(store.secret("dice", () => randomBytes(32).toString("hex")));
     if (opts.houseBots) store.ensureHouseBots(HOUSE_NAMES.slice(0, opts.houseBots));
   }
 
@@ -197,8 +209,7 @@ export class Hub {
   /** The troop levels a player brings to a ranked match: their server-held ones (a house bot's follow its trophies). */
   private levelsOf(p: PlayerRow): Levels | undefined {
     if (p.kind === "house") return uniformLevels(1 + Math.floor(p.rating / 250));
-    const l = this.store.account(p.id).levels;
-    return Object.keys(l).length ? l : undefined;
+    return Acct.levels(this.store.account(p.id));
   }
 
   challenge(id: string, friendId: unknown, now = Date.now()) {
@@ -258,9 +269,7 @@ export class Hub {
     if (room.ranked) for (const s of [0, 1] as Seat[]) {
       const p = this.row(room.players[s].id);
       if (p.kind === "house") continue;
-      const acct = this.store.account(p.id);
-      rewards[s] = Acct.matchReward(acct, { won: end.winner === s, league: leagueOf(p.rating).id, day: new Date(now).toISOString().slice(0, 10), rand: this.opts.rand ?? Math.random });
-      this.store.saveAccount(p.id, acct);
+      rewards[s] = this.withAccount(p.id, (rec) => Acct.matchReward(rec, { won: end.winner === s, league: leagueOf(p.rating).id, day: new Date(now).toISOString().slice(0, 10), rand: this.opts.rand ?? Math.random }));
     }
     const ratings = this.store.finishMatch({
       id: room.id, a: a.id, b: b.id, winner: end.winner, reason: end.reason, rounds: end.rounds, ranked: room.ranked ? 1 : 0,
@@ -308,46 +317,78 @@ export class Hub {
   leaderboard() { return this.store.leaderboard().map(card); }
 
   // ------------------------------------------------------------ the economy (server/account.ts): the server's word is final
-  private change<T>(id: string, fn: (a: Acct.Account) => T): { result: T; account: AccountView } {
+  /** Loads a player's account, lets `fn` change it, and saves it: all of it lands or none of it. */
+  private withAccount<T>(id: string, fn: (rec: Acct.AccountRecord) => T): T {
     try {
       return this.store.atomic(() => {
-        const a = this.store.account(id);
-        const result = fn(a);
-        this.store.saveAccount(id, a);
-        return { result, account: Acct.view(a) };
+        const rec = this.store.account(id);
+        const out = fn(rec);
+        this.store.saveAccount(id, rec);
+        return out;
       });
-    } catch (e) { if (e instanceof Acct.AccountError) return bad(e.message); throw e; }
+    } catch (e) { if (e instanceof Acct.AccountError || e instanceof Refused) return bad(e.message); throw e; }
+  }
+  /** The account as a device mirrors it. `tz` is the device's timezone (kept; it can change once a week). */
+  solo(id: string, tz?: unknown): SoloState {
+    return this.withAccount(id, (rec) => { Acct.setTz(rec, tz); return Acct.state(rec, id, this.dice); });
+  }
+  /** Runs a device's economy actions on the account, in order, and answers with the account as it now stands. */
+  soloOps(id: string, ops: unknown, tz?: unknown): SoloReply {
+    const list = (Array.isArray(ops) ? ops : []).slice(0, 40) as Acct.OpCall[];
+    return this.withAccount(id, (rec) => {
+      Acct.setTz(rec, tz);
+      const rejected = Acct.runOps(rec, id, this.dice, list);
+      return { ...Acct.state(rec, id, this.dice), rejected };
+    });
   }
   account(id: string): AccountView { return Acct.view(this.store.account(id)); }
-  upgrade(id: string, kind: unknown) { return this.change(id, (a) => Acct.upgrade(a, kind)).account; }
-  catalog() { return { products: Acct.PRODUCTS }; }
-  buyWithGems(id: string, sku: unknown) { return this.change(id, (a) => Acct.buyWithGems(a, sku)).account; }
-  /** A verified payment: credits the product once per transaction id, however often the provider repeats itself. */
-  creditPayment(txId: unknown, player: unknown, sku: unknown, source: string) {
+  /** For integrations: one action by name, answered with the plain account view. */
+  upgrade(id: string, kind: unknown): AccountView {
+    return this.withAccount(id, (rec) => {
+      const [r] = Acct.runOps(rec, id, this.dice, [{ name: "army.upgrade", args: [kind] }]);
+      if (r) bad(r.why);
+      return Acct.view(rec);
+    });
+  }
+  catalog() { return { products: Acct.PRODUCTS, payments: !!this.opts.stripeKey }; }
+  /** Sends a player to Stripe to pay for one product. Nothing is credited here: that waits for Stripe's word. */
+  async checkout(id: string, productId: unknown, offer: unknown, returnTo: string) {
+    const key = this.opts.stripeKey ?? bad("Payments are not switched on for this server", 503);
+    const p = this.withAccount(id, (rec) => Acct.intend(rec, productId, offer));
+    const back = (this.opts.publicUrl || returnTo).replace(/\/+$/, "");
+    if (!/^https?:\/\//.test(back)) bad("No address to return to after paying");
+    try {
+      const s = await createCheckout({
+        secretKey: key, title: `Muster: ${p.title}`, amount: Math.round(p.usd * 100), player: id, product: p.id,
+        ...(typeof offer === "string" ? { offer } : {}), successUrl: `${back}/?tab=shop&paid=1`, cancelUrl: `${back}/?tab=shop`,
+      }, this.opts.stripeFetch);
+      return { url: s.url };
+    } catch (e) { console.error(e); return bad("The payment page could not be opened. Try again shortly.", 502); }
+  }
+  /** A verified payment: pays the product out once per transaction id, however often the provider repeats itself. */
+  creditPayment(txId: unknown, player: unknown, productId: unknown, source: string) {
     const tx = String(txId ?? "");
     if (tx.length < 6 || tx.length > 200) bad("Bad transaction id");
     const p = this.store.player(String(player)) ?? this.store.byCode(cleanCode(player)) ?? bad("No such player", 404);
-    try {
-      return this.store.atomic(() => {
-        if (!this.store.recordPurchase(tx, p.id, String(sku), source)) return { credited: false, player: p.id };
-        const a = this.store.account(p.id);
-        Acct.creditPaid(a, sku);
-        this.store.saveAccount(p.id, a);
-        return { credited: true, player: p.id };
-      });
-    } catch (e) { if (e instanceof Acct.AccountError) return bad(e.message); throw e; }
+    Acct.product(productId);
+    const credited = this.withAccount(p.id, (rec) => this.store.recordPurchase(tx, p.id, String(productId), source) && Acct.credit(rec, productId, tx));
+    return { credited, player: p.id };
+  }
+  /** A webhook from Stripe, already verified: credit a paid checkout whose amount is the server's price. */
+  stripePaid(paid: Paid) {
+    const p = Acct.PRODUCTS.find((x) => x.id === paid.product);
+    if (!p || paid.currency !== "usd" || paid.amount !== Math.round(p.usd * 100)) { console.error("stripe: a payment that matches no product", paid); return { credited: false }; }
+    return this.creditPayment(paid.txId, paid.player, paid.product, "stripe");
   }
   /** By hand, from the admin key: coins or gems for a player (a refund, a prize). Recorded like a purchase. */
   grant(player: unknown, coins: unknown, gems: unknown, note: unknown) {
     const p = this.store.player(String(player)) ?? this.store.byCode(cleanCode(player)) ?? bad("No such player", 404);
     const c = Math.max(0, Math.floor(Number(coins) || 0)), g = Math.max(0, Math.floor(Number(gems) || 0));
     if (!c && !g) bad("Nothing to grant");
-    return this.store.atomic(() => {
+    return this.withAccount(p.id, (rec) => {
       this.store.recordPurchase(`grant_${newId()}`, p.id, `grant:${c}c:${g}g:${cleanName(note)}`, "admin");
-      const a = this.store.account(p.id);
-      a.coins += c; a.gems += g;
-      this.store.saveAccount(p.id, a);
-      return { player: p.id, account: Acct.view(a) };
+      withSave(rec.save, () => { if (c) earn("coins", c, "grant"); if (g) earn("gems", g, "grant"); });
+      return { player: p.id, account: Acct.view(rec) };
     });
   }
   /** A person wrongly counted as scripted: wipe their flags. */

@@ -1,4 +1,4 @@
-// Starts the Muster match server.  npm run server   (PORT, MUSTER_DB, MUSTER_ADMIN_KEY, MUSTER_INVITE_ONLY, MUSTER_HOUSE_BOTS, MUSTER_PAYMENT_SECRET, TRUST_PROXY)
+// Starts the Muster match server.  npm run server   (PORT, MUSTER_DB, MUSTER_ADMIN_KEY, MUSTER_INVITE_ONLY, MUSTER_HOUSE_BOTS, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, MUSTER_PUBLIC_URL, TRUST_PROXY)
 import { mkdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -13,7 +13,9 @@ const app = createApp({
   adminKey: process.env.MUSTER_ADMIN_KEY || undefined,
   inviteOnly: process.env.MUSTER_INVITE_ONLY === "1",
   houseBots: Number(process.env.MUSTER_HOUSE_BOTS ?? 16),
-  paymentSecret: process.env.MUSTER_PAYMENT_SECRET || undefined,
+  stripeKey: process.env.STRIPE_SECRET_KEY || undefined,
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || undefined,
+  publicUrl: process.env.MUSTER_PUBLIC_URL || undefined,
   trustProxy: process.env.TRUST_PROXY === "1",
 });
 app.server.listen(port, "0.0.0.0", () => {

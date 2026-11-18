@@ -8,6 +8,7 @@ import { creditPremium, queueChest, type PassCredit } from "../progression/pass"
 import { earn } from "../economy/wallet";
 import { load, save, type Save } from "../save";
 import { ConsumableShop } from "./consumable";
+import { ServerStore } from "./server";
 import { createStore } from "./index";
 import { OFFER_IDS, activeOffers, creditOfferIn, intendIn, normalizeOffers, offerBought, offerPayout, type Offer, type OfferSave } from "./offers";
 import type { Purchase, Store } from "./types";
@@ -67,6 +68,7 @@ function build(store: Store): PassShops {
       if (isOfferBought(o.id)) return { status: "failed", message: "You already have this offer." };
       if (Date.now() >= o.endsAt) return { status: "failed", message: "This offer has ended." };
       commitOffers((s) => intendIn(s, o));
+      if (store instanceof ServerStore) store.offer = o.id; // online, the server records which offer this payment is for
       return offers.buy(o.productId);
     },
   };

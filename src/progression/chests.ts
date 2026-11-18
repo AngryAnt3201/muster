@@ -4,6 +4,7 @@
 // after 10 stars or crowns. Contents are rolled with a seeded RNG the moment a chest drops and kept in the save, so
 // reopening the app never re-rolls them. Daily deals sell specific unit cards for coins, seeded by date.
 // Pure rules over a save-shaped object (time passed in), plus a thin binding to the device save. See outputs/economy/chests.md.
+import { int, nextSeed, none, oneOf, op, wallNow } from "../sync";
 import { UNIT_KINDS, type UnitKind } from "../core/defs";
 import { load, save, type Save } from "../save";
 import { RARITIES, RARITY, grantCards, foundKinds, type Rarity } from "./collection";
@@ -358,7 +359,7 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 const now = () => Date.now();
 const progress = (s: Save): Progress => ({ campaign: s.campaign, found: foundKinds() });
-const seed = () => (Math.random() * 2 ** 32) >>> 0;
+const seed = () => nextSeed(); // online, the server's dice (src/sync.ts)
 
 function current(): ChestSave {
   const s = load() as WithChests;
@@ -374,7 +375,7 @@ function commit<T>(apply: (c: ChestSave, s: Save) => T): T {
 export const chests = (): Readonly<ChestSave> => current();
 /** Game time now (reads only: it never moves the seen-mark without saving). */
 export const gameNow = () => Math.max(now(), current().seen);
-export const localDay = (d = new Date()) => {
+export const localDay = (d = wallNow()) => {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
@@ -396,24 +397,35 @@ export function winChest(crowns: number): WinResult {
 }
 /** Starts the free-chest clock for a new player (one ready now), so the bank fills even before the first claim. */
 export const initChests = () => { if (current().freeFrom < 0) commit((c) => freeBanked(c, c.seen)); };
-export const startUnlock = (slot: number) => commit((c) => startIn(c, slot, c.seen));
-export const openReady = (slot: number) => commit((c) => takeIn(c, slot, c.seen));
+// [sync] Actions. On the server, opening a chest pays it out in the same step (the device animates in between and
+// pays its own copy with grantChest, which is not an action: nobody can send the server a chest to pay).
+const paid = <A extends unknown[]>(f: (...a: A) => Chest | null) => (...a: A) => { const ch = f(...a); if (ch) grantChest(ch); return ch; };
+const slotArg = (r: unknown[]): [number] => [int(r[0], 0, SLOTS - 1)];
+const startUnlock_ = (slot: number) => commit((c) => startIn(c, slot, c.seen));
+export const startUnlock = op("chests.start", startUnlock_, slotArg);
+const openReady_ = (slot: number) => commit((c) => takeIn(c, slot, c.seen));
+export const openReady = op("chests.open", openReady_, slotArg, { server: paid(openReady_) });
 /** Opens a slot now for gems; null if the player can't afford it. */
-export function openWithGems(slot: number): Chest | null {
+export const openWithGems = op("chests.rush", openWithGems_, slotArg, { server: paid(openWithGems_) });
+function openWithGems_(slot: number): Chest | null {
   const cost = commit((c) => skipCost(c, slot, c.seen));
   if (cost > 0 && (!canAfford("gems", cost) || !spend("gems", cost, `chest skip ${slot}`))) return null;
   return commit((c) => rushIn(c, slot, c.seen));
 }
-export const claimFree = () => commit((c, s) => claimFreeIn(c, progress(s), c.seen, seed()));
-export const claimCrown = () => commit((c, s) => claimCrownIn(c, progress(s), localDay(), seed()));
-export function buyShopChest(type: SlotChest): Chest | null {
+const claimFree_ = () => commit((c, s) => claimFreeIn(c, progress(s), c.seen, seed()));
+export const claimFree = op("chests.free", claimFree_, none, { server: paid(claimFree_) });
+const claimCrown_ = () => commit((c, s) => claimCrownIn(c, progress(s), localDay(), seed()));
+export const claimCrown = op("chests.crown", claimCrown_, none, { server: paid(claimCrown_) });
+export const buyShopChest = op("chests.buy", buyShopChest_, (r): [SlotChest] => [oneOf(r[0], SHOP_CHESTS.map((x) => x.type))], { server: paid(buyShopChest_) });
+function buyShopChest_(type: SlotChest): Chest | null {
   const offer = SHOP_CHESTS.find((o) => o.type === type);
   if (!offer || !spend("gems", offer.gems, `shop chest ${type}`)) return null;
   return commit((c, s) => shopChestIn(c, type, progress(s), seed()));
 }
 export const todaysDeals = (): Deal[] => dailyDeals(localDay(), findable(load().campaign, foundKinds()));
 export const dealBought = (i: number) => { const c = current(); return c.deals.day === localDay() && c.deals.bought.includes(i); };
-export function buyDeal(i: number): { isNew: boolean } | null {
+export const buyDeal = op("chests.deal", buyDeal_, (r): [number] => [int(r[0], 0, 11)]);
+function buyDeal_(i: number): { isNew: boolean } | null {
   const d = todaysDeals()[i];
   if (!d || dealBought(i) || !spend("coins", d.price, `deal ${d.kind}`)) return null;
   commit((c) => { if (c.deals.day !== localDay()) c.deals = { day: localDay(), bought: [] }; c.deals.bought.push(i); });

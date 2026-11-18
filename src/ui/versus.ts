@@ -3,9 +3,8 @@
 import "./versus.css";
 import { sfx, unlockAudio } from "../audio/sfx";
 import type { NetClient } from "../net/client";
-import { UNITS } from "../core/defs";
 import { leagueOf } from "../net/ladder";
-import { NAME_MAX, type AccountView, type FriendsView, type PlayerCard, type Push } from "../net/protocol";
+import { NAME_MAX, type FriendsView, type PlayerCard, type Push } from "../net/protocol";
 import { el } from "./dom";
 import { icon } from "./kit";
 
@@ -117,26 +116,12 @@ export function versusScreen(o: VersusOpts): () => void {
     if (!f.friends.length && !f.incoming.length && !f.outgoing.length) kids.push(el("p", { class: "vs-empty" }, ["Send a friend your invite, or type their code."]));
     friendsBox.replaceChildren(el("h2", {}, ["Friends"]), ...kids);
   }
-  // The ranked army: coins, gems, cards and levels as the server holds them. Upgrades are the server's to grant.
-  const armyBox = el("div", { class: "vs-friends vs-army" });
-  function drawArmy(a: AccountView) {
-    const rows = a.units.map((u) => {
-      const up = button(u.cost === null ? "Max" : `${u.cost} coins`, "small gold", () => void attempt(async () => { drawArmy(await net!.upgrade(u.kind)); sfx("upgrade"); }));
-      up.disabled = !!u.why;
-      return el("div", { class: "vs-row" }, [
-        el("div", { class: "vs-who" }, [el("b", {}, [UNITS[u.kind].name]), el("small", {}, [`Level ${u.level} · ${u.need === null ? "top level" : `${u.cards}/${u.need} cards`}${u.why === "cap" ? " · commander level too low" : ""}`])]),
-        el("div", { class: "vs-acts" }, [up]),
-      ]);
-    });
-    armyBox.replaceChildren(el("h2", {}, ["Ranked army"]), el("p", { class: "vs-empty" }, [`${a.coins} coins · ${a.gems} gems · commander ${a.commander}. Ranked wins pay coins and cards.`]), ...rows);
-  }
   const ladderBox = el("div", { class: "vs-friends vs-ladder" });
   async function drawExtras() {
     if (!alive) return;
     try {
-      const [a, top] = await Promise.all([net!.account(), net!.leaderboard()]);
+      const top = await net!.leaderboard();
       if (!alive) return;
-      drawArmy(a);
       ladderBox.replaceChildren(el("h2", {}, ["Ladder"]), ...top.slice(0, 20).map((p, i) => el("div", { class: `vs-row ${p.id === net!.me!.id ? "challenge" : ""}` }, [
         el("b", { class: "vs-rank" }, [String(i + 1)]),
         el("div", { class: "vs-who" }, [el("b", {}, [p.name, ...(p.bot ? [el("i", { class: "vs-bot" }, ["bot"])] : [])]), el("small", {}, [leagueOf(p.rating).name])]),
@@ -187,8 +172,16 @@ export function versusScreen(o: VersusOpts): () => void {
       ]));
       return;
     }
+    // A first sign-in: load the game again so every screen and the Shop run on the server's account from the start.
+    if (net.fresh) {
+      const q = new URLSearchParams(location.search);
+      q.delete("token");
+      if (!q.has("add")) q.set("versus", "");
+      location.replace(`${location.pathname}?${q}`);
+      return;
+    }
     if (!alive) return;
-    body.replaceChildren(youPanel, friendsBox, armyBox, ladderBox, note);
+    body.replaceChildren(youPanel, friendsBox, ladderBox, note);
     drawYou();
     await refresh();
     void drawExtras();

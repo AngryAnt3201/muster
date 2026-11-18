@@ -1,5 +1,7 @@
 // Cosmetics the player owns and wears: keep skins first. Shared contract for the skin art, the War Pass
 // rewards and gem/offer purchases. Cosmetics never change the battle: the sim never reads this file.
+import { earn, spend } from "../economy/wallet";
+import { oneOf, op } from "../sync";
 import { load, save } from "../save";
 
 export type CosmeticSlot = "keep";
@@ -56,7 +58,20 @@ export const ownsCosmetic = (id: string) => current().owned.includes(id);
 export const equipped = (slot: CosmeticSlot): string => current().equipped[slot] ?? DEFAULT_KEEP;
 /** Returns false if already owned or unknown. `reason` is for the economy log only. */
 export const grantCosmetic = (id: string, _reason: string) => commit((c) => grantIn(c, id));
-export const equip = (slot: CosmeticSlot, id: string) => commit((c) => equipIn(c, slot, id));
+export const equip = op("skins.equip", (slot: CosmeticSlot, id: string) => commit((c) => equipIn(c, slot, id)), (r): [CosmeticSlot, string] => [oneOf(r[0], ["keep"] as const) as CosmeticSlot, oneOf(r[1], KEEP_SKINS)]);
+
+/** Gem prices of the skins the Shop sells (the others are War Pass rewards). */
+export const SKIN_PRICES: Partial<Record<KeepSkin, number>> = { "keep:frost": 500, "keep:ember": 700, "keep:shadow": 900 };
+export type SkinBuy = "ok" | "owned" | "not-for-sale" | "short";
+/** Buys a skin for gems. */
+export const buySkin = op("skins.buy", (id: KeepSkin): SkinBuy => {
+  if (ownsCosmetic(id)) return "owned";
+  const price = SKIN_PRICES[id];
+  if (price == null) return "not-for-sale";
+  if (!spend("gems", price, `skin:${id}`)) return "short";
+  if (!grantCosmetic(id, "gems")) { earn("gems", price, `skin:${id}:refund`); return "owned"; }
+  return "ok";
+}, (r): [KeepSkin] => [oneOf(r[0], KEEP_SKINS)]);
 export function onCosmeticsChange(fn: Listener): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);

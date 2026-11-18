@@ -1,9 +1,9 @@
 import "./styles.css";
 import { DEFAULT_AI, TACTICS, type AIProfile, type Tactic } from "./core/ai";
 import { ACTS, LEVELS } from "./core/campaign";
-import { levelConfig, objectiveMet, objectiveText, puzzleConfig, puzzleStars, starsFor, type LevelDef, type PuzzleDef } from "./core/content";
+import { levelConfig, objectiveMet, objectiveText, puzzleConfig, starsFor, type LevelDef, type PuzzleDef } from "./core/content";
 import { UNITS, START_HP, type UnitKind } from "./core/defs";
-import { beginDaily, canScore, dailyBoard, dailyConfig, dailyResult, dateKey, finishDaily, streakOn } from "./core/daily";
+import { canScore, dailyBoard, dailyConfig, dailyResult, dateKey, streakOn } from "./core/daily";
 import { boonChoices, duelConfig, endDuel, gauntletFoe, boardValue, newRun, takeBoon, type GauntletRun } from "./core/gauntlet";
 import type { Match } from "./core/match";
 import { PUZZLES } from "./core/puzzles";
@@ -31,7 +31,7 @@ import { rallyOffer, shopCounters, shopView, showRewards } from "./ui/gemshop";
 import { armyLevel, migrateArmy } from "./progression/troops";
 import { underLevelledHint } from "./ui/army";
 // [progression] troop levels, coin rewards and the Barracks (src/progression, src/ui/barracks.ts)
-import { awardCampaign, awardDaily, awardGauntletRival, awardSkirmish, settleLegacyCoins, withLevels } from "./progression/troops";
+import { settleLegacyCoins, withLevels } from "./progression/troops";
 import { foeLevelForAct } from "./progression/economy";
 import { attachReward, barracksScreen } from "./ui/barracks";
 // [chests] chest slots, free and crown chests, the opening moment (src/progression/chests.ts, src/ui/chests.ts)
@@ -48,12 +48,12 @@ import { MAP_DEFS } from "./core/td/maps"; // map data only (no imports), so Bas
 // [pass] daily quests, the War Pass and special offers (src/progression/pass.ts, quests.ts, src/store/pass.ts, offers.ts)
 import { onPassChange, startPass } from "./progression/pass";
 import { passBadge, passScreen } from "./ui/pass";
-import { passEvent } from "./progression/passEvents";
 import { onQuestsChange, settleQuests } from "./progression/quests";
 import { usePassStore } from "./store/pass";
 import { seedPassDemo } from "./progression/pass";
 import { seedQuestDemo } from "./progression/quests";
 import { showEnding } from "./ui/ending";
+import { campaignResult, dailyBegin, dailyDone, gauntletBegin, gauntletRival, puzzleResult, skirmishResult } from "./progression/results";
 // [versus] online play: friends, challenges, matchmaking (src/net, src/ui/versus.ts, server/)
 import { hashSeed } from "./core/rng";
 import { net } from "./net/client";
@@ -61,11 +61,14 @@ import { leagueOf } from "./net/ladder";
 import { NetMatch } from "./net/netmatch";
 import type { RoundView } from "./net/protocol";
 import { challengeSheet, versusScreen } from "./ui/versus";
+import { refreshSolo, startSolo } from "./net/solo";
+import { ServerStore } from "./store/server";
+import type { Store } from "./store/types";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
 /** The App Store (StoreKit on iOS, a mock on the web). Nothing is locked behind it: purchases only speed progress up. */
-const store = createStore(location.search);
+const store: Store = net()?.hasAccount ? new ServerStore(net()!, () => void refreshSolo(net()!)) : createStore(location.search);
 /** [store] The one-time Starter Pack: gems and coins through the wallet, cards through the collection, once per transaction. */
 const starter = new StarterShop(store, (txId) => payStarter(txId, {
   creditGems: creditPurchase,
@@ -366,8 +369,7 @@ function playLevel(l: LevelDef, attempt = 0) {
       const n = starsFor(l, m);
       // [progression] once the result sheet is up: "your army is under-levelled" with a way to the Army
       if (m.winner !== 0) queueMicrotask(() => underLevelledHint({ avg: armyLevel(l.roster), recommended: foeLevelForAct(l.act), openArmy: barracks }));
-      const coins = awardCampaign(l, m.winner === 0, n); // [progression] before the star save, to see a first clear
-      if (n > (load().campaign[l.id] ?? 0)) save((s) => { s.campaign[l.id] = n; });
+      const { coins, chest } = campaignResult(l.id, m.winner === 0, n); // [sync] one action: coins, cards, stars, the chest
       const nextL = LEVELS.find((x) => x.id === l.id + 1);
       results(m, {
         heading: m.winner === 0 ? "Victory" : "Defeat",
@@ -381,7 +383,7 @@ function playLevel(l: LevelDef, attempt = 0) {
         secondary: ["Campaign", () => campaign(l.act)],
       });
       attachReward(coins, barracks); // [progression]
-      if (m.winner === 0) chestEarned(winChest(n)); // [chests]
+      if (chest) chestEarned(chest); // [chests]
     },
     onQuit: () => campaign(l.act),
     onRestart: () => playLevel(l, attempt + 1),
@@ -451,8 +453,7 @@ function playPuzzle(p: PuzzleDef) {
     showEnemyMines: true,
     onEnd: (m) => {
       const won = m.history[0]?.winner === 0;
-      const n = puzzleStars(p, won, m.sides[0].gold);
-      if (n > (load().puzzles[p.id] ?? 0)) save((s) => { s.puzzles[p.id] = n; });
+      const n = puzzleResult(p.id, won, Math.max(0, Math.floor(m.sides[0].gold)));
       const after = PUZZLES[PUZZLES.indexOf(p) + 1];
       const next = after;
       results(m, {
@@ -482,7 +483,7 @@ function gauntlet() {
         el("span", {}, [el("b", {}, [String(s.gauntlet.runs)]), "runs"]),
       ]),
       ...(run && !run.over ? [btn(`Continue · rival ${run.stage}`, "primary big", () => duel())] : []),
-      btn("New run", run && !run.over ? "big" : "primary big", () => { run = newRun(Math.floor(Math.random() * 1e9)); save((x) => { x.gauntlet.runs++; }); duel(); }),
+      btn("New run", run && !run.over ? "big" : "primary big", () => { run = newRun(Math.floor(Math.random() * 1e9)); gauntletBegin(); duel(); }),
     ]));
 }
 
@@ -503,17 +504,16 @@ function duel() {
         results(m, {
           heading: "Run over",
           note: `You beat ${r.wins} rival${r.wins === 1 ? "" : "s"}.`,
-          primary: ["New run", () => { run = newRun(Math.floor(Math.random() * 1e9)); save((x) => { x.gauntlet.runs++; }); duel(); }],
+          primary: ["New run", () => { run = newRun(Math.floor(Math.random() * 1e9)); gauntletBegin(); duel(); }],
           secondary: ["Menu", title],
         });
         rallyOffer(sheetEl, r, duel); // [gems] Gauntlet Rally: refight this rival for gems, once per run
         return;
       }
-      if (r.wins > load().gauntlet.best) save((s) => { s.gauntlet.best = r.wins; });
-      const coins = awardGauntletRival(r.stage - 1); // [progression]
+      const paid = gauntletRival(r.stage - 1); // [sync] one action: the best run, coins, the chest (two crowns a rival)
       boonPick(r);
-      attachReward(coins); // [progression]
-      chestEarned(winChest(2)); // [chests] two crowns a rival
+      attachReward(paid.coins); // [progression]
+      chestEarned(paid.chest); // [chests]
     },
     onQuit: gauntlet,
   });
@@ -552,7 +552,7 @@ function daily() {
       board: dailyBoard(key), save: d, key, streak, open, next: untilTomorrow(),
       when: new Date().toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }),
       action: open
-        ? btn("Play today's board", "primary big daily-play", () => { save((s) => { beginDaily(s.daily, key); }); playDaily(key, false); })
+        ? btn("Play today's board", "primary big daily-play", () => { dailyBegin(key); playDaily(key, false); })
         : btn("Practice (unscored)", "big daily-play", () => playDaily(key, true)),
     }));
 }
@@ -572,11 +572,8 @@ function playDaily(key: string, practice: boolean, attempt = 0) {
     intro: `vs ${b.foe.name} · ${b.rule.name}`,
     onEnd: (m) => {
       const r = dailyResult(m);
-      let scored = false;
-      if (!practice) save((s) => { scored = finishDaily(s.daily, key, r); });
+      const { coins, scored } = dailyDone(key, practice, r.won, r.score); // [sync] one action: the score, the streak, coins, the quest
       const d = load().daily;
-      const coins = awardDaily(r.won, scored, d.streak); // [progression] scored attempt only
-      passEvent({ kind: "play", mode: "daily" }); // [pass] "play the Daily" quest
       results(m, {
         heading: r.won ? "Victory" : "Defeat",
         note: scored
@@ -652,14 +649,14 @@ function playSkirmish(lab: Lab) {
     mode: lab.watch ? "watch" : "skirmish",
     title: "Skirmish",
     onEnd: (m) => {
-      const coins = awardSkirmish(m.winner === 0, lab.watch, lab.foe.difficulty, lab.hp); // [progression]
+      const { coins, chest } = skirmishResult(m.winner === 0, lab.watch, lab.foe.difficulty, lab.hp[0], lab.hp[1]); // [sync]
       results(m, {
         heading: m.winner === 0 ? (lab.watch ? "Blue wins" : "Victory") : m.winner === 1 ? (lab.watch ? "Red wins" : "Defeat") : "Draw",
         primary: ["Again", () => playSkirmish(lab)],
         secondary: ["AI lab", skirmish],
       });
       attachReward(coins, barracks); // [progression]
-      if (m.winner === 0 && !lab.watch) chestEarned(winChest(2)); // [chests]
+      if (chest) chestEarned(chest); // [chests]
     },
     onQuit: skirmish,
     onRestart: () => playSkirmish(lab),
@@ -743,7 +740,6 @@ function playVersus(view: RoundView) {
         primary: ["Versus", () => versus()],
         secondary: ["Menu", title],
       });
-      if (won) chestEarned(winChest(2)); // [chests] two crowns for beating a person
     },
     onQuit: () => { void m.forfeit(); versus(); },
   });
@@ -818,6 +814,17 @@ async function boot() {
   const font = Promise.race([document.fonts?.load('20px "Lilita One"').catch(() => undefined), new Promise((r) => setTimeout(r, 800))]);
   setSound(s.settings.sound);
   setHaptics(s.settings.haptics);
+  // [sync] Signed in: the account is the server's. Its copy becomes this device's save before anything is drawn, and
+  // every economy action from here on is run there too. Not signed in, or no server in reach: the device's own save,
+  // which never counts for ranked play.
+  let online = false;
+  { const n = net();
+    if (n?.hasAccount) {
+      try {
+        await Promise.race([n.start().then(() => startSolo(n, () => { refreshBar(); if (!game && !sheetEl) here?.(); })), new Promise((_, no) => setTimeout(() => no(Error("slow")), 5000))]);
+        online = true;
+      } catch { /* offline for now */ }
+    } }
   // [store] A Starter Pack paid but never finished (or approved later) is credited, then the screen redraws.
   // The Shop's own Starter Pack panel shows "Owned" and removes itself, so the Shop isn't redrawn under it.
   starter.onCredit(() => { if (!sheetEl && !document.querySelector('[data-offer="starter"]')) here?.(); });
@@ -830,7 +837,7 @@ async function boot() {
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
   // [versus] a device that has played online before signs in quietly, so challenges and a running match find it.
-  { const n = net(); if (n?.hasAccount) void n.start().then(watchNet, () => undefined); }
+  if (online) watchNet();
   // Dev only: play any level from a script without a reload (tools/sprite-mem.mjs plays several back to back).
   if (import.meta.env.DEV) (window as any).__playLevel = (id: number) => { const l = LEVELS.find((x) => x.id === id); if (l) playLevel(l); return !!l; };
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop

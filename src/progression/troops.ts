@@ -1,6 +1,7 @@
 // Troop levels on the device: the save binding for src/progression/economy.ts, plus the coin, card and XP hooks the
 // result screens call. Coins move only through the shared wallet (src/economy/wallet.ts); cards only through the
 // collection (src/progression/collection.ts).
+import { oneOf, op, wallNow } from "../sync";
 import type { LevelDef } from "../core/content";
 import { START_HP, UNIT_KINDS, type UnitKind } from "../core/defs";
 import { dateKey } from "../core/daily";
@@ -110,7 +111,8 @@ export function addXp(n: number): number | null {
 
 export interface UpgradeResult { level: number; xp: number; commanderUp: number | null; }
 /** Buys the next level of a unit with cards plus coins. Returns the result, or null when it isn't allowed or affordable. */
-export function upgradeTroop(k: UnitKind): UpgradeResult | null {
+export const upgradeTroop = op("army.upgrade", upgradeTroop_, (r): [UnitKind] => [oneOf(r[0], UNIT_KINDS)]);
+function upgradeTroop_(k: UnitKind): UpgradeResult | null {
   const st = troopState(k);
   if (st.why) return null;
   if (!spend("coins", st.cost, `level ${k} ${st.level + 1}`)) return null;
@@ -125,7 +127,8 @@ export function upgradeTroop(k: UnitKind): UpgradeResult | null {
 /** The deck (found units only). */
 export const deck = (): UnitKind[] => (prog().deck ?? []).filter(isFound);
 /** Adds or removes a unit from the deck; returns whether it is in the deck now. A full deck refuses new units. */
-export function toggleDeck(k: UnitKind): boolean {
+export const toggleDeck = op("army.deck", toggleDeck_, (r): [UnitKind] => [oneOf(r[0], UNIT_KINDS)]);
+function toggleDeck_(k: UnitKind): boolean {
   let inDeck = false;
   save((s) => {
     s.progression = normalizeProgression(s.progression);
@@ -173,7 +176,7 @@ export function settleLegacyCoins(): number {
 }
 
 /** Call before the campaign's own star save, so a first clear is still known. Pays coins, cards and XP. */
-export function awardCampaign(l: LevelDef, won: boolean, stars: number, now = new Date()): Reward {
+export function awardCampaign(l: LevelDef, won: boolean, stars: number, now = wallNow()): Reward {
   const c = load().campaign;
   const day = dateKey(now);
   const p = prog();
@@ -191,7 +194,7 @@ export function awardCampaign(l: LevelDef, won: boolean, stars: number, now = ne
 }
 export const awardGauntletRival = (stage: number) => withXp(pay(gauntletRivalReward(stage), `gauntlet ${stage}`), WIN_XP.gauntlet);
 export const awardDaily = (won: boolean, scored: boolean, streak: number) => pay(dailyReward({ won, scored, streak }), "daily");
-export function awardSkirmish(won: boolean, watch: boolean, difficulty: number, hp: [number, number], now = new Date()): Reward {
+export function awardSkirmish(won: boolean, watch: boolean, difficulty: number, hp: [number, number], now = wallNow()): Reward {
   const day = dateKey(now);
   const p = prog();
   const earnedToday = p.skirmish?.day === day ? p.skirmish.coins : 0;

@@ -5,6 +5,8 @@
 // Nothing here changes a battle; every level stays open. Rewards are claimed by tapping.
 // Pure rules over a save-shaped object (time passed in), plus a thin binding to the device save.
 // Numbers and how fast the pass fills: outputs/economy/pass.md.
+import { int, none, oneOf, op } from "../sync";
+import { grantChest } from "./chests";
 import type { UnitKind } from "../core/defs";
 import { load, save, type Save } from "../save";
 import { earn, spend } from "../economy/wallet";
@@ -264,13 +266,15 @@ export function payReward(r: PassReward, why: string): Paid {
 }
 
 /** Tap to claim. The tier is marked claimed and its reward paid in the same task, before any animation. */
-export function claimReward(t: Track, tier: number): Paid | null {
+export const claimReward = op("pass.claim", claimReward_, (r): [Track, number] => [oneOf(r[0], ["free", "premium"] as const), int(r[1], 1, TIERS)]);
+function claimReward_(t: Track, tier: number): Paid | null {
   const r = commit((p) => claimIn(p, t, tier));
   return r ? payReward(r, `pass ${t} ${tier}`) : null;
 }
 
 /** Gems to finish this tier; null if it can't be afforded or it's the top. */
-export function skipTier(): boolean {
+export const skipTier = op("pass.skip", skipTier_, none);
+function skipTier_(): boolean {
   const cost = skipCost(current());
   if (!cost || !spend("gems", cost, `pass skip ${tierOf(current().xp) + 1}`)) return false;
   return commit((p) => skipIn(p));
@@ -287,7 +291,9 @@ export function creditPremium(txId: string): PassCredit {
 export const queueChest = (chest: Chest) => commit((p) => { p.toOpen.push(chest); });
 export const waitingChests = (): Chest[] => [...current().toOpen];
 /** Takes the next waiting chest out of the queue: the caller opens it (openChest pays it in its first frame). */
-export const takeChest = (): Chest | null => commit((p) => p.toOpen.shift() ?? null);
+const takeChest_ = (): Chest | null => commit((p) => p.toOpen.shift() ?? null);
+// [sync] On the server the chest is paid as it leaves the queue (the device pays its own copy when it opens).
+export const takeChest = op("pass.chest", takeChest_, none, { server: () => { const ch = takeChest_(); if (ch) grantChest(ch); return ch; } });
 
 let started = false;
 /** Wires the pass in once: crown XP from wins, quest XP, quests' own listener, and Premium's chest speed perk. */

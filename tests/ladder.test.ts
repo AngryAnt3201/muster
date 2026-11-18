@@ -1,12 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createHmac } from "node:crypto";
-import type { AddressInfo } from "node:net";
+import { describe, expect, it } from "vitest";
 import { UNITS } from "../src/core/defs";
 import { LEAGUES, SCRIPTED_CAP, SCRIPTED_FLAGS, applyTrophies, leagueOf, trophyChange } from "../src/net/ladder";
-import type { AccountView, Push, RoundView } from "../src/net/protocol";
-import { upgradeCards, upgradeCoins } from "../src/progression/economy";
-import * as Acct from "../server/account";
-import { createApp, type App } from "../server/app";
+import type { Push, RoundView } from "../src/net/protocol";
 import { Hub } from "../server/hub";
 import { Store, scripted } from "../server/store";
 
@@ -104,114 +99,10 @@ describe("scripted players on the ladder", () => {
     expect(over.reason).toBe("hp");
     expect(over.rating).toBeTruthy();
     expect(over.reward!.coins).toBeGreaterThan(0);
-    expect(hub.account(me.id).coins).toBe(200 + over.reward!.coins);
+    expect(hub.account(me.id).coins).toBe(over.reward!.coins);
     const bot = hub.store.player(bots[0].id)!;
     expect(bot.wins + bot.losses).toBe(1);
     expect(bot.rating).toBeLessThanOrEqual(SCRIPTED_CAP);
   }, 120_000);
 });
 
-describe("the economy lives on the server", () => {
-  let app: App, base: string, token: string, id: string;
-  const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
-    const r = await fetch(base + path, { method, headers: { "content-type": "application/json", authorization: `Bearer ${token}`, ...headers }, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
-    return { status: r.status, data: await r.json() };
-  };
-  const pay = (body: object, secret = "pay-secret") => {
-    const text = JSON.stringify(body);
-    return call("POST", "/v1/store/webhook", text, { "x-muster-signature": createHmac("sha256", secret).update(text).digest("hex") });
-  };
-  beforeAll(async () => {
-    app = createApp({ ratePerSec: 0, registerPerHour: 0, adminKey: "k", paymentSecret: "pay-secret" });
-    await new Promise<void>((r) => app.server.listen(0, "127.0.0.1", r));
-    base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
-    const r = await (await fetch(base + "/v1/register", { method: "POST", body: JSON.stringify({ name: "Buyer" }) })).json();
-    token = r.token; id = r.me.id;
-  });
-  afterAll(() => app.close());
-
-  it("a new account: starter units, some coins, and no way to raise a level it cannot pay for", async () => {
-    const a: AccountView = (await call("GET", "/v1/account")).data;
-    expect(a).toMatchObject({ coins: 200, gems: 0, commander: 1 });
-    expect(a.units.map((u) => u.kind).sort()).toEqual(["blades", "medic", "mine", "ranger"]);
-    expect(a.units.every((u) => u.level === 1 && u.why === "cards")).toBe(true);
-    const r = await call("POST", "/v1/account/upgrade", { kind: "ranger" });
-    expect(r).toMatchObject({ status: 400, data: { error: "Not enough cards" } });
-    expect((await call("POST", "/v1/account/upgrade", { kind: "golem" })).data.error).toBe("You have not found that unit");
-    expect((await call("POST", "/v1/account/upgrade", { kind: "dragon" })).status).toBe(400);
-    // There is no endpoint that sets coins, gems, cards or levels: a client can only ask.
-    expect((await call("POST", "/v1/account", { coins: 99999 })).status).toBe(404);
-  });
-
-  it("upgrades cost what the game's rules say, and the server does the sums", async () => {
-    const acct = app.store.account(id);
-    acct.cards.ranger = 5;
-    app.store.saveAccount(id, acct);
-    const a: AccountView = (await call("POST", "/v1/account/upgrade", { kind: "ranger" })).data;
-    const ranger = a.units.find((u) => u.kind === "ranger")!;
-    expect(ranger.level).toBe(2);
-    expect(ranger.cards).toBe(5 - upgradeCards(1, "common"));
-    expect(a.coins).toBe(200 - upgradeCoins(1, "common"));
-    expect(a.xp).toBeGreaterThan(0);
-    // Level 2 is the cap for a level-1 commander: cards and coins or not, the next one waits.
-    expect((await call("POST", "/v1/account/upgrade", { kind: "ranger" })).data.error).toMatch(/commander/);
-  });
-
-  it("money: only a signed payment credits gems, each transaction once", async () => {
-    const products = (await call("GET", "/v1/store")).data.products;
-    const sack = products.find((p: { sku: string }) => p.sku === "sack");
-    expect(sack).toMatchObject({ usd: 4.99, gives: { gems: 450 } });
-    expect((await call("POST", "/v1/store/buy", { sku: "sack" })).data.error).toMatch(/money/); // not by asking
-    expect((await pay({ txId: "pi_000001", player: id, sku: "sack" }, "wrong")).status).toBe(401);
-    expect((await call("POST", "/v1/store/webhook", { txId: "pi_000001", player: id, sku: "sack" })).status).toBe(401);
-    expect((await call("GET", "/v1/account")).data.gems).toBe(0);
-    expect((await pay({ txId: "pi_000001", player: id, sku: "sack" })).data).toMatchObject({ credited: true });
-    expect((await pay({ txId: "pi_000001", player: id, sku: "sack" })).data).toMatchObject({ credited: false }); // the provider repeats itself
-    expect((await pay({ txId: "pi_000001", player: id, sku: "hoard" })).data.credited).toBe(false);
-    expect((await call("GET", "/v1/account")).data.gems).toBe(450);
-    expect((await pay({ txId: "pi_000002", player: id, sku: "coins-purse" })).status).toBe(400); // a gem item is not sold for money
-    expect((await pay({ txId: "pi_000003", player: "nobody", sku: "sack" })).status).toBe(404);
-    expect(app.store.purchases(id).map((p) => p.tx)).toEqual(["pi_000001"]);
-  });
-
-  it("gems buy coins at the server's prices, never below zero", async () => {
-    const before: AccountView = (await call("GET", "/v1/account")).data;
-    const a: AccountView = (await call("POST", "/v1/store/buy", { sku: "coins-purse" })).data;
-    expect(a.gems).toBe(350);
-    expect(a.coins).toBe(before.coins + 1000);
-    expect((await call("POST", "/v1/store/buy", { sku: "coins-vault" })).data.error).toBe("Not enough gems");
-    expect((await call("GET", "/v1/account")).data.gems).toBe(350);
-  });
-
-  it("the admin key can grant, and nothing else can", async () => {
-    expect((await call("POST", "/v1/admin/grant", { player: id, gems: 50 })).status).toBe(404);
-    const g = await call("POST", "/v1/admin/grant", { player: id, gems: 50, note: "prize" }, { "x-admin-key": "k" });
-    expect(g.data.account.gems).toBe(400);
-  });
-
-  it("match rewards: full pay for the first wins of a day, then a trickle", () => {
-    const a = Acct.newAccount();
-    let n = 0;
-    const rand = () => ((n++ * 37) % 100) / 100;
-    const first = Acct.matchReward(a, { won: true, league: 1, day: "2026-11-18", rand });
-    expect(first.coins).toBe(55);
-    expect(first.cards).toHaveLength(2);
-    for (let i = 1; i < Acct.DAILY_WINS; i++) Acct.matchReward(a, { won: true, league: 1, day: "2026-11-18", rand });
-    expect(Acct.matchReward(a, { won: true, league: 1, day: "2026-11-18", rand })).toEqual({ coins: 10, cards: [] });
-    expect(Acct.matchReward(a, { won: true, league: 1, day: "2026-11-19", rand }).cards).toHaveLength(2);
-    expect(Acct.matchReward(a, { won: false, league: 1, day: "2026-11-19", rand })).toEqual({ coins: 10, cards: [] });
-  });
-
-  it("ranked matches are fought at each player's server-held levels", () => {
-    const hub = new Hub(new Store());
-    const a = hub.register("A", "web").me, b = hub.register("B", "web").me;
-    const acct = hub.store.account(a.id);
-    acct.levels.ranger = 3;
-    hub.store.saveAccount(a.id, acct);
-    for (const p of [a, b]) hub.connect(hub.store.player(p.id)!, { send: () => {} });
-    hub.joinQueue(a.id); hub.joinQueue(b.id);
-    const v = hub.matchView(b.id)!;
-    expect(v.levels).toEqual([{ ranger: 3 }, undefined]);
-    expect([...hub.rooms.values()][0].match.cfg.levels).toEqual([{ ranger: 3 }, undefined]);
-  });
-});

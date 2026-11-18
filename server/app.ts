@@ -1,12 +1,13 @@
 // The match server's HTTP endpoints and WebSocket, over a Hub. Also serves the built game (dist/) when it is there,
 // so one port (and one tunnel or one host) carries the game, the API and the socket.
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { Hub, HttpError, type HubOptions } from "./hub";
 import { Store, type PlayerRow } from "./store";
+import { paidCheckout, verifyEvent } from "./stripe";
 
 export interface AppOptions extends HubOptions {
   db?: string;
@@ -18,8 +19,8 @@ export interface AppOptions extends HubOptions {
   registerPerHour?: number;
   /** Shared secret for /v1/admin (unset = admin routes are off). */
   adminKey?: string;
-  /** Shared secret your payment handler signs its calls to /v1/store/webhook with (unset = the webhook is off). */
-  paymentSecret?: string;
+  /** Stripe's signing secret for the webhook at /v1/stripe/webhook (unset = the webhook is off). */
+  stripeWebhookSecret?: string;
   /** Read the caller's address from X-Forwarded-For (only behind a proxy you run). */
   trustProxy?: boolean;
 }
@@ -101,8 +102,10 @@ export function createApp(opts: AppOptions = {}): App {
     // The economy: the server's account is the only one that counts.
     "GET /v1/account": ({ me }) => hub.account(me.id),
     "POST /v1/account/upgrade": ({ me, body }) => hub.upgrade(me.id, body.kind),
+    "GET /v1/solo": ({ me, req }) => hub.solo(me.id, Number(new URL(req.url ?? "/", "http://x").searchParams.get("tz") ?? NaN)),
+    "POST /v1/solo/ops": ({ me, body }) => hub.soloOps(me.id, body.ops, body.tz),
     "GET /v1/store": () => hub.catalog(),
-    "POST /v1/store/buy": ({ me, body }) => hub.buyWithGems(me.id, body.sku),
+    "POST /v1/store/checkout": ({ me, body, req }) => hub.checkout(me.id, body.product, body.offer, String(req.headers.origin ?? "")),
   };
 
   const json = (res: ServerResponse, status: number, data: unknown) => {
@@ -140,15 +143,14 @@ export function createApp(opts: AppOptions = {}): App {
         const b = await body(req);
         return json(res, 200, hub.register(b.name, b.client));
       }
-      if (key === "POST /v1/store/webhook") {
-        // Money in. Your payment handler calls this once the provider has confirmed a payment, signing the exact
-        // body with the shared secret: {txId, player, sku}. Each txId pays out once, however often it is sent.
-        if (!opts.paymentSecret) throw new HttpError(404, "Not found");
+      if (key === "POST /v1/stripe/webhook") {
+        // Money in. Stripe calls this when a checkout is paid; the signature over the exact body proves it is Stripe.
+        if (!opts.stripeWebhookSecret) throw new HttpError(404, "Not found");
         const text = await raw(req);
-        const want = createHmac("sha256", opts.paymentSecret).update(text).digest("hex");
-        if (!same(String(req.headers["x-muster-signature"] ?? ""), want)) throw new HttpError(401, "Bad signature");
-        const b = parse(text);
-        return json(res, 200, hub.creditPayment(b.txId, b.player, b.sku, "payment"));
+        let event: unknown;
+        try { event = verifyEvent(text, String(req.headers["stripe-signature"] ?? ""), opts.stripeWebhookSecret); } catch { throw new HttpError(401, "Bad signature"); }
+        const paid = paidCheckout(event);
+        return json(res, 200, paid ? hub.stripePaid(paid) : { ignored: true });
       }
       if (key === "GET /v1/leaderboard") return json(res, 200, { players: hub.leaderboard() });
       if (path.startsWith("/v1/admin/")) {

@@ -1,19 +1,17 @@
 // Bastion UI: map select, the in-run HUD (wave, gold, keep HP, call-wave, speed, follow), the place / upgrade /
 // sell sheet, and the result screen. Owns its canvas loop and touch input; reuses the kit's buttons and icons.
+import { COINS_PER_WAVE, bastionResult, coinsForWin } from "../progression/results";
 import "./td.css";
 import { ABILITIES, ASCEND_ROUND, MAX_RANK, UNITS, type UnitKind } from "../core/defs";
 import { MAP_DEFS } from "../core/td/maps";
 import { DT, KEEP_HP, LEASH, SELL_BACK, TD_ROSTER, TdRun, modeOf, placeCost, rankUpCost } from "../core/td/sim";
 import { BOSS_NAME } from "../core/td/waves";
-import { earn } from "../economy/wallet";
 import { sfx, unlockAudio } from "../audio/sfx";
 import { whenPortrait } from "../render/sprites";
 import { TdView } from "../render/tdView";
 import { el, stars } from "./dom";
 import { ROLE_LABEL, coin, icon, roleBadge } from "./kit";
 import { attachReward } from "./barracks";
-import { winChest } from "../progression/chests"; // [chests]
-import { passEvent } from "../progression/passEvents"; // [pass]
 import { chestEarned } from "./chests"; // [chests]
 
 const KEY = "muster.td.v1";
@@ -26,9 +24,8 @@ function saveTd(mut: (s: TdSave) => void) {
   const s = loadTd(); mut(s);
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode */ }
 }
-/** Coins: a little per wave cleared, more for a win (into the shared wallet). */
-export const COINS_PER_WAVE = 2;
-export const coinsForWin = (stars: number) => 20 + stars * 10;
+/** Coins: a little per wave cleared, more for a win, paid into the shared wallet when the run ends (results.ts). */
+export { COINS_PER_WAVE, coinsForWin };
 
 function button(label: string | Node, cls: string, fn: () => void) {
   const b = el("button", { class: `btn ${cls}` }, [label]) as HTMLButtonElement;
@@ -337,7 +334,7 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
             else if (e.t === "zap") { sfx("zap", 0.5); lastSound = now; }
             else if (e.t === "die" && e.enemy) { sfx("down", 0.5); lastSound = now; }
           }
-          if (e.t === "cleared") { coins += COINS_PER_WAVE; earn("coins", COINS_PER_WAVE, `bastion ${mapId} wave ${e.n}`); toast(`Wave ${e.n} held  +${e.bonus} gold`); }
+          if (e.t === "cleared") { coins += COINS_PER_WAVE; toast(`Wave ${e.n} held  +${e.bonus} gold`); }
         }
         if ((run.phase as string) === "won" || (run.phase as string) === "lost") { finish(); break; }
       }
@@ -357,9 +354,9 @@ export function playBastion(app: HTMLElement, mapId: string, exit: () => void, s
     finished = true;
     const won = run.phase === "won", st = run.stars();
     const waveCoins = coins;
-    if (won) { const c = coinsForWin(st); coins += c; earn("coins", c, `bastion ${mapId} win ${st}`); }
-    const chest = won ? winChest(st) : null; // [chests] a win drops the next chest in the cycle
-    passEvent({ kind: "play", mode: "bastion" }); // [pass] "play Bastion" quest
+    if (won) coins += coinsForWin(st);
+    // One action pays the run: the waves held, the win, the chest and the "play Bastion" quest.
+    const { chest } = bastionResult(won, st, Math.round(waveCoins / COINS_PER_WAVE));
     // The same coin line as the other modes' result screens (paid already: per wave during the run, the win here).
     const winCoins = won ? coinsForWin(st) : 0;
     const parts: [string, number][] = ([["Waves held", waveCoins], ["Victory", won ? coinsForWin(0) : 0], [`${st} star${st === 1 ? "" : "s"}`, winCoins - coinsForWin(0)]] as [string, number][])

@@ -134,8 +134,12 @@ export type Push =
 /** What a ranked match paid into the player's server account. */
 export interface MatchReward { coins: number; cards: [UnitKind, number][]; }
 
-/** A thing to buy: with money (`usd`, credited by a verified payment) or with gems (`gems`). */
-export interface Product { sku: string; name: string; usd?: number; gems?: number; gives: { coins?: number; gems?: number }; }
+/** A thing sold for money. Paid on Stripe's page; credited by the server when Stripe confirms. */
+export interface Product { id: string; title: string; description: string; usd: number; }
+
+/** The account as a device mirrors it: the game's save as the server holds it, and the next seeds for anything rolled. */
+export interface SoloState { save: Record<string, unknown>; seeds: number[]; now: number; }
+export interface SoloReply extends SoloState { rejected: { i: number; name: string; why: string }[]; }
 
 /** A player's server-held economy, as the game shows it. */
 export interface AccountView {

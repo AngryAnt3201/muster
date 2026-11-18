@@ -31,6 +31,8 @@ export class NetClient {
   /** The match this account is in, as last told by the server (a rejoin after a reload starts from it). */
   match: RoundView | null = null;
   searching = false;
+  /** This session made or was handed its account just now (the game reloads once to move onto the server's save). */
+  fresh = false;
   private token: string | null;
   private key: string;
   private ws: WebSocket | null = null;
@@ -53,7 +55,7 @@ export class NetClient {
   }
 
   /** Signs this device in as the holder of an issued token. */
-  useToken(token: string) { this.token = token.trim(); store.set(this.key, this.token); }
+  useToken(token: string) { this.token = token.trim(); store.set(this.key, this.token); this.fresh = true; }
 
   /** This device already has an account on this server. */
   get hasAccount() { return !!this.token; }
@@ -80,6 +82,7 @@ export class NetClient {
       const r = await this.call<{ token: string; me: Me }>("POST", "/v1/register", { name: defaultName, client: "web" });
       this.token = r.token; this.me = r.me;
       store.set(this.key, r.token);
+      this.fresh = true;
     }
     this.wanted = true;
     this.open();
@@ -127,7 +130,6 @@ export class NetClient {
   account = () => this.call<AccountView>("GET", "/v1/account");
   upgrade = (kind: string) => this.call<AccountView>("POST", "/v1/account/upgrade", { kind });
   products = () => this.call<{ products: Product[] }>("GET", "/v1/store").then((r) => r.products);
-  buy = (sku: string) => this.call<AccountView>("POST", "/v1/store/buy", { sku });
   leaderboard = () => this.call<{ players: PlayerCard[] }>("GET", "/v1/leaderboard").then((r) => r.players);
 
   /** The calls a running match makes. */

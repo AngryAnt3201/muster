@@ -2,13 +2,15 @@
 // (<div id="shop-chests">, filled by the chests work), then gem packs (App Store consumables), then coin bundles
 // bought with gems. Nothing sold here unlocks content: every level and mode is free, purchases speed things up. Plus the two small gem moments elsewhere: the free-gem strip on result screens and the
 // Gauntlet Rally. Prices are always StoreKit's displayPrice; gem amounts come from src/economy/gems.ts.
+import { buyCoinBundle } from "../economy/rewards";
+import { payRally } from "../progression/results";
 import { skinShop } from "./skins";
 import { chestShop } from "./chests";
 import { sfx, unlockAudio } from "../audio/sfx";
 import {
   COIN_BUNDLES, GEM_NAME, GEM_PACKS, RALLY_GEMS, applyRally, bestValue, canRally, coinBonus, packBonus, type RallyRun, type Reward,
 } from "../economy/gems";
-import { canAfford, earn, spend } from "../economy/wallet";
+import { canAfford } from "../economy/wallet";
 import { buzz } from "../native";
 import type { GemShop } from "../store/gems";
 import type { StarterShop } from "../store/starter";
@@ -121,8 +123,7 @@ export function shopView(starter: StarterShop, gems: GemShop) {
   // ---- coin bundles (gems -> coins)
   const coinRows = COIN_BUNDLES.map((b) => {
     const go = button(el("span", {}, [gemIcon(), fmt(b.gems)]), "coin-buy", () => {
-      if (!spend("gems", b.gems, `coins:${b.id}`)) { sfx("deny"); say(`Not enough ${GEM_NAME.toLowerCase()} for that bundle.`, "warn"); return; }
-      earn("coins", b.coins, `bundle:${b.id}`);
+      if (!buyCoinBundle(b.id)) { sfx("deny"); say(`Not enough ${GEM_NAME.toLowerCase()} for that bundle.`, "warn"); return; }
       buzz("light");
       say(`+${fmt(b.coins)} coins.`, "good");
       void flyInto(row, counter("coins"), "coins", b.coins);
@@ -269,7 +270,7 @@ export function rallyOffer(host: HTMLElement | null, run: RallyRun & { stage: nu
   if (!box || !canRally(run)) return;
   const afford = canAfford("gems", RALLY_GEMS);
   const go = button(el("span", {}, ["Rally", el("small", {}, [gemIcon(), String(RALLY_GEMS)])]), `gem big rally-btn ${afford ? "" : "short"}`, () => {
-    if (!spend("gems", RALLY_GEMS, "gauntlet:rally")) { sfx("deny"); note.textContent = `You need ${RALLY_GEMS} ${GEM_NAME.toLowerCase()}. Daily wins and bosses earn them.`; return; }
+    if (!payRally()) { sfx("deny"); note.textContent = `You need ${RALLY_GEMS} ${GEM_NAME.toLowerCase()}. Daily wins and bosses earn them.`; return; }
     applyRally(run);
     buzz("success");
     onRally();

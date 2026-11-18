@@ -3,10 +3,11 @@
 // the art is public/keeps/skins/<name>/<state>.webp (art/keeps/render_keeps.py --skin <name>), drawn by the board
 // for the player's keep (src/render/board.ts, src/render/keeps.ts).
 import "./skins.css";
+import { SKIN_PRICES, buySkin as buySkinAction } from "../progression/cosmetics";
 import { sfx } from "../audio/sfx";
 import { buzz } from "../native";
 import { GEM_NAME } from "../economy/gems";
-import { canAfford, earn, onWalletChange, spend, spendIn, wallet, type WalletSave } from "../economy/wallet";
+import { canAfford, earn, onWalletChange, spendIn, wallet, type WalletSave } from "../economy/wallet";
 import {
   DEFAULT_KEEP, KEEP_SKINS, equip, equipped, grantCosmetic, grantIn, onCosmeticsChange, ownsCosmetic,
   type CosmeticsSave, type KeepSkin,
@@ -37,7 +38,7 @@ export interface SkinInfo {
  * Frost is a palette and snow; Ember adds lava light and braziers; Shadow adds glowing lanterns and wisps (the most
  * light effects), so it costs the most. Gilded and Blossom are War Pass rewards and are never sold for gems.
  */
-export const SKIN_PRICES: Partial<Record<KeepSkin, number>> = { "keep:frost": 500, "keep:ember": 700, "keep:shadow": 900 };
+export { SKIN_PRICES };
 
 export const SKIN_INFO: Record<KeepSkin, SkinInfo> = {
   "keep:meadow": { id: "keep:meadow", name: "Meadow Keep", blurb: "Sunlit stone and a sea-green roof. Where every warlord starts.", source: "default", accent: "#36b5a8", accent2: "#ffcf4d" },
@@ -74,16 +75,8 @@ export function buySkinIn(w: WalletSave, c: CosmeticsSave, id: string): BuyResul
   return "ok";
 }
 
-/** Buys a skin for gems on the device save. */
-export function buySkin(id: KeepSkin): BuyResult {
-  if (ownsCosmetic(id)) return "owned";
-  const price = skinPrice(id);
-  if (price == null) return "not-for-sale";
-  if (!canAfford("gems", price)) return "short";
-  if (!spend("gems", price, `skin:${id}`)) return "short";
-  if (!grantCosmetic(id, "gems")) { earn("gems", price, `skin:${id}:refund`); return "owned"; }
-  return "ok";
-}
+/** Buys a skin for gems (an action: online, the server decides). */
+export const buySkin = (id: KeepSkin): BuyResult => buySkinAction(id);
 
 // ---------------------------------------------------------------- shared bits
 

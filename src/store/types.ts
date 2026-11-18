@@ -36,7 +36,7 @@ export interface BuyResult {
   productId?: string;
 }
 
-export type StoreKind = "mock" | "native" | "unavailable";
+export type StoreKind = "mock" | "native" | "unavailable" | "server";
 
 export interface Store {
   readonly kind: StoreKind;
