@@ -60,7 +60,8 @@ for (let round = 1; round <= 3; round++) {
   await b.click(".btn.fight");
   await Promise.all([a, b].map((p) => p.waitForFunction("window.__game.phase === 'battle' && window.__game.hold <= 0")));
   // Each player's own troops fight from the bottom of their own screen.
-  for (const p of [a, b]) check(await game(p, "(() => { const m = g.battle.bodies.filter((x) => x.side === 0 && x.kind !== 'mine'); return m.length > 0 && m.reduce((n, x) => n + x.y, 0) / m.length > 7; })()"), `round ${round}: own army starts at the bottom`);
+  // (Checked on the pieces, not on where the fight has got to: the units start moving at once.)
+  for (const p of [a, b]) check(await game(p, "(() => { const mine = g.match.sides[0].pieces, ids = new Set(mine.map((x) => x.id)); const bodies = g.battle.bodies.filter((x) => x.side === 0 && x.pieceId > 0); return mine.length > 0 && mine.every((x) => x.y > 7) && g.match.sides[1].pieces.every((x) => x.y < 7) && bodies.length > 0 && bodies.every((x) => ids.has(x.pieceId)); })()"), `round ${round}: own army starts at the bottom`);
   await a.waitForTimeout(1500);
   if (round === 2) await Promise.all([a.screenshot({ path: `${out}/5-battle-a.png` }), b.screenshot({ path: `${out}/5-battle-b.png` })]);
   for (const p of [a, b]) await p.click(".btn.skip").catch(() => {});
