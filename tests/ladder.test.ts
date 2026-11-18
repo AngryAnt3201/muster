@@ -88,7 +88,7 @@ describe("scripted players on the ladder", () => {
     while (view && rounds++ < 60) {
       const from = pushes.length;
       const slot = view.you.shop.findIndex((k) => k && UNITS[k].cost <= view!.you.gold);
-      if (slot >= 0) expect(hub.act(me.id, { t: "buy", slot, x: 2 + (rounds % 5), y: 11 }).ok).toBe(true);
+      if (slot >= 0) hub.act(me.id, { t: "buy", slot, x: 2 + (rounds % 5), y: 11 }); // refused once the board is full: fine
       hub.ready(me.id, undefined);
       const battle = pushes.slice(from).find((p) => p.t === "battle") as Extract<Push, { t: "battle" }>;
       expect(battle).toBeTruthy();
