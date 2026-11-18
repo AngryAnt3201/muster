@@ -1,0 +1,4 @@
+{
+  "url": "",
+  "notes": "Where the hosted match server lives, e.g. https://play.example.com. Empty = none yet: `npm run play` starts one on this machine. Once set, every clone and every build talks to it (override with VITE_MUSTER_SERVER or ?server=)."
+}

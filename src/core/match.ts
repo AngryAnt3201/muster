@@ -35,6 +35,9 @@ export interface MatchConfig {
   firstRound?: number;
   /** Carried gold for side 0 (Gauntlet). */
   carryGold?: number;
+  /** Online play: each side numbers its own pieces from this base, so a player's ids do not depend on what the other
+   * side bought (the server and each client then agree on ids without a round trip). Omitted = one shared counter. */
+  idBase?: [number, number];
 }
 
 export interface SideState {
@@ -70,11 +73,18 @@ export class Match {
   readonly sides: [SideState, SideState];
   readonly cfg: MatchConfig;
   readonly history: RoundReport[] = [];
-  private shopRng: [Rng, Rng];
+  protected shopRng: [Rng, Rng];
   private nextPiece = 1;
+  private nextBy: [number, number] = [1, 1];
+  /** The next piece id for a side (per-side counters with cfg.idBase). */
+  protected newId(s: Side) { return this.cfg.idBase ? this.nextBy[s]++ : this.nextPiece++; }
+  /** The id the next piece bought by a side will get (online play: the server tells each client where its counter stands). */
+  nextIdFor(s: Side) { return this.cfg.idBase ? this.nextBy[s] : this.nextPiece; }
+  protected setNextId(s: Side, id: number) { this.nextBy[s] = id; }
 
   constructor(cfg: MatchConfig) {
     this.cfg = cfg;
+    if (cfg.idBase) this.nextBy = [cfg.idBase[0], cfg.idBase[1]];
     const rng = new Rng(cfg.seed);
     this.shopRng = [rng.fork(11), rng.fork(12)];
     const mk = (s: Side): SideState => ({
@@ -95,7 +105,7 @@ export class Match {
       for (const sp of cfg.start?.[s] ?? []) {
         const { x, y } = toWorld(s, sp.lx, sp.depth);
         const rank = sp.rank ?? 1;
-        this.sides[s].pieces.push({ id: this.nextPiece++, kind: sp.kind, side: s, x, y, rank, spent: UNITS[sp.kind].cost * rank });
+        this.sides[s].pieces.push({ id: this.newId(s), kind: sp.kind, side: s, x, y, rank, spent: UNITS[sp.kind].cost * rank });
       }
     }
     this.round = Math.max(0, (cfg.firstRound ?? 1) - 1);
@@ -130,7 +140,7 @@ export class Match {
     }
   }
 
-  private rollShop(s: Side) {
+  protected rollShop(s: Side) {
     const st = this.sides[s];
     const fixed = this.cfg.fixedShop?.[s];
     if (fixed) { st.shop = [...fixed]; return; }
@@ -181,7 +191,7 @@ export class Match {
     const pos = clampToZone(s, x, y, UNITS[kind].radius);
     st.gold -= UNITS[kind].cost;
     if (!this.cfg.fixedShop?.[s]) st.shop[slot] = null;
-    const p: Piece = { id: this.nextPiece++, kind, side: s, x: pos.x, y: pos.y, rank: 1, spent: UNITS[kind].cost };
+    const p: Piece = { id: this.newId(s), kind, side: s, x: pos.x, y: pos.y, rank: 1, spent: UNITS[kind].cost };
     st.pieces.push(p);
     return p;
   }

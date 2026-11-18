@@ -1,0 +1,69 @@
+# A push to `production` ships the match server: checks first, then the image, then the machine.
+#
+# The image always goes to the GitHub container registry (ghcr.io/<owner>/<repo>-server). The restart on your machine
+# runs once these are set under Settings > Secrets and variables > Actions:
+#   Variables:  DEPLOY_HOST   the machine's address          DEPLOY_USER  the login (default: deploy)
+#               DEPLOY_URL    the public address, for the health check (e.g. https://play.example.com)
+#   Secrets:    DEPLOY_SSH_KEY   a private key that login accepts
+# On the machine: Docker, and /etc/muster.env holding MUSTER_ADMIN_KEY, MUSTER_INVITE_ONLY=1, TRUST_PROXY=1 and
+# MUSTER_PAYMENT_SECRET. The database lives in the Docker volume `muster-data` and survives every deploy.
+# A restart ends matches in progress (players keep their accounts, trophies and purchases).
+name: Deploy
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+  image:
+    name: Build and publish the server image
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: { contents: read, packages: write }
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: name
+        run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')-server" >> "$GITHUB_OUTPUT"
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: docker build -t "${{ steps.name.outputs.image }}:${{ github.sha }}" -t "${{ steps.name.outputs.image }}:production" .
+      - name: The image starts and answers
+        run: |
+          docker run -d --name smoke -p 8787:8787 "${{ steps.name.outputs.image }}:${{ github.sha }}"
+          for _ in $(seq 1 30); do curl -sf http://localhost:8787/health && exit 0; sleep 1; done
+          docker logs smoke; exit 1
+      - run: docker push --all-tags "${{ steps.name.outputs.image }}"
+  release:
+    name: Restart the server on the machine
+    needs: image
+    if: ${{ vars.DEPLOY_HOST != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Pull the new image and restart
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ vars.DEPLOY_HOST }}
+          LOGIN: ${{ vars.DEPLOY_USER || 'deploy' }}
+          IMAGE: ${{ needs.image.outputs.image }}:${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          install -m 700 -d ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy "$LOGIN@$HOST" "set -e
+            echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin
+            docker pull '$IMAGE'
+            docker rm -f muster 2>/dev/null || true
+            docker run -d --name muster --restart unless-stopped -p 127.0.0.1:8787:8787 -v muster-data:/app/server/data --env-file /etc/muster.env '$IMAGE'
+            docker image prune -f > /dev/null"
+      - name: The live server answers
+        if: ${{ vars.DEPLOY_URL != '' }}
+        run: for _ in $(seq 1 30); do curl -sf "${{ vars.DEPLOY_URL }}/health" && exit 0; sleep 2; done; exit 1

@@ -3,6 +3,7 @@ import { applyPlan, planTurnAsync, type AIProfile } from "../core/ai";
 import type { Battle } from "../core/battle";
 import { BODY_EXTRA, DT, UNITS, clampToZone, inZone, upgradeCost, type Piece, type Side, type SpawnKind, type UnitKind } from "../core/defs";
 import { Match, type MatchConfig, type RoundReport } from "../core/match";
+import type { NetMatch } from "../net/netmatch";
 import { sfx, unlockAudio } from "../audio/sfx";
 import { buzz } from "../native";
 import { BoardView, type Scene } from "../render/board";
@@ -54,7 +55,9 @@ export interface GameOpts {
   cfg: MatchConfig;
   foe?: AIProfile; // the rival's AI (omit for a puzzle: the foe board stands still)
   you?: AIProfile; // set to let an AI play your side (watch mode)
-  mode: "campaign" | "skirmish" | "gauntlet" | "puzzle" | "daily" | "watch" | "demo";
+  mode: "campaign" | "skirmish" | "gauntlet" | "puzzle" | "daily" | "watch" | "demo" | "versus";
+  /** An online match (src/net/netmatch.ts): the rival is a person, the server deals the shops and fights the battles. */
+  net?: NetMatch;
   title?: string;
   showEnemyMines?: boolean;
   /** Campaign act whose arena to fight in (anything else gets act 1's). */
@@ -108,7 +111,11 @@ export class GameScreen {
 
   constructor(host: HTMLElement, opts: GameOpts) {
     this.o = opts;
-    this.match = new Match(opts.cfg);
+    this.match = opts.net ?? new Match(opts.cfg);
+    if (opts.net) {
+      opts.net.onChange = () => { if (!this.destroyed) this.refreshHud(); };
+      opts.net.onOver = () => { if (!this.destroyed) this.o.onEnd(this.match); };
+    }
     this.hpShown = [this.match.sides[0].hp, this.match.sides[1].hp];
     this.trail = [...this.hpShown];
     this.root = el("div", { class: `game mode-${opts.mode}` });
@@ -155,6 +162,8 @@ export class GameScreen {
   }
 
   private get watch() { return !!this.o.you; }
+  /** Online: Ready is sent, so the board is fixed until the battle. */
+  private get locked() { return !!this.o.net?.readySent; }
 
   // ------------------------------------------------------------ HUD
   private buildHud() {
@@ -234,13 +243,16 @@ export class GameScreen {
     this.h.gold.replaceChildren(coin("", "icon-only"), el("b", {}, [String(you.gold)]));
     this.h.supply.replaceChildren(icon("flag"), el("b", {}, [String(m.supplyUsed(0))]), `/${m.supplyCap(0)}`);
     this.h.foeGold.replaceChildren(...(puzzle ? [] : [coin("", "icon-only"), String(foe.gold)]));
-    const deploy = this.phase === "deploy" && !this.watch;
+    const net = this.o.net;
+    const deploy = this.phase === "deploy" && !this.watch && !this.locked;
+    if (net) this.h.foeName.textContent = `${foe.name}${net.foeReady && this.phase === "deploy" ? " ✓" : ""}`;
     this.root.classList.toggle("in-battle", this.phase !== "deploy");
     this.h.reroll.replaceChildren(icon("reroll"), coin(m.rerollCost(0)));
     this.h.reroll.disabled = !deploy || !m.canReroll(0);
     this.h.reroll.classList.toggle("gone", !!m.cfg.noReroll || !!m.cfg.fixedShop?.[0]);
     this.h.fight.disabled = !deploy;
-    this.h.fight.textContent = this.planning && deploy ? "..." : "Fight";
+    if (net) { this.clockShown = undefined; this.tickClock(); }
+    else this.h.fight.textContent = this.planning && deploy ? "..." : "Fight";
     this.h.fight.classList.toggle("ready", deploy && !this.planning && m.sides[0].pieces.length > 0);
     this.h.speed.textContent = `${this.speed}×`;
     const hint = this.root.querySelector(".hint") as HTMLElement;
@@ -258,6 +270,21 @@ export class GameScreen {
       }
     } else hint.className = "hint hidden";
     this.renderShop();
+  }
+
+  private clockShown?: string;
+  private retryAt = 0;
+  /** Online: the Ready button carries the deploy clock; at zero the board is sent as it stands. */
+  private tickClock() {
+    const net = this.o.net;
+    if (!net || this.phase !== "deploy") return;
+    const left = net.secondsLeft();
+    if (left !== null && left <= 0 && !net.readySent && performance.now() >= this.retryAt) { this.retryAt = performance.now() + 2000; void this.fight(); return; }
+    const text = net.readySent ? "Waiting" : left === null ? "Ready" : `Ready ${Math.ceil(left)}`;
+    if (text === this.clockShown) return;
+    this.clockShown = text;
+    this.h.fight.textContent = text;
+    this.h.fight.classList.toggle("hurry", !net.readySent && left !== null && left <= 10);
   }
 
   private setHp(bar: HTMLElement, text: HTMLElement, hp: number, max: number, trail: number) {
@@ -382,6 +409,8 @@ export class GameScreen {
       if (this.watch) setTimeout(() => void this.fight(), 900);
     });
     this.refreshHud();
+    // Online, rejoining a round where Ready was already sent: straight back to waiting for the battle.
+    if (this.locked) queueMicrotask(() => void this.fight());
   }
 
   /** Pin the sheets this fight draws (every body at its rank, and what it spawns at tier 1) so the sheet budget never
@@ -409,6 +438,18 @@ export class GameScreen {
     this.h.fight.disabled = true;
     await Promise.all(this.plans);
     if (this.destroyed || this.phase !== "deploy") return;
+    const net = this.o.net;
+    if (net) {
+      // Send the board and wait for the rival; the server fights the battle and both screens replay it.
+      if (this.readying) return;
+      this.readying = true;
+      this.selected = null;
+      const sent = net.ready();
+      this.refreshHud();
+      try { await sent; } catch { this.readying = false; if (!this.destroyed) { this.flashStatus("Can't reach the server"); this.refreshHud(); } return; }
+      this.readying = false;
+      if (this.destroyed || this.phase !== "deploy") return;
+    }
     const m = this.match;
     const seen = new Set(m.sides[1].seen.map((p) => p.id));
     this.view.markReveal(m.sides[1].pieces.filter((p) => !seen.has(p.id)).map((p) => p.id));
@@ -432,7 +473,16 @@ export class GameScreen {
     this.refreshHud();
   }
 
+  private readying = false;
   private reroll() {
+    if (this.o.net) {
+      if (this.phase !== "deploy" || !this.match.canReroll(0)) { sfx("deny"); return; }
+      this.pickSlot = null;
+      sfx("reroll"); buzz("light");
+      void this.o.net.rerollNet().then(() => { if (!this.destroyed) this.refreshHud(); });
+      this.refreshHud();
+      return;
+    }
     if (this.phase !== "deploy" || this.watch || !this.match.canReroll(0)) { sfx("deny"); return; }
     this.match.reroll(0);
     this.pickSlot = null;
@@ -531,6 +581,7 @@ export class GameScreen {
     if (this.destroyed) return;
     const dt = Math.min(0.05, (now - this.lastT) / 1000);
     this.lastT = now;
+    this.tickClock();
     if (!this.paused) {
       if (this.phase === "battle" && this.battle && this.hold > 0) this.hold -= dt;
       else if (this.phase === "battle" && this.battle) {
@@ -616,7 +667,7 @@ export class GameScreen {
 
   private boardDown(e: PointerEvent) {
     unlockAudio();
-    if (this.phase !== "deploy" || this.watch || this.paused) return;
+    if (this.phase !== "deploy" || this.watch || this.paused || this.locked) return;
     const w = this.view.toWorld(e.clientX, e.clientY);
     // Figures stand up off the ground: a tap on the body (not just the feet) picks it.
     const up = this.view.toWorldAt(e.clientX, e.clientY, 0.35);
@@ -800,7 +851,7 @@ export class GameScreen {
 
   // ------------------------------------------------------------ pause
   private openMenu() {
-    this.paused = true;
+    this.paused = !this.o.net; // an online match does not stop for one player's menu
     const s = load().settings;
     const m = this.h.menu;
     const mt = this.match, you = mt.sides[0], foe = mt.sides[1];
@@ -816,7 +867,7 @@ export class GameScreen {
       el("div", { class: `hpbar ${cls}` }, [el("b", { style: `width:${Math.max(0, (hp / max) * 100)}%` }), el("i", { style: `width:${Math.max(0, (hp / max) * 100)}%` }), el("span", {}, [String(Math.max(0, Math.round(hp)))])]),
     ]);
     m.replaceChildren(el("div", { class: "sheet pause-sheet" }, [
-      ribbon("Paused"),
+      ribbon(this.o.net ? "Menu" : "Paused"),
       el("div", { class: "pause-info" }, [
         el("div", { class: "pause-title" }, [el("b", {}, [this.o.title ?? "Battle"]), el("span", {}, [this.o.mode === "puzzle" ? "Breakpoint" : `Round ${mt.round}`])]),
         side("you", "You", this.hpShown[0], you.maxHp),
@@ -825,7 +876,7 @@ export class GameScreen {
       button("Resume", "primary big", () => this.closeMenu()),
       el("div", { class: "pause-row" }, [
         ...(this.o.onRestart ? [button("Restart", "", () => { this.closeMenu(); this.o.onRestart!(); })] : []),
-        button("Quit", "danger", () => { this.closeMenu(); this.o.onQuit(); }),
+        button(this.o.net ? "Forfeit" : "Quit", "danger", () => { this.closeMenu(); this.o.onQuit(); }),
       ]),
       el("div", { class: "pause-row toggles" }, [
         toggle("Sound", s.sound, () => { save((x) => { x.settings.sound = !x.settings.sound; }); import("../audio/sfx").then((a) => a.setSound(load().settings.sound)); this.openMenu(); }),

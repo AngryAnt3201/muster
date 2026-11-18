@@ -13,6 +13,10 @@
     "vfx": "/usr/local/bin/python3 art/vfx/make_vfx.py --contact",
     "art:title": "${BLENDER:-blender} -b --factory-startup -P art/ui/title_key.py && cwebp -quiet -q 80 art/ui/build/title_key.png -o public/ui/title-key.webp",
     "dev": "vite --host 0.0.0.0 --port 5180",
+    "play": "node tools/play.mjs",
+    "server": "vite-node server/main.ts",
+    "token": "node tools/token.mjs",
+    "e2e:versus": "node tools/versus-e2e.mjs",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "balance": "vite-node tools/balance.ts",
@@ -29,6 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
     "playwright": "1.59",
     "typescript": "5.6",
     "vite": "^6.4.5",
@@ -41,6 +46,10 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.6.0",
     "@capacitor/status-bar": "^8.0.4",
-    "muster-store": "file:ios/MusterStore"
+    "muster-store": "file:ios/MusterStore",
+    "ws": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

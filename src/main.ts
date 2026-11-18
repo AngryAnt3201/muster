@@ -54,6 +54,13 @@ import { usePassStore } from "./store/pass";
 import { seedPassDemo } from "./progression/pass";
 import { seedQuestDemo } from "./progression/quests";
 import { showEnding } from "./ui/ending";
+// [versus] online play: friends, challenges, matchmaking (src/net, src/ui/versus.ts, server/)
+import { hashSeed } from "./core/rng";
+import { net } from "./net/client";
+import { leagueOf } from "./net/ladder";
+import { NetMatch } from "./net/netmatch";
+import type { RoundView } from "./net/protocol";
+import { challengeSheet, versusScreen } from "./ui/versus";
 
 const app = document.getElementById("app")!;
 let game: GameScreen | null = null;
@@ -74,6 +81,8 @@ usePassStore(store);
 let here: (() => void) | null = null;
 
 function clear() {
+  leaveVersus?.(); leaveVersus = null; // [versus] stop the Versus screen listening, leave the queue
+  matchOff?.(); matchOff = null; versusMatch = null;
   game?.destroy(); game = null;
   sheetEl = null;
   here = null;
@@ -158,6 +167,8 @@ function modeCards(): ModeCard[] {
   const pz = Object.keys(s.puzzles).length, pzStars = Object.values(s.puzzles).reduce((a, b) => a + b, 0);
   const td = bastionStars();
   return [
+    // [versus] hook: play a friend or a matched rival (src/ui/versus.ts). Shown where a match server is set.
+    ...(net() ? [{ id: "versus", name: "Versus", line: "Challenge a friend or find a rival", stat: "online", art: "/arenas/act7.jpg", glyph: "sword", open: () => versus() } satisfies ModeCard] : []),
     { id: "daily", name: "Daily", line: fresh ? "A new board for everyone today" : `Next board in ${untilTomorrow()}`, stat: flameChip(streak), art: "/maps/sky.jpg", artY: "4%", glyph: "flame", dot: fresh, open: daily },
     { id: "gauntlet", name: "Gauntlet", line: "Rival after rival, one health pool", stat: s.gauntlet.best ? `best ${s.gauntlet.best}` : "endless", art: "/maps/ash.jpg", artY: "2%", glyph: "crown", open: gauntlet },
     { id: "puzzles", name: "Breakpoint", line: "Win with the gold you're given", stat: starChip(pzStars, PUZZLES.length * 3), progress: pz / PUZZLES.length, art: "/maps/frozen.jpg", glyph: "star", open: puzzles },
@@ -656,6 +667,88 @@ function playSkirmish(lab: Lab) {
 }
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
+// ---------------------------------------------------------------- [versus] online play
+let leaveVersus: (() => void) | null = null;
+let matchOff: (() => void) | null = null;
+let versusMatch: NetMatch | null = null;
+let netWatched = false;
+
+function versus(add?: string | null) {
+  clear();
+  here = () => versus();
+  leaveVersus = versusScreen({ app, net: net(), back: title, add });
+  watchNet();
+}
+
+/** Once this device has an account, the server reaches the player anywhere in the menus: a friend's challenge pops
+ *  up as a sheet, and a match that starts (or one left running by a reload) takes over the screen. */
+function watchNet() {
+  const n = net();
+  if (!n || netWatched) return;
+  netWatched = true;
+  let shown: string | null = null;
+  n.on((p) => {
+    if (p.t === "match_found") playVersus(p.view);
+    else if (p.t === "hello" && p.match && versusMatch?.matchId !== p.match.matchId) playVersus(p.match);
+    else if (p.t === "challenge" && !game) {
+      shown = p.id;
+      sfx("round");
+      sheet(challengeSheet(p.from,
+        () => { closeSheet(); void n.respondChallenge(p.id, true).catch(() => undefined); },
+        () => { closeSheet(); void n.respondChallenge(p.id, false).catch(() => undefined); }));
+    } else if (p.t === "challenge_gone" && p.id === shown) { shown = null; closeSheet(); }
+  });
+}
+
+function playVersus(view: RoundView) {
+  const n = net();
+  if (!n) return;
+  clear();
+  const m = new NetMatch(view, n.link());
+  versusMatch = m;
+  matchOff = n.on((p) => {
+    if (p.t === "foe_ready" && p.matchId === m.matchId) m.onFoeReady();
+    else if (p.t === "deploy" && p.matchId === m.matchId) m.onDeploy(p.round, p.deadline, p.now);
+    else if (p.t === "battle") m.onBattle(p.battle);
+    else if (p.t === "match_over" && p.matchId === m.matchId) m.onMatchOver(p.winner, p.reason, p.rating, p.reward);
+    else if (p.t === "hello" && !m.over) {
+      // The socket dropped and came back: catch up on whatever was missed.
+      if (!p.match || p.match.matchId !== m.matchId) {
+        void n.call<{ matches: { id: string; won: boolean; draw: boolean; reason: "hp" | "forfeit" | "timeout" }[] }>("GET", "/v1/history").then((h) => {
+          const r = h.matches.find((x) => x.id === m.matchId);
+          if (r && !m.over) m.onMatchOver(r.draw ? -1 : r.won ? m.seat : ((1 - m.seat) as 0 | 1), r.reason);
+        }).catch(() => undefined);
+      } else if (p.match.round > m.round && !m.watching) playVersus(p.match);
+      else if (p.match.round === m.round) { m.foeReady = p.match.foe.ready; m.setDeadline(p.match.deadline, p.match.now); m.onChange?.(); }
+    }
+  });
+  const off = matchOff;
+  game = new GameScreen(app, {
+    cfg: m.cfg,
+    net: m,
+    mode: "versus",
+    title: view.ranked ? "Ranked match" : "Friendly match",
+    intro: `vs ${view.foe.name}`,
+    arena: 1 + (hashSeed(view.matchId) % ACTS.length),
+    onEnd: (mm) => {
+      off(); if (matchOff === off) matchOff = null;
+      const o = m.over, won = mm.winner === 0;
+      const why = o?.reason === "forfeit" ? (won ? `${view.foe.name} left the match.` : "You left the match.") : o?.reason === "timeout" ? (won ? `${view.foe.name} ran out of time.` : "You ran out of time.") : "";
+      const d = o?.rating ? o.rating.after - o.rating.before : 0;
+      const rated = o?.rating ? `${d >= 0 ? "+" : ""}${d} trophies (${o.rating.after}, ${leagueOf(o.rating.after).name}).` : "";
+      const paid = o?.reward ? `Earned ${o.reward.coins} coins${o.reward.cards.map(([k, n]) => `, ${n} ${UNITS[k].name}`).join("")}.` : "";
+      results(mm, {
+        heading: won ? "Victory" : mm.winner === 1 ? "Defeat" : "Draw",
+        note: [why, rated, paid].filter(Boolean).join(" ") || undefined,
+        primary: ["Versus", () => versus()],
+        secondary: ["Menu", title],
+      });
+      if (won) chestEarned(winChest(2)); // [chests] two crowns for beating a person
+    },
+    onQuit: () => { void m.forfeit(); versus(); },
+  });
+}
+
 // ---------------------------------------------------------------- shop
 /** [home] The Shop is a tab now. `back` is kept for older callers; the tab bar is the way out. */
 function shopScreen(_back?: () => void) { home("shop"); }
@@ -736,6 +829,8 @@ async function boot() {
   settleLegacyCoins(); // [progression] coins for campaign clears made before troop levels existed
   await Promise.all([initNative(), loadSprites(), font]);
   window.addEventListener("pointerdown", () => unlockAudio(), { once: true });
+  // [versus] a device that has played online before signs in quietly, so challenges and a running match find it.
+  { const n = net(); if (n?.hasAccount) void n.start().then(watchNet, () => undefined); }
   // Dev only: play any level from a script without a reload (tools/sprite-mem.mjs plays several back to back).
   if (import.meta.env.DEV) (window as any).__playLevel = (id: number) => { const l = LEVELS.find((x) => x.id === id); if (l) playLevel(l); return !!l; };
   // Deep links for checks: ?level=3, ?puzzle=2, ?lab, ?daily, ?gauntlet, ?watch, ?shop
@@ -746,6 +841,8 @@ async function boot() {
   if (q.has("ending")) { campaign(ACTS.length); return void showEnding(app, () => campaign(ACTS.length)); } // review shot of the ending
   if (q.has("puzzles")) return puzzles();
   if (q.has("lab")) return skirmish();
+  // [versus] ?versus opens it; ?add=CODE is an invite link (opens Versus and asks that player to be friends).
+  if (q.has("versus") || q.has("add")) return versus(q.get("add"));
   if (q.has("daily")) return daily();
   if (q.has("barracks") || q.has("army")) return barracks(); // [progression]
   if (q.has("shop")) return shopScreen();

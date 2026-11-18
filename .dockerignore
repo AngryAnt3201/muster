@@ -1,0 +1,9 @@
+node_modules
+dist
+ios/App
+art/*
+!art/style
+captures
+outputs
+server/data
+.git

@@ -1,0 +1,49 @@
+/* Versus (src/ui/versus.ts): your card, Find match, the friends list. Kit colours only. */
+.versus .vs-body { display: flex; flex-direction: column; gap: 16px; max-width: 520px; margin: 0 auto; }
+.vs-rating { display: inline-flex; align-items: center; gap: 5px; }
+.vs-rating .glyph { width: 18px; height: 18px; }
+.vs-you { gap: 14px; }
+.vs-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.vs-field small, .vs-record span { font: 400 13px/1 var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-muted); }
+.vs-input { appearance: none; width: 100%; min-width: 0; padding: 9px 12px; border-radius: 12px; border: 2.5px solid var(--k-ink); background: var(--k-well); color: var(--k-text);
+  font: 400 20px/1.1 var(--display); outline: none; box-shadow: inset 0 2px 0 rgba(0,0,0,0.12); }
+.vs-input:focus { border-color: var(--k-blue); }
+.vs-input::placeholder { color: var(--k-muted); opacity: 0.8; }
+.vs-code-row { display: flex; align-items: flex-end; gap: 10px; }
+.vs-code { font: 400 30px/1 var(--display); letter-spacing: 0.14em; color: var(--k-text); user-select: all; -webkit-user-select: all; }
+.vs-record { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.vs-record span:first-child b { font-size: 18px; white-space: nowrap; }
+.vs-record span { display: inline-flex; align-items: baseline; gap: 6px; }
+.vs-record b { font: 400 22px/1 var(--display); color: var(--k-text); letter-spacing: 0; }
+.vs-find.searching { --b: var(--k-accent); }
+.vs-find.searching b::after { content: ""; display: inline-block; width: 1.1em; text-align: left; animation: vs-dots 1.2s steps(4) infinite; }
+@keyframes vs-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+.vs-friends { display: flex; flex-direction: column; gap: 10px; }
+.vs-friends h2 { margin: 4px 2px 0; font: 400 22px/1.1 var(--display); color: #fff; text-shadow: var(--ol); }
+.vs-add-row { display: flex; gap: 8px; align-items: center; }
+.vs-token { font: 600 15px/1.2 ui-monospace, monospace; }
+.vs-add { text-transform: uppercase; letter-spacing: 0.12em; background: var(--k-panel); }
+.vs-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 16px; border: 2.5px solid var(--k-ink); background: var(--k-panel); color: var(--k-text);
+  box-shadow: 0 3px 0 var(--k-ink); }
+.vs-row.challenge { background: color-mix(in srgb, var(--k-accent) 35%, var(--k-panel)); }
+.vs-row.pending { opacity: 0.8; }
+.vs-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--k-ink); background: var(--k-muted); }
+.vs-dot.on { background: var(--k-go); }
+.vs-dot.busy { background: var(--k-accent); }
+.vs-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.vs-who b { font: 400 18px/1.1 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vs-who small, .vs-pending { font-size: 13px; font-weight: 600; color: var(--k-muted); }
+.vs-bot { margin-left: 6px; padding: 1px 6px 2px; border-radius: 7px; border: 1.5px solid var(--k-ink); background: var(--k-well); font: 600 11px/1 system-ui, sans-serif; font-style: normal; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 2px; }
+.vs-rank { flex: none; width: 26px; text-align: center; font: 400 18px/1 var(--display); color: var(--k-muted); }
+.vs-trophies { flex: none; font: 400 20px/1 var(--display); }
+.vs-acts { display: flex; gap: 6px; flex: none; }
+.vs-empty { margin: 2px 4px; font-size: 15px; font-weight: 600; color: #fff; text-shadow: var(--ol-s); }
+.panel .vs-empty { color: var(--k-muted); text-shadow: none; word-break: break-all; }
+.vs-note { position: fixed; left: 50%; bottom: calc(var(--sb) + 26px); transform: translate(-50%, 12px); z-index: 30; max-width: calc(100% - 32px); padding: 9px 16px; border-radius: 14px;
+  border: 2.5px solid var(--k-ink); background: var(--k-plate); color: #fff; font: 400 16px/1.2 var(--display); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
+.vs-note.show { opacity: 1; transform: translate(-50%, 0); }
+.vs-note.bad { background: var(--k-danger); }
+.vs-challenge { text-align: center; }
+/* In an online match the Ready button carries the clock; it turns in the last ten seconds. */
+.mode-versus .btn.fight { font-size: 24px; letter-spacing: 0.03em; }
+.mode-versus .btn.fight.hurry { --b: var(--k-danger); }
