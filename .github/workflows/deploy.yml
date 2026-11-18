@@ -5,8 +5,8 @@
 #   Variables:  DEPLOY_HOST   the machine's address          DEPLOY_USER  the login (default: deploy)
 #               DEPLOY_URL    the public address, for the health check (e.g. https://play.example.com)
 #   Secrets:    DEPLOY_SSH_KEY   a private key that login accepts
-# On the machine: Docker, and /etc/muster.env holding MUSTER_ADMIN_KEY, MUSTER_INVITE_ONLY=1, TRUST_PROXY=1 and
-# MUSTER_PAYMENT_SECRET. The database lives in the Docker volume `muster-data` and survives every deploy.
+# On the machine: Docker, and /etc/muster.env holding MUSTER_ADMIN_KEY, MUSTER_INVITE_ONLY=1, TRUST_PROXY=1,
+# MUSTER_PUBLIC_URL, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET. The database lives in the Docker volume `muster-data` and survives every deploy.
 # A restart ends matches in progress (players keep their accounts, trophies and purchases).
 name: Deploy
 on:

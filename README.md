@@ -73,9 +73,17 @@ Scripted players are on the ladder, in the lower ranks only. That means the serv
 
 ### The economy is the server's
 
-Coins, gems, cards and troop levels for ranked play live in the server's database (`server/account.ts`), not on the device. A client can ask for an upgrade or a gem purchase; the server checks it against the game's own cost tables and answers with the new account. There is no call that sets a balance. Ranked matches are fought at each player's server-held levels, and pay coins and cards the server rolls (full rewards for the first ten wins of a day). Money comes in one way: your payment handler calls `POST /v1/store/webhook` with `{txId, player, sku}`, signed (`x-muster-signature`: HMAC-SHA256 of the body with `MUSTER_PAYMENT_SECRET`); each `txId` pays out once. Looks and names are the player's to change; the ledger is not.
+Signed in, a player's whole account lives in the server's database: coins, gems, cards, troop levels, chests, the War Pass, quests, skins, campaign stars. It is the game's own save, held by the server, and the game's own rules change it.
 
-The solo modes (campaign, Gauntlet, Daily, the Shop and Pass tabs) still keep their own progress on the device. They do not touch the server account and nothing in them counts in ranked.
+Every way the account can change is a named action (`src/sync.ts`): a battle result, an upgrade, opening a chest, a gem purchase. The device runs an action at once so the screen does not wait, and reports it; the server runs it again on the real account (`server/account.ts`), behind that action's guard, with its own clock and its own dice, and answers with the account as it now stands. The device takes that copy as it is (`src/net/solo.ts`), so anything it did that the server would not is simply gone. The pieces actions are built from (earn, spend, grant) are not actions and cannot be called from outside.
+
+- Spending is exact: upgrades, chests, bundles, skins and pass tiers cost what the game's tables say, checked on the server.
+- Rolls are the server's: chest seeds come from a secret only it holds. The device is handed the next few so an opening can play without a wait; it cannot choose them. (A modified client can read them ahead of time and so see what its next chest holds before opening it. It cannot change it.)
+- Solo battles are bounded, not proven: the server cannot watch a fight that runs on the device. A level pays its first clear once and only after the one before it, replays and Skirmish sit under their daily caps, the Gauntlet pays each rival of a run in turn, and results must be spaced as far apart as battles take.
+- Ranked is proven: the server fights those battles itself, at each player's server-held levels, and rolls the rewards.
+- Money: the Shop sends the player to Stripe Checkout at the server's price (`server/stripe.ts`); the account is credited only when Stripe's signed webhook (`POST /v1/stripe/webhook`) says the payment is in, once per payment.
+
+Not signed in, or with no server in reach, the game runs on the device's own save (kept separately, never mixed with the account). That save is a sandbox: it is not sent anywhere and counts for nothing in ranked. Looks and names are the player's to change; the account is not.
 
 How it works: the server (`server/`) owns the only real match. A client sends what the player wants (buy, upgrade, sell, reroll, where the pieces stand at Ready); the server checks it against the rules, deals every shop and fights every battle from its own randomness, then sends both players the same pieces and seed to replay. The outcome is the server's. Seat 1 watches the same battle turned half a turn (`src/net/mirror.ts`), so both players stand at the bottom in blue. A player never receives the rival's shop, this round's purchases or anything that predicts a shop or a battle.
 
@@ -86,12 +94,13 @@ How it works: the server (`server/`) owns the only real match. A client sends wh
 | `server/app.ts` | HTTP endpoints under `/v1`, the push socket `/v1/ws`, rate limits, static files |
 | `server/store.ts` | SQLite (`server/data/muster.db`): players, friendships, finished matches, accounts, purchases |
 | `server/telemetry.ts` | automation checks on action timing; flagged matches count on the player |
-| `server/account.ts` | the economy: accounts, upgrades, products, match rewards |
+| `server/account.ts` | the account: the game save held by the server, actions run on it, products, ranked rewards |
+| `server/stripe.ts` | Stripe Checkout sessions and webhook signatures |
 | `src/net/ladder.ts` | trophies, leagues, the cap on scripted players |
 | `src/net/` | the client: account and socket, the online match, the board turn |
 | `src/ui/versus.ts` | the Versus screen |
 
-Hosting: `server.config.json` holds the hosted server's address; once set, every clone and every build uses it (`VITE_MUSTER_SERVER` and `?server=` override). The `Dockerfile` runs the server with the built game on one port; keep `server/data` on a volume. Settings: `PORT`, `MUSTER_DB`, `MUSTER_ADMIN_KEY` (turns on the `/v1/admin` routes, header `x-admin-key`), `MUSTER_INVITE_ONLY=1` (no self sign-up: every player holds a token you issued), `MUSTER_HOUSE_BOTS` (how many house bots, default 16), `MUSTER_PAYMENT_SECRET` (turns on the payment webhook), `TRUST_PROXY=1` behind a proxy.
+Hosting: `server.config.json` holds the hosted server's address; once set, every clone and every build uses it (`VITE_MUSTER_SERVER` and `?server=` override). The `Dockerfile` runs the server with the built game on one port; keep `server/data` on a volume. Settings: `PORT`, `MUSTER_DB`, `MUSTER_ADMIN_KEY` (turns on the `/v1/admin` routes, header `x-admin-key`), `MUSTER_INVITE_ONLY=1` (no self sign-up: every player holds a token you issued), `MUSTER_HOUSE_BOTS` (how many house bots, default 16), `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` (turn on payments; in Stripe, add a webhook to `<your address>/v1/stripe/webhook` for `checkout.session.completed` and `checkout.session.async_payment_succeeded`), `MUSTER_PUBLIC_URL` (where players return after paying), `TRUST_PROXY=1` behind a proxy.
 
 Branches and CI: `main` is where work lands; `production` is what is deployed. Every push and pull request runs the checks (`.github/workflows/ci.yml`: types, tests, build, then two browsers playing a match). A push to `production` also builds the server image, publishes it to the GitHub container registry and, once the repository variable `DEPLOY_HOST` is set, restarts it on that machine (`.github/workflows/deploy.yml` lists the settings it needs). Promote with a pull request from `main` to `production`.
 
@@ -118,7 +127,8 @@ Anything the game does, a token holder can do: the game has no private endpoints
 | `POST /v1/match/watched`, `/forfeit` | `round` | battle seen (starts the deploy clock once both have); give up |
 | `GET /v1/history`, `GET /v1/leaderboard` | | your matches; the ladder |
 | `GET /v1/account`, `POST /v1/account/upgrade` | `kind` | your coins, gems, cards and levels; buy a unit's next level |
-| `GET /v1/store`, `POST /v1/store/buy` | `sku` | what is for sale; buy a gem-priced product |
+| `GET /v1/store`, `POST /v1/store/checkout` | `product` | what is for sale; a Stripe page to pay for one |
+| `GET /v1/solo`, `POST /v1/solo/ops` | `ops` | the whole account as the game mirrors it; run economy actions `[{name, args}]` |
 
 The socket `/v1/ws` only pushes: send `{"t":"auth","token":"..."}` first, then listen. Every message and view is typed in `src/net/protocol.ts`, and coordinates are in the server's frame (seat 0 deploys at the bottom, y near 14; seat 1 at the top). `tests/server.test.ts` has a complete scripted player in about twenty lines.
 
